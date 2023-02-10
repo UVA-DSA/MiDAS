@@ -16,28 +16,28 @@
                 <div class="fields">
                     <div class="field">
                         <label>Subject</label>
-                        <input type="text" placeholder="Subject Name" required>
+                        <input type="text" placeholder="Subject Name" required id="subject">
                     </div>
                     <div class="field">
                         <label>Trial</label>
-                        <input type="text" placeholder="Trial Number" required>
+                        <input type="text" placeholder="Trial Number" required id="trial">
                     </div>
                 </div>
                 <div class="fields">
                     <div class="field">
                         <label>Task</label>
-                        <input type="text" placeholder="Enter Task" required>
+                        <input type="text" placeholder="Enter Task" required id="task">
                     </div>
                     <div class="field">
                         <label>Rate</label>
-                        <input type="number" id="inputNumber" name="inputNumber" min="12" max="255" required>
+                        <input type="number" id="rate" name="inputNumber" min="12" max="255" required value="90">
                     </div>
                 </div>
         
                 <div class="fields">
                     <div class="field">
                         <label>Range</label>
-                        <select>
+                        <select id="range_val">
                             <option value="36">36 in</option>
                             <option value="72">72 in</option>
                             <option value="144">144 in</option>
@@ -45,7 +45,7 @@
                     </div>
                     <div class="field">
                         <label>Hemisphere</label>
-                        <select>
+                        <select id="hemisphere">
                             <option value="right">Front</option>
                             <option value="back">Back</option>
                             <option value="top">Top</option>
@@ -56,7 +56,7 @@
                     </div>
                     <div class="field">
                         <label>Filter</label>
-                        <select>
+                        <select id="filter_val">
                             <option value="wide">Wide</option>
                             <option value="narrow">Narrow</option>
                         </select>
@@ -100,5 +100,6 @@
         </div>
     </div>
     <script src="main.js"></script>
+    <script type="text/javascript" src="../eel.js"></script>
 </body>
 </html>

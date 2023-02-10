@@ -6,19 +6,17 @@ import datetime
 eel.init('web')
 
 @eel.expose
-def get_random_name():
-    eel.prompt_alerts('Random name')
-
-@eel.expose
-def get_random_number():
-    eel.prompt_alerts(random.randint(1, 100))
-
-@eel.expose
-def get_date():
-    eel.prompt_alerts(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-
-@eel.expose
-def get_ip():
-    eel.prompt_alerts('127.0.0.1')
+def sendData(subject, trial, task, rate, range_val, hemisphere, filter_val):
+    data = {
+        "Subject" : subject,
+        "Trial": int(trial),
+        "Task": task,
+        "Rate": float(rate),
+        "Range": float(range_val),
+        "Hemisphere": hemisphere,
+        "Filter": filter_val
+        }
+    print(data)
+    return
 
 eel.start('index.html')

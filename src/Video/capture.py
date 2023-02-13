@@ -15,6 +15,8 @@ import csv
 import ffmpeg
 
 
+
+
 def error_handler(text, directory):
     print(Fore.YELLOW + text)
     

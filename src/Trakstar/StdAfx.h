@@ -29,6 +29,8 @@
 #include "json.hpp"
 #include <cstdlib>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 
 //{{AFX_INSERT_LOCATION}}

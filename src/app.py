@@ -48,11 +48,12 @@ def getInputStreams(path: str):
 
     returns: Nothing
     '''
+    subprocess.Popen(['python3', path + '/src/video/capture.py'])
+
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as video:
         video.bind(('localhost', video_port))
         video.listen()
-        
 
         vid_con, _ = video.accept()
         print("Connected to Video")
@@ -61,7 +62,7 @@ def getInputStreams(path: str):
 
             #video data processing
             vid_data = pickle.loads(vid_con.recv(video_stream_size))
-            if vid_data == ["Data not collected", "N/A"]: #something wrong with video data
+            if vid_data == "Data not collected": #something wrong with video data
                 pass #update later with what to do
 
 

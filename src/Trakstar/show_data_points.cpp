@@ -1,7 +1,8 @@
 #include "stdafx.h"
 
+
 using namespace std;
-using json = nlohmann::json;
+
 
 
 
@@ -15,11 +16,6 @@ void errorHandler(int error){
 	char    *pBuffer = &buffer[0];
 	int     numberBytes;
 
-    ofstream errorFile;
-    errorFile.open("errorFile.txt");
-    errorFile << "error";
-    errorFile.close();
-
 	while(error!=BIRD_ERROR_SUCCESS)
 	{
 		error = GetErrorText(error, pBuffer, sizeof(buffer), SIMPLE_MESSAGE);
@@ -28,15 +24,12 @@ void errorHandler(int error){
 		printf("%s", buffer);
 	}
 
-
-    printf("\nClosing in 10 seconds\n");
-
     sleep(10);
 	exit(0);
 }
 
 
-int main() {
+int main(int argc, char* argv[])  {
 
     //The following are used for setup, data collection, and logging of current system settings / info
     CSystem     ATC3DG;		    // a pointer to a single instance of the system class	
@@ -46,28 +39,14 @@ int main() {
     int         i;              // used in general to loop through
     int         errorCode;      // for error handling
 
-
-
-    /*
-    Openning up JSON File and Reading Data -- SHRISHA
-    */
-    ifstream json_file_read;
-    json_file_read.open("data.json");
-    json j;
-    json_file_read >> j;
-
-
-    string file_naming = j.value("file_naming", "Unable_to_parse_info");
-    char * name_conv = const_cast<char*>(file_naming.c_str()); // turn into char *
-
     //system setup
-    double measure_rate = j.value("rate", 90.0);  //measurement rate in Hz (CLI)
-    double max_range = j.value("range", 36.0);  // maximum range parameter (36, 72, 144 in). Anything above 36 will have lower resolution (CLI)
+    double measure_rate = stod(argv[1]);  //measurement rate in Hz (CLI)
+    double max_range = stod(argv[2]);  // maximum range parameter (36, 72, 144 in). Anything above 36 will have lower resolution (CLI)
     short trans_select = 0; //selects transmitter based on id (default 0) (CLI)
 
     //sensor setup
     BOOL filter_wide, filter_narrow;
-    if (j.value("filter_ac_wide_notch", 1) == 1) {
+    if (argv[3] == "wide") {
         filter_wide = true;
         filter_narrow = false;
     } else {
@@ -76,49 +55,41 @@ int main() {
     }
 
     HEMISPHERE_TYPE hem;
-    switch(j.value("hemisphere", 1)) {
-        case 0:
+    switch(argv[4]) {
+        case "front":
             hem = FRONT;
             break;
-        case 1:
+        case "back":
             hem = BACK;
             break;
-        case 2:
+        case "top":
             hem = TOP;
             break;
-        case 3:
+        case "bottom":
             hem = BOTTOM;
             break;
-        case 4:
+        case "left":
             hem = LEFT;
             break;
-        case 5:
+        case "right":
             hem = RIGHT;
             break;
         default:
             hem = FRONT;
     }
 
-    double azim = j.value("azimuth", 0);
-    double elev = j.value("elevation", 0);
-    double roll = j.value("roll", 0);
+    double azim = 0;
+    double elev = 0;
+    double roll = 0;
 
     //Transmitter settings vars
     BOOL xyz_ref_frame = 0;
 
-
-    json_file_read.close();
-
-    int rm_status = remove("data.json");
-    if (rm_status == 0) {
-        printf("JSON File Deleted\n");
-    }
+    string file_naming = argv[5];
 
     /*
     System Initialize -- JOYCE AND SHRISHA
     */
-    printf("\n\nWelcome to DATA COLLECTION APP \n");
-    printf("Initializing System\n");
     errorCode = InitializeBIRDSystem();
     if (errorCode != BIRD_ERROR_SUCCESS) errorHandler(errorCode);
 
@@ -142,22 +113,17 @@ int main() {
 		errorCode = GetTransmitterConfiguration(i, &pXmtr[i].m_config);
 		if(errorCode!=BIRD_ERROR_SUCCESS) errorHandler(errorCode);
 	}
-    printf("System Initialization Successful\n");
-
-
 
 
 
     /*
     System settings setup (basic settings) -- SHRISHA 
     */
-    printf("Starting System Settings\n");
 
     SET_SYSTEM_PARAMETER(SELECT_TRANSMITTER, trans_select);
 	SET_SYSTEM_PARAMETER(MEASUREMENT_RATE, measure_rate);
     SET_SYSTEM_PARAMETER(MAXIMUM_RANGE, max_range);
     SET_SYSTEM_PARAMETER(METRIC, true);
-    printf("System Settings Successful\n");
 
 
 
@@ -165,7 +131,6 @@ int main() {
     /*
     Sensor settings setup -- SHRISHA
     */
-    printf("Starting Sensor Settings \n");
 
     USHORT  sensorID;
 
@@ -184,7 +149,6 @@ int main() {
         SET_SENSOR_PARAMETER(sensorID, FILTER_AC_WIDE_NOTCH, filter_wide); 
         SET_SENSOR_PARAMETER(sensorID, FILTER_AC_NARROW_NOTCH, filter_narrow); 
     }
-    printf("Sensor Settings Successful\n");
 
 
 
@@ -192,7 +156,6 @@ int main() {
     /*
     Transmitter settings setup -- JOYCE
     */
-    printf("Starting Transmitter Settings\n");
 
     USHORT transmitterID = 0;
 
@@ -201,7 +164,6 @@ int main() {
 		SET_TRANSMITTER_PARAMETER(transmitterID, REFERENCE_FRAME, anglesRecord);
 	}
 	SET_TRANSMITTER_PARAMETER(transmitterID, XYZ_REFERENCE_FRAME, xyz_ref_frame);  //sets the angle reference frame with respect to transmitter tilt. False means not with respect to. 
-    printf("Transmitter Settings Successful\n");
 
 
 
@@ -211,7 +173,6 @@ int main() {
     */
     string str_path = "./" + file_naming + "/" + file_naming + ".ini";
     char * savePath = const_cast<char*>(str_path.c_str());
-    printf("Saving system configuration to %s\n", savePath);
     errorCode = SaveSystemConfiguration(savePath);
     if(errorCode!=BIRD_ERROR_SUCCESS) errorHandler(errorCode);
 
@@ -224,58 +185,59 @@ int main() {
     */
     printf("Collecting Data \n");
 
-    ofstream myFile;
-    myFile.open("./" + file_naming + "/" + file_naming + ".csv");
-    myFile << "Sensor ID" << "," << "Status" << "," <<  "X (mm)"  << "," <<  "Y (mm)" << "," <<  "Z (mm)" << "," <<  "Azimuth" << "," <<  "Elevation " << "," <<  "Roll" << "," <<  "trakSTAR Time (ms since epoch)" << "," <<  "Quality" << endl;    
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    
+    // Set up the server address
+    struct sockaddr_in server_address;
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(12346);
+    inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr);
+    
+    // Connect to the socket
+    int connection_status = connect(client_socket, (struct sockaddr*) &server_address, sizeof(server_address));
+    if (connection_status == -1) {
+        cerr << "Could not connect to server" << endl;
+        return 1;
+    }
+
+    char buffer[4096];
+    snprintf(buffer, sizeof(buffer), "Sensor ID, Status, X (mm), Y (mm), Z (mm), Azimuth, Elevation, Roll, trakStart Time (ms), Quality");
+    int bytes_sent = send(client_socket, buffer, strlen(buffer), 0);
+    if (bytes_sent == -1) {
+        close(client_socket);
+        std::cerr << "Could not send data" << std::endl;
+        return 1;
+    }
+
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD record[8*4];
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD *pRecord = record;
-
-    printf("Starting Data Collection \nPress Q to stop data collection \n");
 
     while(1) {
 		errorCode = GetSynchronousRecord(ALL_SENSORS, pRecord, sizeof(record)[0] * ATC3DG.m_config.numberSensors);
 		if(errorCode!=BIRD_ERROR_SUCCESS) errorHandler(errorCode);
 
-	
-
-
 		// scan the sensors and request a record if the sensor is physically attached
 		for(sensorID=0; sensorID < ATC3DG.m_config.numberSensors; sensorID++)
 		{
 			// get the status of the last data record and only report the data if everything is okay
-			unsigned int status = GetSensorStatus( sensorID);
+			unsigned int status = GetSensorStatus(sensorID);
 
 			if (status == VALID_STATUS)
 			{
                 string time_str = to_string(record[sensorID].time); //to format trakSTAR time into string so it goes in properly
-                myFile << sensorID << "," << status << "," <<  record[sensorID].x  << "," <<  record[sensorID].y << "," <<  record[sensorID].z << "," <<  record[sensorID].a << "," <<  record[sensorID].e << "," <<  record[sensorID].r << "," <<  time_str << "," <<  record[sensorID].quality << endl;
-				// save output to file. All data is stored in the record matrix
+                snprintf(buffer, sizeof(buffer), "%u, %u, %f, %f, %f, %f, %f, %f, %s, %u", sensorID, status, record[sensorID].x, record[sensorID].y, record[sensorID].z, record[sensorID].a, record[sensorID].e, record[sensorID].r, time_str, record[sensorID].quality);
+                int bytes_sent = send(client_socket, buffer, strlen(buffer), 0);
+                if (bytes_sent == -1) {
+                    close(client_socket);
+                    USHORT id = -1;
+                    printf("Socket connection stopped. Shutting Down");
+                    errorCode = SetSystemParameter(SELECT_TRANSMITTER, &id, sizeof(id));
+                    if(errorCode!=BIRD_ERROR_SUCCESS) errorHandler(errorCode);
+                    return 1;
+                }
+                //For reference: myFile << sensorID << "," << status << "," <<  record[sensorID].x  << "," <<  record[sensorID].y << "," <<  record[sensorID].z << "," <<  record[sensorID].a << "," <<  record[sensorID].e << "," <<  record[sensorID].r << "," <<  time_str << "," <<  record[sensorID].quality << endl;
 			}  
 		}
-
-        if (GetKeyState('Q') & 0x8000) { //checking high bit is 1 (1 << 15). If q is pressed, go to end routine
-            printf("Stopped Data Collection. Shutting Down\n\n\n Thank you for using DATA COLLECTION APP. This window will close in 10 seconds");
-            myFile.close();
-
-            //for communication with python script
-            ofstream updateFile("updateFile.txt");
-            updateFile << "end";
-            updateFile.close();
-
-
-
-
-            /*
-            System shut down (set transmitter to -1) -- SHRISHA
-            */
-            USHORT id = -1;
-            errorCode = SetSystemParameter(SELECT_TRANSMITTER, &id, sizeof(id));
-            if(errorCode!=BIRD_ERROR_SUCCESS) errorHandler(errorCode);
-
-            sleep(10);
-
-            return 0; // End function
-        }
 
 	}
 

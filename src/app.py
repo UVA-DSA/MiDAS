@@ -2,6 +2,8 @@ import eel
 import socket
 import subprocess
 import pickle
+import datetime
+from os import mkdir
 
 #defines
 video_port = 12345
@@ -33,23 +35,26 @@ def sendData(subject, trial, task, rate, range_val, hemisphere, filter_val):
         "Rate": float(rate),
         "Range": float(range_val),
         "Hemisphere": hemisphere,
-        "Filter": filter_val
+        "Filter": filter_val,
+        "Date": str(datetime.datetime.today().date()),
+        "Time": str(datetime.datetime.today().time())[:8]
         }
     print(data)
-    path = "FILL OUT" #TODO
-    getInputStreams(path)
+    path = f"./../{data['Task']}_S{data['Subject']}_T{data['Trial']}_{data['Date']}_{data['Time']}" 
+    mkdir(path)
+    getInputStreams(data)
     return
 
-def getInputStreams(path: str):
+def getInputStreams(data: dict):
     '''
     Reaches out to different data streams (socket) to get data. Prepares to write them to file 
 
-    path: string that shows path where data should be stored
+    data: dict that contains user data
 
     returns: Nothing
     '''
-    subprocess.Popen(['python3', path + '/src/video/capture.py'])
-
+    
+    subprocess.Popen(['python3', 'video/capture.py'])
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as video:
         video.bind(('localhost', video_port))
@@ -63,7 +68,7 @@ def getInputStreams(path: str):
             #video data processing
             vid_data = pickle.loads(vid_con.recv(video_stream_size))
             if vid_data == "Data not collected": #something wrong with video data
-                pass #update later with what to do
+                pass #TODO: update later with what to do
 
 
             if not vid_data:

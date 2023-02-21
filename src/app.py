@@ -5,7 +5,7 @@ import pickle
 import datetime
 from os import mkdir
 import csv
-import cv2
+
 
 #defines
 video_port = 12345
@@ -129,7 +129,7 @@ def getInputStreams(data: dict):
             raven_data = pickle.loads(raven_con.recv(raven_stream_size))
             if not raven_data:
                 pass
-            raven_data_as_list = raven_data.split(',') #TODO: Fill out neccessary headers
+            raven_data_as_list = raven_data.split(',') 
             with open(f"{path}/raven.csv", "a") as raven_file: #writing data to file
                 writer = csv.writer(raven_file)
                 writer.writerow(raven_data_as_list)

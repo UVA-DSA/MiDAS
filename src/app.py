@@ -8,7 +8,7 @@ from queue import Queue
 from threading import Thread
 
 #defines
-capture_q_size = 10
+CAPTURE_Q_SIZE = 10
 
 #global variables
 capture_q = Queue()
@@ -52,6 +52,7 @@ def sendData(subject, trial, task, rate, range_val, hemisphere, filter_val):
 def readData(capture_q): #add readKinematic, etc flags in future
     if (capture_q != None):
         capture_data = capture_q.get()
+        print(capture_data)
 
 def startThreads(data: dict):
     '''
@@ -61,7 +62,7 @@ def startThreads(data: dict):
 
     returns: Nothing
     '''
-    capture_thread = Thread(target = send_vid_data, args=(capture_q, capture_q_size,))
+    capture_thread = Thread(target = send_vid_data, args=(capture_q, CAPTURE_Q_SIZE,))
     read_thread = Thread(target = readData, args = (capture_q, ))
     #future threads go here 
 

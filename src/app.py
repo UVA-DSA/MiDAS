@@ -10,8 +10,9 @@ from threading import Thread
 #defines
 CAPTURE_Q_SIZE = 10
 
+
 #global variables
-capture_q = Queue()
+capture_q = Queue(CAPTURE_Q_SIZE)
 
 eel.init('web')
 
@@ -50,6 +51,7 @@ def sendData(subject, trial, task, rate, range_val, hemisphere, filter_val):
     return
 
 def readData(capture_q): #add readKinematic, etc flags in future
+    
     if (capture_q != None):
         capture_data = capture_q.get()
         print(capture_data)
@@ -62,7 +64,7 @@ def startThreads(data: dict):
 
     returns: Nothing
     '''
-    capture_thread = Thread(target = send_vid_data, args=(capture_q, CAPTURE_Q_SIZE,))
+    capture_thread = Thread(target = send_vid_data, args=(capture_q,))
     read_thread = Thread(target = readData, args = (capture_q, ))
     #future threads go here 
 

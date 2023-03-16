@@ -13,7 +13,7 @@ def send_vid_data(q):
             time = time_ns()
             data = [frame, time, frame_num]
             q.put(data)
-            if (counter >= q_size):
+            if q.full():
                 _ = q.get() #removes last object from q to keep only a certain amount
 
     

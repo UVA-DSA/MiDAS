@@ -6,6 +6,7 @@ import csv
 from Video.capture import send_vid_data 
 from queue import Queue
 from threading import Thread
+import time
 
 #defines
 CAPTURE_Q_SIZE = 10
@@ -52,9 +53,8 @@ def sendData(subject, trial, task, rate, range_val, hemisphere, filter_val):
 
 def readData(capture_q): #add readKinematic, etc flags in future
     
-    if (capture_q != None):
-        capture_data = capture_q.get()
-        print(capture_data)
+    time.sleep(1)
+    most_recent_capture = capture_q.queue[-1]
 
 def startThreads(data: dict):
     '''

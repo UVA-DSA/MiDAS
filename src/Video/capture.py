@@ -2,7 +2,7 @@ import cv2
 from queue import Queue
 from time import time_ns
 
-def send_vid_data(q, q_size):
+def send_vid_data(q):
     counter = 0 #used to fill up q
     cap = cv2.VideoCapture(1) #1 for connection to the video capture card
     frame_num = 0

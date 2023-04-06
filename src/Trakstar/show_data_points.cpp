@@ -5,8 +5,6 @@ using namespace std;
 
 
 
-
-
 /*Standard error handler. Whenever some settings are changed,
 the error handler is run in ordder to check that everything is going
 correctly. If not, it prints what is wrong and exits the program so as not 
@@ -40,43 +38,15 @@ int main(int argc, char* argv[])  {
     int         errorCode;      // for error handling
 
     //system setup
-    double measure_rate = stod(argv[1]);  //measurement rate in Hz (CLI)
-    double max_range = stod(argv[2]);  // maximum range parameter (36, 72, 144 in). Anything above 36 will have lower resolution (CLI)
+    double measure_rate = stod(90);  //measurement rate in Hz (CLI)
+    double max_range = stod(36);  // maximum range parameter (36, 72, 144 in). Anything above 36 will have lower resolution (CLI)
     short trans_select = 0; //selects transmitter based on id (default 0) (CLI)
+    BOOL filter_wide = true; 
+    BOOL filter_narrow = false;
 
-    //sensor setup
-    BOOL filter_wide, filter_narrow;
-    if (argv[3] == "wide") {
-        filter_wide = true;
-        filter_narrow = false;
-    } else {
-        filter_wide = false;
-        filter_narrow = true;
-    }
 
-    HEMISPHERE_TYPE hem;
-    switch(argv[4]) {
-        case "front":
-            hem = FRONT;
-            break;
-        case "back":
-            hem = BACK;
-            break;
-        case "top":
-            hem = TOP;
-            break;
-        case "bottom":
-            hem = BOTTOM;
-            break;
-        case "left":
-            hem = LEFT;
-            break;
-        case "right":
-            hem = RIGHT;
-            break;
-        default:
-            hem = FRONT;
-    }
+
+    HEMISPHERE_TYPE hem = FRONT; //default hemisphere is front (CLI)
 
     double azim = 0;
     double elev = 0;
@@ -124,7 +94,6 @@ int main(int argc, char* argv[])  {
 	SET_SYSTEM_PARAMETER(MEASUREMENT_RATE, measure_rate);
     SET_SYSTEM_PARAMETER(MAXIMUM_RANGE, max_range);
     SET_SYSTEM_PARAMETER(METRIC, true);
-
 
 
 
@@ -200,14 +169,6 @@ int main(int argc, char* argv[])  {
         return 1;
     }
 
-    char buffer[4096];
-    snprintf(buffer, sizeof(buffer), "Sensor ID, Status, X (mm), Y (mm), Z (mm), Azimuth, Elevation, Roll, trakStart Time (ms), Quality");
-    int bytes_sent = send(client_socket, buffer, strlen(buffer), 0);
-    if (bytes_sent == -1) {
-        close(client_socket);
-        std::cerr << "Could not send data" << std::endl;
-        return 1;
-    }
 
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD record[8*4];
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD *pRecord = record;

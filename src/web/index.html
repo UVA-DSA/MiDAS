@@ -34,34 +34,6 @@
                     </div>
                 </div>
         
-                <div class="fields">
-                    <div class="field">
-                        <label>Range</label>
-                        <select id="range_val">
-                            <option value="36">36 in</option>
-                            <option value="72">72 in</option>
-                            <option value="144">144 in</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label>Hemisphere</label>
-                        <select id="hemisphere">
-                            <option value="right">Front</option>
-                            <option value="back">Back</option>
-                            <option value="top">Top</option>
-                            <option value="bottom">Bottom</option>
-                            <option value="left">Left</option>
-                            <option value="right">Right</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label>Filter</label>
-                        <select id="filter_val">
-                            <option value="wide">Wide</option>
-                            <option value="narrow">Narrow</option>
-                        </select>
-                    </div>
-                </div>
                 <br>
                 <br>
                 <button class="ui button" type="submit" onclick="sendData();">Start</button>
@@ -83,17 +55,8 @@
                         <b>Task:</b>Type of exercise beign recorded
                     </p>
                     <p>
-                        <b>Rate:</b>Frequency(Hz) as a float value between 12 and 255. Any rate value above 120 might lead to less accurate results.
+                        <b>Rate:</b>Frequency(Hz) as a float value of MIDAS sampling rate
                     </p>
-                    <p>
-                        <b>Range:</b>Maximum recordable range (in). Lower ranges increase accuracy.
-                    </p>
-                    <p>
-                        <b>Hemisphere:</b> Default position front is the way the xyz axes are labled on 
-                    </p>
-                    <p>
-                        <b>Filter:</b> Filtering out a wide or narrow range. Narrower ranges lead to faster computation time.
-                    </p> 
                 </div>
         
             </div>

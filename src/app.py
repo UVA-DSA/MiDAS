@@ -1,19 +1,24 @@
 import eel
-import subprocess
 import datetime
 from os import mkdir
-import csv
+
 from Video.capture import send_vid_data 
+from Trakstar.trackstarWriter import getTrackStarData
+
+
 from queue import Queue
 from threading import Thread
 import time
 
+
 #defines
 CAPTURE_Q_SIZE = 10
+TRACKSTAR_Q_SIZE = 100
 
 
 #global variables
 capture_q = Queue(CAPTURE_Q_SIZE)
+trackstar_q = Queue(TRACKSTAR_Q_SIZE)
 
 eel.init('web')
 
@@ -39,41 +44,46 @@ def sendData(subject, trial, task, rate, range_val, hemisphere, filter_val):
         "Trial": int(trial),
         "Task": task,
         "Rate": float(rate),
-        "Range": float(range_val),
-        "Hemisphere": hemisphere,
-        "Filter": filter_val,
         "Date": str(datetime.datetime.today().date()),
         "Time": str(datetime.datetime.today().time())[:8]
         }
     print(data)
     path = f"./../{data['Task']}_S{data['Subject']}_T{data['Trial']}_{data['Date']}_{data['Time']}" 
     mkdir(path)
-    getInputStreams(data)
+    
+    startThreads(path, rate)
     return
 
-def readData(capture_q): #add readKinematic, etc flags in future
+def readData(rate, list_of_qs): #add readKinematic, etc flags in future
+
+    sample_time = 1/rate
+
+    while True:
+        start_time = time.time()
+        for q in list_of_qs:
+            print(q.queue[-1])
+
+        #make sure sleep for sample time
+        time.sleep(sample_time - (time.time() - start_time))
     
-    time.sleep(1)
-    most_recent_capture = capture_q.queue[-1]
 
-def startThreads(data: dict):
-    '''
-    Reaches out to different data streams (socket) to get data. Prepares to write them to file 
+def startThreads(path, rate):
 
-    data: dict that contains user data
+    list_of_qs = [capture_q, trackstar_q]
 
-    returns: Nothing
-    '''
-    capture_thread = Thread(target = send_vid_data, args=(capture_q,))
-    read_thread = Thread(target = readData, args = (capture_q, ))
+    capture_thread = Thread(target = send_vid_data, args=(capture_q, path + '/video.csv'))
+    trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path + '/trakstar.csv'))
+    read_thread = Thread(target = readData, args = (rate, list_of_qs))
     #future threads go here 
 
     #start threads
     capture_thread.start()
+    trakstar_thread.start()
     read_thread.start()
 
     #wait for join
     capture_thread.join()
+    trakstar_thread.join()
     read_thread.join()
 
     return

@@ -23,7 +23,7 @@ trackstar_q = Queue(TRACKSTAR_Q_SIZE)
 eel.init('web')
 
 @eel.expose
-def sendData(subject, trial, task, rate, range_val, hemisphere, filter_val):
+def sendData(subject, trial, task, rate):
     '''
     Takes data in from frontend, puts it in a dictionary, and passes dictionary into function 
     getInputStreams(). All data values come in as strings and are converted into respective 

@@ -3,14 +3,11 @@ function sendData() {
     var trial = document.getElementById("trial").value;
     var task = document.getElementById("task").value;
     var rate = document.getElementById("rate").value;
-    var range_val = document.getElementById("range_val").value;
-    var hemisphere = document.getElementById("hemisphere").value;
-    var filter_val = document.getElementById("filter_val").value;
 
     if (!subject || !trial || !task || !rate) {
         alert("Please fill out all forms");
         return false;
       } else {
-        eel.sendData(subject, trial, task, rate, range_val, hemisphere, filter_val)();
+        eel.sendData(subject, trial, task, rate)();
       }
 }

@@ -1,7 +1,6 @@
 import eel
 import datetime
-from os import mkdir
-
+import os 
 from Video.capture import send_vid_data 
 from Trakstar.trackstarWriter import getTrackStarData
 
@@ -48,32 +47,58 @@ def sendData(subject, trial, task, rate):
         "Time": str(datetime.datetime.today().time())[:8]
         }
     print(data)
-    path = f"./../{data['Task']}_S{data['Subject']}_T{data['Trial']}_{data['Date']}_{data['Time']}" 
-    mkdir(path)
+    path = f"{data['Task']}_S{data['Subject']}_T{data['Trial']}_{data['Date']}/" 
+    
+    mydir = "./Data/"
+    myfile = path
+    path = os.path.join(mydir, myfile)
+
+    
+    if not os.path.exists(path):
+        os.makedirs(path)
+    
     
     startThreads(path, rate)
     return
 
 def readData(rate, list_of_qs): #add readKinematic, etc flags in future
 
-    sample_time = 1/rate
+    sample_time = 1/int(rate)
+    print("Sample rate(hz),time(s): ",rate,sample_time)
 
     while True:
-        start_time = time.time()
-        for q in list_of_qs:
-            print(q.queue[-1])
+        
+        try:
+            
+            start_time = time.time()
+            for idx,q in enumerate(list_of_qs):
+                if(idx == 0):
+                    print("Video Capture Queue:")
+                if(idx == 1):
+                    print("Trackstar Queue:")
+                    
+                if(not q.empty()):
+                    print(q.queue[-1])
 
-        #make sure sleep for sample time
-        time.sleep(sample_time - (time.time() - start_time))
+            #make sure sleep for sample time
+            sleep_time = sample_time - (time.time() - start_time)
+            if(sleep_time > 0):
+                time.sleep(sleep_time)
     
+        except Exception as e:
+            print("Exception!", e)
 
 def startThreads(path, rate):
 
     list_of_qs = [capture_q, trackstar_q]
 
-    capture_thread = Thread(target = send_vid_data, args=(capture_q, path + '/video.csv'))
-    trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path + '/trakstar.csv'))
+    capture_thread = Thread(target = send_vid_data, args=(capture_q, path))
+    capture_thread.daemon = True
+    trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path ))
+    trakstar_thread.daemon = True
     read_thread = Thread(target = readData, args = (rate, list_of_qs))
+    read_thread.daemon = True
+    
     #future threads go here 
 
     #start threads

@@ -12,7 +12,7 @@
 
 
 // TODO: reference additional headers your program requires here
-
+#include <winsock2.h>
 #include <windows.h>
 #include "atc3dg.h"		// ATC3DG API
 #include "show_data_points.h"		// class declarations
@@ -26,11 +26,11 @@
 #include <chrono>
 #include <sys/time.h>
 #include <ctime>
-#include "json.hpp"
 #include <cstdlib>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
+#include <iconv.h>
+#include <cstring>
+
 
 
 //{{AFX_INSERT_LOCATION}}

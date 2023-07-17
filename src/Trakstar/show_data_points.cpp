@@ -37,9 +37,10 @@ int main(int argc, char* argv[])  {
     int         i;              // used in general to loop through
     int         errorCode;      // for error handling
 
+    printf("Configuring system settings\n");
     //system setup
-    double measure_rate = stod(90);  //measurement rate in Hz (CLI)
-    double max_range = stod(36);  // maximum range parameter (36, 72, 144 in). Anything above 36 will have lower resolution (CLI)
+    double measure_rate = 90;  //measurement rate in Hz (CLI)
+    double max_range = 36;  // maximum range parameter (36, 72, 144 in). Anything above 36 will have lower resolution (CLI)
     short trans_select = 0; //selects transmitter based on id (default 0) (CLI)
     BOOL filter_wide = true; 
     BOOL filter_narrow = false;
@@ -55,7 +56,6 @@ int main(int argc, char* argv[])  {
     //Transmitter settings vars
     BOOL xyz_ref_frame = 0;
 
-    string file_naming = argv[5];
 
     /*
     System Initialize -- JOYCE AND SHRISHA
@@ -137,13 +137,6 @@ int main(int argc, char* argv[])  {
 
 
 
-    /*
-    Save system settings (for reference) -- SHRISHA
-    */
-    string str_path = "./" + file_naming + "/" + file_naming + ".ini";
-    char * savePath = const_cast<char*>(str_path.c_str());
-    errorCode = SaveSystemConfiguration(savePath);
-    if(errorCode!=BIRD_ERROR_SUCCESS) errorHandler(errorCode);
 
 
 
@@ -154,14 +147,23 @@ int main(int argc, char* argv[])  {
     */
     printf("Collecting Data \n");
 
-    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    WSADATA wsa_data;
+    int result = WSAStartup(MAKEWORD(2,2), &wsa_data);
+    if (result != 0) {
+        cerr << "WSA startup failed: " << result << endl;
+        return 1;
+    }
+
+
+
+    SOCKET client_socket = socket(AF_INET, SOCK_STREAM, 0);
     
     // Set up the server address
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(12346);
-    inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr);
-    
+    server_address.sin_addr.s_addr = inet_addr("127.0.0.1");
+
     // Connect to the socket
     int connection_status = connect(client_socket, (struct sockaddr*) &server_address, sizeof(server_address));
     if (connection_status == -1) {
@@ -169,9 +171,9 @@ int main(int argc, char* argv[])  {
         return 1;
     }
 
-
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD record[8*4];
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD *pRecord = record;
+
 
     while(1) {
 		errorCode = GetSynchronousRecord(ALL_SENSORS, pRecord, sizeof(record)[0] * ATC3DG.m_config.numberSensors);
@@ -185,11 +187,19 @@ int main(int argc, char* argv[])  {
 
 			if (status == VALID_STATUS)
 			{
-                string time_str = to_string(record[sensorID].time); //to format trakSTAR time into string so it goes in properly
-                snprintf(buffer, sizeof(buffer), "%u, %u, %f, %f, %f, %f, %f, %f, %s, %u", sensorID, status, record[sensorID].x, record[sensorID].y, record[sensorID].z, record[sensorID].a, record[sensorID].e, record[sensorID].r, time_str, record[sensorID].quality);
+                                
+
+                char buffer[128];
+                memset(buffer, 0, 128);                
+                sprintf(buffer, "%u,%f,%f,%f,%f,%f,%f,%f", sensorID, record[sensorID].x, record[sensorID].y, record[sensorID].z, record[sensorID].a, record[sensorID].e, record[sensorID].r, record[sensorID].time);
+
+                cout << buffer << endl;
                 int bytes_sent = send(client_socket, buffer, strlen(buffer), 0);
-                if (bytes_sent == -1) {
-                    close(client_socket);
+
+                if (bytes_sent < 0) {
+                    printf("Bytes_sent: %d\n", bytes_sent);
+                    sleep(10);
+                    closesocket(client_socket);
                     USHORT id = -1;
                     printf("Socket connection stopped. Shutting Down");
                     errorCode = SetSystemParameter(SELECT_TRANSMITTER, &id, sizeof(id));

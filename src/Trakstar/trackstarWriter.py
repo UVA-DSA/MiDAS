@@ -7,7 +7,7 @@ import subprocess
 
 
 
-def getTrackStarData(q, path):
+def getTrackStarData(q, path, event):
     
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -32,7 +32,9 @@ def getTrackStarData(q, path):
     csv_writer.writerow(['SensorID', 'Status', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Computer Time'])
 
     while True:
-        
+        if event.is_set():
+            print("Stopping")
+            break
         try:
             # Receive the data and split by commas
             data = connection.recv(128).decode()
@@ -40,17 +42,19 @@ def getTrackStarData(q, path):
             
             #convert to correct type
             if(values[0]):
-                values[0] = int(float(values[0]))
-                for i in range(1, len(values)):
-                    if(values[i]):
-                        values[i] = float(values[i])
-                
-                #add in alienware time
-                values.append(time_ns())
-                print(values)
-                
-                
-                csv_writer.writerow(values)
+                if(values[0] != '-'):
+                    values[0] = int(float(values[0]))
+                    for i in range(1, len(values)):
+                        if(values[i]):
+                            if(values[i] != '-'):
+                                values[i] = float(values[i])
+                    
+                    #add in alienware time
+                    values.append(time_ns())
+                    print(values)
+                    
+                    
+                    csv_writer.writerow(values)
             # q.put(data)
             # if q.full():
             #     _ = q.get() #removes last object from q to keep only a certain amount
@@ -65,4 +69,4 @@ def getTrackStarData(q, path):
         
 if __name__ == "__main__":
     q = Queue(16)
-    getTrackStarData(q, "./test.csv")
+    getTrackStarData(q, "../")

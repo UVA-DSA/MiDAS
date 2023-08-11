@@ -6,20 +6,17 @@ from Trakstar.trackstarWriter import getTrackStarData
 
 
 from queue import Queue
-from threading import Thread
+from threading import Thread,Event
 import time
 
-
-#defines
-CAPTURE_Q_SIZE = 10
-TRACKSTAR_Q_SIZE = 100
+import signal
 
 
-#global variables
-capture_q = Queue(CAPTURE_Q_SIZE)
-trackstar_q = Queue(TRACKSTAR_Q_SIZE)
+def handle_kb_interrupt(sig, frame):
+    event.set()
 
-eel.init('web')
+
+
 
 @eel.expose
 def sendData(subject, trial, task, rate):
@@ -59,26 +56,31 @@ def sendData(subject, trial, task, rate):
     
     
     startThreads(path, rate)
+    
     return
 
 def readData(rate, list_of_qs): #add readKinematic, etc flags in future
 
     sample_time = 1/int(rate)
     print("Sample rate(hz),time(s): ",rate,sample_time)
-
     while True:
-        
+        if event.is_set():
+            print("Stopping")
+            return
         try:
             
             start_time = time.time()
             for idx,q in enumerate(list_of_qs):
-                if(idx == 0):
-                    print("Video Capture Queue:")
-                if(idx == 1):
-                    print("Trackstar Queue:")
-                    
                 if(not q.empty()):
+                    
+                    if(idx == 0):
+                        print("Video Capture Queue:")
+                        
+                    if(idx == 1):
+                        print("Trackstar Queue:")
+                    
                     print(q.queue[-1])
+                        
 
             #make sure sleep for sample time
             sleep_time = sample_time - (time.time() - start_time)
@@ -87,17 +89,18 @@ def readData(rate, list_of_qs): #add readKinematic, etc flags in future
     
         except Exception as e:
             print("Exception!", e)
-
+ 
+    
 def startThreads(path, rate):
 
     list_of_qs = [capture_q, trackstar_q]
 
-    capture_thread = Thread(target = send_vid_data, args=(capture_q, path))
-    capture_thread.daemon = True
-    trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path ))
-    trakstar_thread.daemon = True
+    capture_thread = Thread(target = send_vid_data, args=(capture_q, path, event))
+    # capture_thread.daemon = True
+    trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path, event ))
+    # trakstar_thread.daemon = True
     read_thread = Thread(target = readData, args = (rate, list_of_qs))
-    read_thread.daemon = True
+    # read_thread.daemon = True
     
     #future threads go here 
 
@@ -107,10 +110,44 @@ def startThreads(path, rate):
     read_thread.start()
 
     #wait for join
-    capture_thread.join()
-    trakstar_thread.join()
-    read_thread.join()
+    # capture_thread.join()
+    # trakstar_thread.join()
+    # read_thread.join()
 
     return
 
-eel.start('index.html')
+@eel.expose
+def endProgram():
+    print("Ending")
+    event.set()
+    exit()
+
+
+def close_callback(route):
+    endProgram()
+
+
+if __name__ == '__main__':
+
+
+    #defines
+    CAPTURE_Q_SIZE = 10
+    TRACKSTAR_Q_SIZE = 100
+
+
+    #global variables
+    capture_q = Queue(CAPTURE_Q_SIZE)
+    trackstar_q = Queue(TRACKSTAR_Q_SIZE)
+
+    capture_thread = None
+    trakstar_thread = None
+    read_thread = None
+
+    event = Event()
+
+    signal.signal(signal.SIGINT, handle_kb_interrupt)
+
+
+    eel.init('web')
+
+    eel.start('index.html', close_callback=endProgram)

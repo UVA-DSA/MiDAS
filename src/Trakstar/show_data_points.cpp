@@ -171,6 +171,11 @@ int main(int argc, char* argv[])  {
         return 1;
     }
 
+    ofstream myFile;
+    myFile.open("./backup_recording.csv");
+    myFile << "Sensor ID" << "," << "Status" << "," <<  "X (mm)"  << "," <<  "Y (mm)" << "," <<  "Z (mm)" << "," <<  "Azimuth" << "," <<  "Elevation " << "," <<  "Roll" << "," <<  "trakSTAR Time (ms since epoch)" << "," <<  "Quality" << endl;    
+   
+
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD record[8*4];
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD *pRecord = record;
 
@@ -187,7 +192,9 @@ int main(int argc, char* argv[])  {
 
 			if (status == VALID_STATUS)
 			{
-                                
+                string time_str = to_string(record[sensorID].time); //to format trakSTAR time into string so it goes in properly
+                myFile << sensorID << "," << status << "," <<  record[sensorID].x  << "," <<  record[sensorID].y << "," <<  record[sensorID].z << "," <<  record[sensorID].a << "," <<  record[sensorID].e << "," <<  record[sensorID].r << "," <<  time_str << "," <<  record[sensorID].quality << endl;
+			        
 
                 char buffer[128];
                 memset(buffer, 0, 128);                
@@ -198,6 +205,7 @@ int main(int argc, char* argv[])  {
 
                 if (bytes_sent < 0) {
                     printf("Bytes_sent: %d\n", bytes_sent);
+                    myFile.close();
                     sleep(10);
                     closesocket(client_socket);
                     USHORT id = -1;

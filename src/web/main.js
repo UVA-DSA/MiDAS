@@ -11,3 +11,8 @@ function sendData() {
         eel.sendData(subject, trial, task, rate)();
       }
 }
+
+function endProgram() {
+  eel.endProgram();
+  // window.close();
+}

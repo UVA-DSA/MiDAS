@@ -8,7 +8,10 @@ Pre-requisites
 2. HDMI Capture card connected via USB.
 3. Trakstar Device connected via USB.
 
-Running the system
+## Compiling Trakstar
+1. Go to src/Trakstar directory.
+2. `g++ -c show_data_points.cpp -o main.o; g++ -o main.exe main.o -L. -lATC3DG64 -lws2_32 -liconv;`
+## Running the system
 
 1. Activate Conda Environment `midasv1`.
 2. Execute `python app.py` in `src` directory.

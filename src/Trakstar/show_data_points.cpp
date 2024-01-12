@@ -3,7 +3,7 @@
 
 using namespace std;
 
-
+#define DEFAULT_BUFLEN 128
 
 /*Standard error handler. Whenever some settings are changed,
 the error handler is run in ordder to check that everything is going
@@ -157,6 +157,12 @@ int main(int argc, char* argv[])  {
 
 
     SOCKET client_socket = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (client_socket == INVALID_SOCKET) {
+        cerr << "Error creating socket: " << WSAGetLastError() << endl;
+        WSACleanup();
+        return 1;
+    }
     
     // Set up the server address
     struct sockaddr_in server_address;
@@ -164,17 +170,20 @@ int main(int argc, char* argv[])  {
     server_address.sin_port = htons(12346);
     server_address.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    // Connect to the socket
-    int connection_status = connect(client_socket, (struct sockaddr*) &server_address, sizeof(server_address));
-    if (connection_status == -1) {
-        cerr << "Could not connect to server" << endl;
+    // // Connect to the socket
+    // int connection_status = connect(client_socket, (struct sockaddr*) &server_address, sizeof(server_address));
+    // if (connection_status == -1) {
+    //     cerr << "Could not connect to server" << endl;
+    //     return 1;
+    // }
+
+        // Connect to the server
+    if (connect(client_socket, reinterpret_cast<sockaddr*>(&server_address), sizeof(server_address)) == SOCKET_ERROR) {
+        cerr << "Could not connect to server: " << WSAGetLastError() << endl;
+        closesocket(client_socket);
+        WSACleanup();
         return 1;
     }
-
-    ofstream myFile;
-    myFile.open("./backup_recording.csv");
-    myFile << "Sensor ID" << "," << "Status" << "," <<  "X (mm)"  << "," <<  "Y (mm)" << "," <<  "Z (mm)" << "," <<  "Azimuth" << "," <<  "Elevation " << "," <<  "Roll" << "," <<  "trakSTAR Time (ms since epoch)" << "," <<  "Quality" << endl;    
-   
 
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD record[8*4];
     DOUBLE_POSITION_ANGLES_TIME_Q_RECORD *pRecord = record;
@@ -192,21 +201,56 @@ int main(int argc, char* argv[])  {
 
 			if (status == VALID_STATUS)
 			{
-                string time_str = to_string(record[sensorID].time); //to format trakSTAR time into string so it goes in properly
-                myFile << sensorID << "," << status << "," <<  record[sensorID].x  << "," <<  record[sensorID].y << "," <<  record[sensorID].z << "," <<  record[sensorID].a << "," <<  record[sensorID].e << "," <<  record[sensorID].r << "," <<  time_str << "," <<  record[sensorID].quality << endl;
-			        
+                                
+
+                char tempBuffer[1];  // Just a temporary buffer with size 1
+                int bytesNeeded;
+
+                // Calculate the size without writing to the buffer
+                sprintf(tempBuffer, "%u,%f,%f,%f,%f,%f,%f,%f%n", sensorID, record[sensorID].x, record[sensorID].y, record[sensorID].z, record[sensorID].a, record[sensorID].e, record[sensorID].r, record[sensorID].time, &bytesNeeded);
+
+
+
 
                 char buffer[128];
-                memset(buffer, 0, 128);                
-                sprintf(buffer, "%u,%f,%f,%f,%f,%f,%f,%f", sensorID, record[sensorID].x, record[sensorID].y, record[sensorID].z, record[sensorID].a, record[sensorID].e, record[sensorID].r, record[sensorID].time);
+                int bytesWritten;
+                memset(buffer, 0, 128); //possible source of error - filling char with all 0? Maybe increase value of memory?               
+                bytesWritten = sprintf(buffer, "%d,%u,%f,%f,%f,%f,%f,%f,%f", bytesNeeded, sensorID, record[sensorID].x, record[sensorID].y, record[sensorID].z, record[sensorID].a, record[sensorID].e, record[sensorID].r, record[sensorID].time);
+
+                printf("bytesWritten: %d\n", bytesWritten);
+
 
                 cout << buffer << endl;
                 int bytes_sent = send(client_socket, buffer, strlen(buffer), 0);
+                printf("Bytes_sent: %d\n", bytes_sent);
+
+
+                // Receive acknowledgment from the server
+                char acknowledgment_buffer[DEFAULT_BUFLEN];
+                int bytes_received = recv(client_socket, acknowledgment_buffer, DEFAULT_BUFLEN, 0);
+
+                if (bytes_received == SOCKET_ERROR) {
+                    cerr << "Error receiving acknowledgment: " << WSAGetLastError() << endl;
+                    closesocket(client_socket);
+                    WSACleanup();
+                    return 1;
+                }
+
+                acknowledgment_buffer[bytes_received] = '\0';  // Null-terminate the received data
+                cout << "Received acknowledgment: " << acknowledgment_buffer << endl;
+
+
+
+                if (bytes_sent == SOCKET_ERROR) {
+                    cerr << "Error sending data: " << WSAGetLastError() << endl;
+                    closesocket(client_socket);
+                    WSACleanup();
+                    return 1;
+                }
 
                 if (bytes_sent < 0) {
-                    printf("Bytes_sent: %d\n", bytes_sent);
-                    myFile.close();
-                    sleep(10);
+                    printf("Error Bytes_sent: %d\n", bytes_sent);
+                    sleep(1);
                     closesocket(client_socket);
                     USHORT id = -1;
                     printf("Socket connection stopped. Shutting Down");
@@ -219,5 +263,9 @@ int main(int argc, char* argv[])  {
 		}
 
 	}
+
+        // Cleanup
+    closesocket(client_socket);
+    WSACleanup();
 
 }

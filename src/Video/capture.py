@@ -4,7 +4,7 @@ from time import time_ns
 import csv
 import os
 
-def send_vid_data(q, path, event):
+def send_vid_data(q, path):
 
     # Create a CSV file and write the header row
     csv_path = path + '/video.csv'
@@ -17,25 +17,24 @@ def send_vid_data(q, path, event):
     if not os.path.exists(img_dir):
         os.mkdir(img_dir)
     
-    cap = cv2.VideoCapture(1) #1 for connection to the video capture card
+    cap = cv2.VideoCapture(0) #1 for connection to the video capture card
     frame_num = 0
     while cap.isOpened():
-        if event.is_set():
-            print("Stopping")
-            break
-        ret, frame = cap.read()
-        if ret == True: #making sure capture was succesful
-            frame_num += 1
-            time = time_ns()
-            data = [frame_num, time, frame]
-            
-            filename = f"/{frame_num}_{time}.jpeg"
-            img_path = img_dir + filename
-            cv2.imwrite(img_path, frame)
+        try:
+            ret, frame = cap.read()
+            if ret == True: #making sure capture was succesful
+                frame_num += 1
+                time = time_ns()
+                data = [frame_num, time, frame]
+                
+                filename = f"/{frame_num}_{time}.jpeg"
+                img_path = img_dir + filename
+                cv2.imwrite(img_path, frame)
 
-            csv_writer.writerow(data)
-            q.put(data)
-            if q.full():
-                _ = q.get() #removes last object from q to keep only a certain amount
+                csv_writer.writerow(data)
+                q.put(data)
+                if q.full():
+                    _ = q.get() #removes last object from q to keep only a certain amount
 
-    
+        except KeyboardInterrupt:
+            exit(0)

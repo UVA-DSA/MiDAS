@@ -6,17 +6,20 @@ from Trakstar.trackstarWriter import getTrackStarData
 
 
 from queue import Queue
-from threading import Thread,Event
+from threading import Thread
 import time
 
-import signal
+
+#defines
+CAPTURE_Q_SIZE = 10
+TRACKSTAR_Q_SIZE = 100
 
 
-def handle_kb_interrupt(sig, frame):
-    event.set()
+#global variables
+capture_q = Queue(CAPTURE_Q_SIZE)
+trackstar_q = Queue(TRACKSTAR_Q_SIZE)
 
-
-
+eel.init('web')
 
 @eel.expose
 def sendData(subject, trial, task, rate):
@@ -56,51 +59,60 @@ def sendData(subject, trial, task, rate):
     
     
     startThreads(path, rate)
-    
     return
 
 def readData(rate, list_of_qs): #add readKinematic, etc flags in future
 
     sample_time = 1/int(rate)
     print("Sample rate(hz),time(s): ",rate,sample_time)
+
+    # try:
+    #     while True:
+    #         start_time = time.time()
+    #         # Your existing code here
+
+    #         # Make sure to sleep for the sample time
+    #         sleep_time = sample_time - (time.time() - start_time)
+    #         if sleep_time > 0:
+    #             time.sleep(sleep_time)
+
+    # except KeyboardInterrupt:
+    #     print("KeyboardInterrupt received. Exiting threads.")
+    #     # Perform any cleanup here if necessary
+        
     while True:
-        if event.is_set():
-            print("Stopping")
-            return
+        
         try:
             
             start_time = time.time()
-            for idx,q in enumerate(list_of_qs):
-                if(not q.empty()):
+            # for idx,q in enumerate(list_of_qs):
+            #     if(idx == 0):
+            #         print("Video Capture Queue:")
+            #     if(idx == 1):
+            #         print("Trackstar Queue:")
                     
-                    if(idx == 0):
-                        print("Video Capture Queue:")
-                        
-                    if(idx == 1):
-                        print("Trackstar Queue:")
-                    
-                    print(q.queue[-1])
-                        
+            #     # if(not q.empty()):
+            #     #     print(q.queue[-1])
 
             #make sure sleep for sample time
             sleep_time = sample_time - (time.time() - start_time)
             if(sleep_time > 0):
                 time.sleep(sleep_time)
     
-        except Exception as e:
-            print("Exception!", e)
- 
-    
+        except KeyboardInterrupt:
+            print("Keyboard Interrupt!")
+            exit(-1)
+
 def startThreads(path, rate):
 
     list_of_qs = [capture_q, trackstar_q]
 
-    capture_thread = Thread(target = send_vid_data, args=(capture_q, path, event))
-    # capture_thread.daemon = True
-    trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path, event ))
-    # trakstar_thread.daemon = True
+    capture_thread = Thread(target = send_vid_data, args=(capture_q, path))
+    capture_thread.daemon = True
+    trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path ))
+    trakstar_thread.daemon = True
     read_thread = Thread(target = readData, args = (rate, list_of_qs))
-    # read_thread.daemon = True
+    read_thread.daemon = True
     
     #future threads go here 
 
@@ -109,45 +121,16 @@ def startThreads(path, rate):
     trakstar_thread.start()
     read_thread.start()
 
-    #wait for join
-    # capture_thread.join()
-    # trakstar_thread.join()
-    # read_thread.join()
+    try:
+        # Wait for threads to finish
+        capture_thread.join()
+        trakstar_thread.join()
+        read_thread.join()
+
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt received. Exiting main program.")
+
 
     return
 
-@eel.expose
-def endProgram():
-    print("Ending")
-    event.set()
-    exit()
-
-
-def close_callback(route):
-    endProgram()
-
-
-if __name__ == '__main__':
-
-
-    #defines
-    CAPTURE_Q_SIZE = 10
-    TRACKSTAR_Q_SIZE = 100
-
-
-    #global variables
-    capture_q = Queue(CAPTURE_Q_SIZE)
-    trackstar_q = Queue(TRACKSTAR_Q_SIZE)
-
-    capture_thread = None
-    trakstar_thread = None
-    read_thread = None
-
-    event = Event()
-
-    signal.signal(signal.SIGINT, handle_kb_interrupt)
-
-
-    eel.init('web')
-
-    eel.start('index.html', close_callback=endProgram)
+eel.start('index.html')

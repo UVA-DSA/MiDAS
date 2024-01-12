@@ -7,7 +7,7 @@ import subprocess
 
 
 
-def getTrackStarData(q, path, event):
+def getTrackStarData(q, path):
     
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -29,44 +29,46 @@ def getTrackStarData(q, path, event):
     csv_path = path + '/trakstar.csv'
     csv_file = open(csv_path, 'w', newline='')
     csv_writer = csv.writer(csv_file)
+    # So the line below is asking to append 10 items per line to the CSV but 9 values are being sent
     csv_writer.writerow(['SensorID', 'Status', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Computer Time'])
 
     while True:
-        if event.is_set():
-            print("Stopping")
-            break
+        
         try:
             # Receive the data and split by commas
             data = connection.recv(128).decode()
+            
             values = data.split(',')
             
             #convert to correct type
-            if(values[0]):
-                if(values[0] != '-'):
-                    values[0] = int(float(values[0]))
-                    for i in range(1, len(values)):
-                        if(values[i]):
-                            if(values[i] != '-'):
-                                values[i] = float(values[i])
-                    
-                    #add in alienware time
-                    values.append(time_ns())
-                    print(values)
-                    
-                    
-                    csv_writer.writerow(values)
+            #use this to get rid of erraneous values?
+            print("raw values",values)
+            if(values[0]): 
+                values[0] = int(float(values[0]))
+                for i in range(1, 8):
+                    if(values[i]):
+                        values[i] = float(values[i])
+                
+                #add in alienware time
+                values.append(time_ns())
+                print(values)
+                
+                #is this just writing all the values at once or each set of sensor values?
+                csv_writer.writerow(values)
             # q.put(data)
             # if q.full():
             #     _ = q.get() #removes last object from q to keep only a certain amount
+                          
+            acknowledgment_message = "ACK"
+            connection.send(acknowledgment_message.encode())
 
-        except Exception as e:
+        except KeyboardInterrupt:
             # Clean up the connection
             print("closed!")
-            print(e)
             connection.close()
             csv_file.close()
-            return
+            exit(-1)
         
 if __name__ == "__main__":
     q = Queue(16)
-    getTrackStarData(q, "../")
+    getTrackStarData(q, "./test.csv")

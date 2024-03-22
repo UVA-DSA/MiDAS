@@ -1,6 +1,7 @@
 import eel
 import datetime
 import os 
+import csv
 from Video.capture import send_vid_data 
 from Trakstar.trackstarWriter import getTrackStarData
 
@@ -41,7 +42,7 @@ def sendData(subject, trial, task, rate):
     data = {
         "Subject" : subject,
         "Trial": int(trial),
-        "Task": task,
+        "Task": str(task),
         "Rate": float(rate),
         "Date": str(datetime.datetime.today().date()),
         "Time": str(datetime.datetime.today().time())[:8]
@@ -58,10 +59,14 @@ def sendData(subject, trial, task, rate):
         os.makedirs(path)
     
     
-    startThreads(path, rate)
+    startThreads(path, rate, task)
     return
 
-def readData(rate, list_of_qs): #add readKinematic, etc flags in future
+def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
+
+    if rate == 0:
+        print("Rate not valid")
+        exit(-1)
 
     sample_time = 1/int(rate)
     print("Sample rate(hz),time(s): ",rate,sample_time)
@@ -79,31 +84,43 @@ def readData(rate, list_of_qs): #add readKinematic, etc flags in future
     # except KeyboardInterrupt:
     #     print("KeyboardInterrupt received. Exiting threads.")
     #     # Perform any cleanup here if necessary
-        
-    while True:
-        
-        try:
+
+    csv_path = './Data/' + task + 'TrackStar+VideoData.csv' 
+    #csv_file = open(csv_path, 'w', newline='')
+    #csv_writer = csv.writer(csv_file)
+    #csv_writer.writerow(['Trackstar Data + Video Data'])
+    #time.sleep(float(10)) #adding this to give time for the video capture card to get up and runnning and then start processing data
+    with open(csv_path, "w", newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(['Trackstar Data + Video Data'])
+        while True:
             
-            start_time = time.time()
-            # for idx,q in enumerate(list_of_qs):
-            #     if(idx == 0):
-            #         print("Video Capture Queue:")
-            #     if(idx == 1):
-            #         print("Trackstar Queue:")
-                    
-            #     # if(not q.empty()):
-            #     #     print(q.queue[-1])
+            try:
+                
+                start_time = time.time()
+                local_time = time.ctime(start_time)
+                print("Adding data to csv")
+                csv_writer.writerow([local_time,start_time, 'Null trackstar data', list_of_qs[0].get()[3]])
+                # for idx,q in enumerate(list_of_qs):
+                #     if(idx == 0):
+                #         print("Video Capture Queue:")
+                #     if(idx == 1):
+                #         print("Trackstar Queue:")
+                        
+                #     # if(not q.empty()):
+                #     #     print(q.queue[-1])
 
-            #make sure sleep for sample time
-            sleep_time = sample_time - (time.time() - start_time)
-            if(sleep_time > 0):
-                time.sleep(sleep_time)
-    
-        except KeyboardInterrupt:
-            print("Keyboard Interrupt!")
-            exit(-1)
+                #make sure sleep for sample time
+                sleep_time = sample_time - (time.time() - start_time)
+                if(sleep_time > 0):
+                    time.sleep(sleep_time)
+                
+        
+            except KeyboardInterrupt:
+                print("Keyboard Interrupt!")
+                exit(-1)
 
-def startThreads(path, rate):
+def startThreads(path, rate, task):
 
     list_of_qs = [capture_q, trackstar_q]
 
@@ -111,20 +128,20 @@ def startThreads(path, rate):
     capture_thread.daemon = True
     trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path ))
     trakstar_thread.daemon = True
-    read_thread = Thread(target = readData, args = (rate, list_of_qs))
+    read_thread = Thread(target = readData, args = (task, rate, list_of_qs))
     read_thread.daemon = True
     
     #future threads go here 
 
     #start threads
     capture_thread.start()
-    trakstar_thread.start()
+    #trakstar_thread.start()
     read_thread.start()
 
     try:
         # Wait for threads to finish
         capture_thread.join()
-        trakstar_thread.join()
+        #trakstar_thread.join()
         read_thread.join()
 
     except KeyboardInterrupt:

@@ -13,6 +13,7 @@ function sendData() {
 }
 
 function endProgram() {
+  console.log("End button clicked")
   eel.endProgram();
   // window.close();
 }

@@ -37,4 +37,7 @@ def send_vid_data(q, path):
                     _ = q.get() #removes last object from q to keep only a certain amount
 
         except KeyboardInterrupt:
+            print("KeyboardInterrupt: Exiting...")
+            cap.release()
+            csv_file.close()
             exit(0)

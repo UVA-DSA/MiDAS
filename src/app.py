@@ -7,8 +7,10 @@ from Trakstar.trackstarWriter import getTrackStarData
 
 
 from queue import Queue
-from threading import Thread
+from threading import Thread, Event
+import threading
 import time
+import sys
 
 
 #defines
@@ -19,6 +21,7 @@ TRACKSTAR_Q_SIZE = 100
 #global variables
 capture_q = Queue(CAPTURE_Q_SIZE)
 trackstar_q = Queue(TRACKSTAR_Q_SIZE)
+thread_stop = True
 
 eel.init('web')
 
@@ -59,11 +62,18 @@ def sendData(subject, trial, task, rate):
         os.makedirs(path)
     
     
-    startThreads(path, rate, task)
-    return
+    send_data_thread = threading.Thread(target=startThreads, args=(path, rate, task))
+    send_data_thread.start()
+    return 
+
+@eel.expose
+def endProgram():
+    global thread_stop
+    print("Program ended")
+    thread_stop = False
 
 def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
-
+    global thread_stop
     if rate == 0:
         print("Rate not valid")
         exit(-1)
@@ -86,21 +96,24 @@ def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
     #     # Perform any cleanup here if necessary
 
     csv_path = './Data/' + task + 'TrackStar+VideoData.csv' 
-    #csv_file = open(csv_path, 'w', newline='')
-    #csv_writer = csv.writer(csv_file)
-    #csv_writer.writerow(['Trackstar Data + Video Data'])
+    csv_file = open(csv_path, 'w', newline='')
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(['Trackstar Data + Video Data'])
     #time.sleep(float(10)) #adding this to give time for the video capture card to get up and runnning and then start processing data
-    with open(csv_path, "w", newline='') as csv_file:
+    with open(csv_path, 'w', newline = "") as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(['Trackstar Data + Video Data'])
-        while True:
+        while thread_stop:
             
             try:
                 
                 start_time = time.time()
                 local_time = time.ctime(start_time)
                 print("Adding data to csv")
-                csv_writer.writerow([local_time,start_time, 'Null trackstar data', list_of_qs[0].get()[3]])
+                #trackstar_q = list_of_qs[1].get().split(',')
+                #csv_writer.writerow([local_time,start_time, trackstar_q[0], trackstar_q[1],trackstar_q[2], trackstar_q[3], trackstar_q[4], trackstar_q[5], trackstar_q[6], trackstar_q[7], list_of_qs[0].get()[3]])
+                csv_writer.writerow([local_time,start_time, list_of_qs[0].get()[3]])
+                csv_file.flush()
                 # for idx,q in enumerate(list_of_qs):
                 #     if(idx == 0):
                 #         print("Video Capture Queue:")
@@ -119,6 +132,8 @@ def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
             except KeyboardInterrupt:
                 print("Keyboard Interrupt!")
                 exit(-1)
+        else:
+           return
 
 def startThreads(path, rate, task):
 
@@ -146,7 +161,9 @@ def startThreads(path, rate, task):
 
     except KeyboardInterrupt:
         print("KeyboardInterrupt received. Exiting main program.")
+        exit(-1)
 
+    print("jawn")
 
     return
 

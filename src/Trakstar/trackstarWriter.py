@@ -55,9 +55,9 @@ def getTrackStarData(q, path):
                 
                 #is this just writing all the values at once or each set of sensor values?
                 csv_writer.writerow(values)
-            # q.put(data)
-            # if q.full():
-            #     _ = q.get() #removes last object from q to keep only a certain amount
+                q.put(data)
+                if q.full():
+                    _ = q.get() #removes last object from q to keep only a certain amount
                           
             acknowledgment_message = "ACK"
             connection.send(acknowledgment_message.encode())

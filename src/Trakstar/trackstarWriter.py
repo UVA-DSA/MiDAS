@@ -2,6 +2,7 @@ import csv
 import socket
 from queue import Queue
 from time import time_ns
+import time
 import multiprocessing
 import subprocess
 
@@ -51,13 +52,16 @@ def getTrackStarData(q, path):
                 
                 #add in alienware time
                 values.append(time_ns())
+                start_time = time.time()
+                local_time = time.ctime(start_time)
+                values.append(local_time)
                 print(values)
                 
                 #is this just writing all the values at once or each set of sensor values?
                 csv_writer.writerow(values)
-            # q.put(data)
-            # if q.full():
-            #     _ = q.get() #removes last object from q to keep only a certain amount
+                q.put(values)
+                if q.full():
+                    _ = q.get() #removes last object from q to keep only a certain amount
                           
             acknowledgment_message = "ACK"
             connection.send(acknowledgment_message.encode())
@@ -70,5 +74,5 @@ def getTrackStarData(q, path):
             exit(-1)
         
 if __name__ == "__main__":
-    q = Queue(16)
+    q = Queue()
     getTrackStarData(q, "./test.csv")

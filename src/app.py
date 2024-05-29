@@ -3,7 +3,7 @@ import datetime
 import os 
 import csv
 from Video.capture import send_vid_data 
-from Trakstar.trackstarWriter import getTrackStarData
+from Trakstar.trackstarWriter import get_trakstar_data
 
 
 from queue import Queue
@@ -143,7 +143,7 @@ def startThreads(path, rate, task):
 
     capture_thread = Thread(target = send_vid_data, args=(capture_q, path))
     capture_thread.daemon = True
-    trakstar_thread = Thread(target = getTrackStarData, args=(trackstar_q, path ))
+    trakstar_thread = Thread(target = get_trakstar_data, args=(trackstar_q, path ))
     trakstar_thread.daemon = True
     read_thread = Thread(target = readData, args = (task, rate, list_of_qs))
     read_thread.daemon = True

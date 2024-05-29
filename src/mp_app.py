@@ -3,8 +3,8 @@ import datetime
 import os 
 import csv
 from Video.capture import send_vid_data 
-from Trakstar.trackstarWriter import getTrackStarData
-
+from Trakstar.trackstarWriter import get_trakstar_data
+from Smartwatch.tcp_smartwatch_client import receive_smartwatch_data
 from multiprocessing import Process, Queue, Event
 import time
 import sys
@@ -12,11 +12,18 @@ import sys
 # defines
 CAPTURE_Q_SIZE = 10
 TRACKSTAR_Q_SIZE = 100
+SMARTWATCH_Q_SIZE = 100
 
 # global variables
 capture_q = Queue(CAPTURE_Q_SIZE)
 trackstar_q = Queue(TRACKSTAR_Q_SIZE)
+smartwatch_q = Queue(SMARTWATCH_Q_SIZE)
+
 thread_stop = Event()
+
+# Replace these values with your smartwatch's IP, port
+smartwatch_ip = '127.0.0.1'
+smartwatch_port = 7889
 
 eel.init('web')
 
@@ -85,33 +92,35 @@ def readData(task, rate, list_of_qs):
                 local_time = time.ctime(start_time)
                 
                 trackstar_data = None
+                smartwatch_data = None
                 video_data = None
         
                 try:
-                    video_data = list_of_qs[0].get(block=False)
-                    # print("Video Queue ",  video_data)
+                    video_data = list_of_qs[0].get(block=True)
                 except:
-                    # print("No data in queue")
                     pass
   
                     
+                # try:
+                #     trackstar_data = list_of_qs[1].get(block=False)
+                # except:
+                #     pass
+                
+                
                 try:
-                    trackstar_data = list_of_qs[1].get(block=False)
-                    # print("Trakstar Queue ", trackstar_data)
-                    
+                    smartwatch_data = list_of_qs[2].get(block=True)
                 except:
-                    # print("No data in queue")
                     pass
                 
-                        # Add logic to handle the case where trackstar_data or video_data is None
-                if video_data is None:
+                # Add logic to handle the case where trackstar_data or video_data is None
+                if video_data is None  or smartwatch_data is None:
                     continue
                 
                 trackstar_data = [''] * 9  # Adjust the number of elements as needed
 
                 
-                print("Writing to csv file ..")
-                csv_writer.writerow([local_time, start_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], video_data[-1]])
+                # print("Writing to csv file ..")
+                csv_writer.writerow([local_time, start_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], video_data[-1], smartwatch_data[0],smartwatch_data[1]])
                 csv_file.flush()
                 
                 
@@ -126,22 +135,30 @@ def readData(task, rate, list_of_qs):
             return
 
 def startProcesses(path, rate, task):
-    list_of_qs = [capture_q, trackstar_q]
+    list_of_qs = [capture_q, trackstar_q, smartwatch_q]
 
     capture_process = Process(target=send_vid_data, args=(capture_q, path))
     capture_process.daemon = True
-    trakstar_process = Process(target=getTrackStarData, args=(trackstar_q, path))
+    
+    trakstar_process = Process(target=get_trakstar_data, args=(trackstar_q, path))
     trakstar_process.daemon = True
+    
+    smartwatch_process = Process(target=receive_smartwatch_data, args=(smartwatch_ip,smartwatch_port,smartwatch_q,path))
+    smartwatch_process.daemon = True
+    
     read_process = Process(target=readData, args=(task, rate, list_of_qs))
     read_process.daemon = True
 
     capture_process.start()
     trakstar_process.start()
+    smartwatch_process.start()
+
     read_process.start()
 
     try:
         capture_process.join()
         trakstar_process.join()
+        smartwatch_process.join()
         read_process.join()
 
     except KeyboardInterrupt:

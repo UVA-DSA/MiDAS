@@ -115,9 +115,9 @@ def readData(task, rate, list_of_qs):
                 csv_file.flush()
                 
                 
-                sleep_time = sample_time - (time.time() - start_time)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                # sleep_time = sample_time - (time.time() - start_time)
+                while (time.time() - start_time) < sample_time:
+                    pass 
 
             except KeyboardInterrupt:
                 print("Keyboard Interrupt!")
@@ -150,4 +150,5 @@ def startProcesses(path, rate, task):
 
     return
 
-eel.start('index.html')
+if __name__ == "__main__":
+    eel.start('index.html')

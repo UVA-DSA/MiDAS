@@ -112,7 +112,9 @@ def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
                 print("Adding data to csv")
                 #trackstar_q = list_of_qs[1].get().split(',')
                 #csv_writer.writerow([local_time,start_time, trackstar_q[0], trackstar_q[1],trackstar_q[2], trackstar_q[3], trackstar_q[4], trackstar_q[5], trackstar_q[6], trackstar_q[7], list_of_qs[0].get()[3]])
-                csv_writer.writerow([local_time,start_time, list_of_qs[0].get()[3]])
+                trackstar_data = list_of_qs[1].get()
+                csv_writer.writerow([local_time,start_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], trackstar_data[3]])
+                #csv_writer.writerow([local_time,start_time, list_of_qs[1].get()[0], list_of_qs[1].get()[1], list_of_qs[1].get()[2], list_of_qs[1].get()[3], list_of_qs[1].get()[4], list_of_qs[1].get()[5], list_of_qs[1].get()[6], list_of_qs[1].get()[7], list_of_qs[1].get()[8], list_of_qs[0].get()[3]])
                 csv_file.flush()
                 # for idx,q in enumerate(list_of_qs):
                 #     if(idx == 0):
@@ -150,20 +152,18 @@ def startThreads(path, rate, task):
 
     #start threads
     capture_thread.start()
-    #trakstar_thread.start()
+    trakstar_thread.start()
     read_thread.start()
 
     try:
         # Wait for threads to finish
         capture_thread.join()
-        #trakstar_thread.join()
+        trakstar_thread.join()
         read_thread.join()
 
     except KeyboardInterrupt:
         print("KeyboardInterrupt received. Exiting main program.")
         exit(-1)
-
-    print("jawn")
 
     return
 

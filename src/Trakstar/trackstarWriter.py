@@ -8,7 +8,7 @@ import subprocess
 
 
 
-def getTrackStarData(q, path):
+def get_trakstar_data(q, path):
     
     # Create a TCP/IP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -75,4 +75,4 @@ def getTrackStarData(q, path):
         
 if __name__ == "__main__":
     q = Queue()
-    getTrackStarData(q, "./test.csv")
+    get_trakstar_data(q, "./test.csv")

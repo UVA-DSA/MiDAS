@@ -22,7 +22,12 @@ smartwatch_q = Queue(SMARTWATCH_Q_SIZE)
 thread_stop = Event()
 
 # Replace these values with your smartwatch's IP, port
-smartwatch_ip = '127.0.0.1'
+smartwatch_1_ip = '172.27.191.158'
+smartwatch_1_id = 'right'
+
+smartwatch_2_ip = '172.27.176.73'
+smartwatch_2_id = 'left'
+
 smartwatch_port = 7889
 
 eel.init('web')
@@ -69,7 +74,7 @@ def endProgram():
     print("Program ended")
     thread_stop.set()
 
-def readData(task, rate, list_of_qs):
+def readData(task, rate, list_of_qs, path):
     global thread_stop
     if rate == 0:
         print("Rate not valid")
@@ -78,46 +83,54 @@ def readData(task, rate, list_of_qs):
     sample_time = 1 / int(rate)
     print("Sample rate(hz), time(s): ", rate, sample_time)
 
-    csv_path = './Data/' + task + 'TrackStar+VideoData.csv'
-    csv_file = open(csv_path, 'w', newline='')
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Trackstar Data + Video Data'])
+    csv_path = path + '/synced_data.csv'
     
+
     with open(csv_path, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Trackstar Data + Video Data'])
+        csv_writer.writerow(["server_time",  "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_atime", "video_time", "video_id", 'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis', 'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis'])
+    
         while not thread_stop.is_set():
             try:
                 start_time = time.time()
                 local_time = time.ctime(start_time)
+                #get current epoch time in ns
+                local_time = int(time.time_ns())
                 
                 trackstar_data = None
                 smartwatch_data = None
                 video_data = None
         
                 try:
-                    video_data = list_of_qs[0].get(block=True)
+                    video_data = list_of_qs[0].get(block=False)
                 except:
                     pass
   
                     
-                # try:
-                #     trackstar_data = list_of_qs[1].get(block=False)
-                # except:
-                #     pass
+                try:
+                    trackstar_data = list_of_qs[1].get(block=False)
+                except:
+                    pass
                 
                 
                 try:
-                    smartwatch_data = list_of_qs[2].get(block=True)
+                    smartwatch_data = list_of_qs[2].get(block=False)
                 except:
                     pass
                 
                 # Add logic to handle the case where trackstar_data or video_data is None
-                if video_data is None  or smartwatch_data is None:
-                    continue
+                # if video_data is None or smartwatch_data is None or trackstar_data is None:
+                #     continue
                 
-                trackstar_data = [''] * 9  # Adjust the number of elements as needed
-
+                if video_data is None:
+                    video_data = [0, 0, 0]
+                    
+                if smartwatch_data is None:
+                    smartwatch_data = [0, 0]
+                    
+                if trackstar_data is None:
+                    trackstar_data = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+                
                 
                 # print("Writing to csv file ..")
                 csv_writer.writerow([local_time, start_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], video_data[-1], smartwatch_data[0],smartwatch_data[1]])
@@ -137,28 +150,35 @@ def readData(task, rate, list_of_qs):
 def startProcesses(path, rate, task):
     list_of_qs = [capture_q, trackstar_q, smartwatch_q]
 
-    capture_process = Process(target=send_vid_data, args=(capture_q, path))
-    capture_process.daemon = True
+    video_capture_process = Process(target=send_vid_data, args=(capture_q, path))
+    video_capture_process.daemon = True
     
     trakstar_process = Process(target=get_trakstar_data, args=(trackstar_q, path))
     trakstar_process.daemon = True
     
-    smartwatch_process = Process(target=receive_smartwatch_data, args=(smartwatch_ip,smartwatch_port,smartwatch_q,path))
-    smartwatch_process.daemon = True
+    smartwatch_1_process = Process(target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_q,path, smartwatch_1_id))
+    smartwatch_1_process.daemon = True
     
-    read_process = Process(target=readData, args=(task, rate, list_of_qs))
+    smartwatch_2_process = Process(target=receive_smartwatch_data, args=(smartwatch_2_ip,smartwatch_port,smartwatch_q,path, smartwatch_2_id))
+    smartwatch_2_process.daemon = True
+    
+    read_process = Process(target=readData, args=(task, rate, list_of_qs, path))
     read_process.daemon = True
 
-    capture_process.start()
+    video_capture_process.start()
     trakstar_process.start()
-    smartwatch_process.start()
+    
+    smartwatch_1_process.start()
+    smartwatch_2_process.start()
 
     read_process.start()
 
     try:
-        capture_process.join()
+        video_capture_process.join()
         trakstar_process.join()
-        smartwatch_process.join()
+        smartwatch_1_process.join()
+        smartwatch_2_process.join()
+        
         read_process.join()
 
     except KeyboardInterrupt:

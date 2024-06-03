@@ -17,7 +17,8 @@ SMARTWATCH_Q_SIZE = 100
 # global variables
 capture_q = Queue(CAPTURE_Q_SIZE)
 trackstar_q = Queue(TRACKSTAR_Q_SIZE)
-smartwatch_q = Queue(SMARTWATCH_Q_SIZE)
+smartwatch_1_q = Queue(SMARTWATCH_Q_SIZE)
+smartwatch_2_q = Queue(SMARTWATCH_Q_SIZE)
 
 thread_stop = Event()
 
@@ -98,7 +99,8 @@ def readData(task, rate, list_of_qs, path):
                 local_time = int(time.time_ns())
                 
                 trackstar_data = None
-                smartwatch_data = None
+                smartwatch_1_data = None
+                smartwatch_2_data = None
                 video_data = None
         
                 try:
@@ -114,9 +116,16 @@ def readData(task, rate, list_of_qs, path):
                 
                 
                 try:
-                    smartwatch_data = list_of_qs[2].get(block=False)
+                    smartwatch_1_data = list_of_qs[2].get(block=False)
                 except:
                     pass
+                
+                
+                try:
+                    smartwatch_2_data = list_of_qs[3].get(block=False)
+                except:
+                    pass
+                
                 
                 # Add logic to handle the case where trackstar_data or video_data is None
                 # if video_data is None or smartwatch_data is None or trackstar_data is None:
@@ -125,15 +134,18 @@ def readData(task, rate, list_of_qs, path):
                 if video_data is None:
                     video_data = [0, 0, 0]
                     
-                if smartwatch_data is None:
-                    smartwatch_data = [0, 0]
+                if smartwatch_1_data is None:
+                    smartwatch_1_data = [0,0,0,0,0,0]
+                    
+                if smartwatch_2_data is None:
+                    smartwatch_2_data = [0,0,0,0,0,0]
                     
                 if trackstar_data is None:
                     trackstar_data = [0, 0, 0, 0, 0, 0, 0, 0, 0]
                 
                 
                 # print("Writing to csv file ..")
-                csv_writer.writerow([local_time, start_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], video_data[-1], smartwatch_data[0],smartwatch_data[1]])
+                csv_writer.writerow([local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5]])
                 csv_file.flush()
                 
                 
@@ -148,7 +160,7 @@ def readData(task, rate, list_of_qs, path):
             return
 
 def startProcesses(path, rate, task):
-    list_of_qs = [capture_q, trackstar_q, smartwatch_q]
+    list_of_qs = [capture_q, trackstar_q, smartwatch_1_q, smartwatch_2_q]
 
     video_capture_process = Process(target=send_vid_data, args=(capture_q, path))
     video_capture_process.daemon = True
@@ -156,10 +168,10 @@ def startProcesses(path, rate, task):
     trakstar_process = Process(target=get_trakstar_data, args=(trackstar_q, path))
     trakstar_process.daemon = True
     
-    smartwatch_1_process = Process(target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_q,path, smartwatch_1_id))
+    smartwatch_1_process = Process(target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_1_q,path, smartwatch_1_id))
     smartwatch_1_process.daemon = True
     
-    smartwatch_2_process = Process(target=receive_smartwatch_data, args=(smartwatch_2_ip,smartwatch_port,smartwatch_q,path, smartwatch_2_id))
+    smartwatch_2_process = Process(target=receive_smartwatch_data, args=(smartwatch_2_ip,smartwatch_port,smartwatch_2_q,path, smartwatch_2_id))
     smartwatch_2_process.daemon = True
     
     read_process = Process(target=readData, args=(task, rate, list_of_qs, path))

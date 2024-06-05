@@ -3,6 +3,7 @@ import datetime
 import os 
 import csv
 from Video.capture import send_vid_data 
+from Video.camera import get_camera_instance
 from Trakstar.trackstarWriter import get_trakstar_data
 from Smartwatch.tcp_smartwatch_client import receive_smartwatch_data
 from multiprocessing import Process, Queue, Event
@@ -16,9 +17,12 @@ SMARTWATCH_Q_SIZE = 100
 
 # global variables
 capture_q = Queue(CAPTURE_Q_SIZE)
+camera_q = Queue(CAPTURE_Q_SIZE)
 trackstar_q = Queue(TRACKSTAR_Q_SIZE)
 smartwatch_1_q = Queue(SMARTWATCH_Q_SIZE)
 smartwatch_2_q = Queue(SMARTWATCH_Q_SIZE)
+
+camera_type = "Intel"
 
 thread_stop = Event()
 
@@ -164,6 +168,10 @@ def startProcesses(path, rate, task):
 
     video_capture_process = Process(target=send_vid_data, args=(capture_q, path))
     video_capture_process.daemon = True
+
+    camera_handler = get_camera_instance(camera_type)(camera_q, path)
+    camera_capture_process = Process(target=camera_handler.run, args=())
+    camera_capture_process.daemon = True
     
     trakstar_process = Process(target=get_trakstar_data, args=(trackstar_q, path))
     trakstar_process.daemon = True

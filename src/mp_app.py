@@ -3,7 +3,7 @@ import datetime
 import os 
 import csv
 from Video.capture import send_vid_data 
-from Video.camera import get_camera_instance
+from Video.camera import get_camera_handler
 from Trakstar.trackstarWriter import get_trakstar_data
 from Smartwatch.tcp_smartwatch_client import receive_smartwatch_data
 from multiprocessing import Process, Queue, Event
@@ -198,13 +198,13 @@ def startProcesses(path, rate, task):
     smartwatch_1_q = manager.LifoQueue(SMARTWATCH_Q_SIZE)
     smartwatch_2_q = manager.LifoQueue(SMARTWATCH_Q_SIZE)
 
-    list_of_qs = [capture_q, trackstar_q, smartwatch_1_q, smartwatch_2_q]
+    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q]
 
     video_capture_process = Process(target=send_vid_data, args=(capture_q, path))
     video_capture_process.daemon = True
 
-    camera_handler = get_camera_instance(camera_type)(camera_q, path)
-    camera_capture_process = Process(target=camera_handler.run, args=())
+    camera_handler = get_camera_handler(camera_type)
+    camera_capture_process = Process(target=camera_handler, args=(camera_q, path))
     camera_capture_process.daemon = True
     
     trakstar_process = Process(target=get_trakstar_data, args=(trackstar_q, path))

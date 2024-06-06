@@ -1,3 +1,4 @@
+import os
 import csv
 import socket
 from queue import Queue
@@ -27,11 +28,11 @@ def get_trakstar_data(q, path):
 
 
     # Create a CSV file and write the header row
-    csv_path = path + '/trakstar.csv'
+    csv_path = os.path.join(path, '/trakstar.csv')
     csv_file = open(csv_path, 'w', newline='')
     csv_writer = csv.writer(csv_file)
     # So the line below is asking to append 10 items per line to the CSV but 9 values are being sent
-    csv_writer.writerow(['SensorID', 'Status', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Computer Time'])
+    csv_writer.writerow(['SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Computer Time'])
 
     while True:
         
@@ -51,7 +52,7 @@ def get_trakstar_data(q, path):
                         values[i] = float(values[i])
                 
                 #add in alienware time
-                values.append(time_ns())
+                values.append(time_ns()) # TODO: replace with the actual trakstar time
                 start_time = time.time()
                 local_time = time.ctime(start_time)
                 values.append(local_time)

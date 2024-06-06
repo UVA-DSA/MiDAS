@@ -93,7 +93,7 @@ def readData(task, rate, list_of_qs, path):
 
     with open(csv_path, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["server_time",  "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_atime", "video_time", "video_id", 'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis', 'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis'])
+        csv_writer.writerow(["server_time",  "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_atime", "video_time", "video_id", "camera_time", "camera_frame_id", 'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis', 'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis'])
     
         while not thread_stop.is_set():
             try:
@@ -103,6 +103,7 @@ def readData(task, rate, list_of_qs, path):
                 local_time = int(time.time_ns())
                 
                 trackstar_data = None
+                camera_data = None
                 smartwatch_1_data = None
                 smartwatch_2_data = None
                 video_data = None
@@ -111,22 +112,27 @@ def readData(task, rate, list_of_qs, path):
                     video_data = list_of_qs[0].get(block=False)
                 except:
                     pass
+
+                try:
+                    camera_data = list_of_qs[1].get(block=False)
+                except:
+                    pass
   
                     
                 try:
-                    trackstar_data = list_of_qs[1].get(block=False)
+                    trackstar_data = list_of_qs[2].get(block=False)
                 except:
                     pass
                 
                 
                 try:
-                    smartwatch_1_data = list_of_qs[2].get(block=False)
+                    smartwatch_1_data = list_of_qs[3].get(block=False)
                 except:
                     pass
                 
                 
                 try:
-                    smartwatch_2_data = list_of_qs[3].get(block=False)
+                    smartwatch_2_data = list_of_qs[4].get(block=False)
                 except:
                     pass
                 
@@ -137,6 +143,9 @@ def readData(task, rate, list_of_qs, path):
                 
                 if video_data is None:
                     video_data = [0, 0, 0]
+
+                if camera_data is None:
+                    camera_data = [0, 0]
                     
                 if smartwatch_1_data is None:
                     smartwatch_1_data = [0,0,0,0,0,0]
@@ -149,7 +158,7 @@ def readData(task, rate, list_of_qs, path):
                 
                 
                 # print("Writing to csv file ..")
-                csv_writer.writerow([local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5]])
+                csv_writer.writerow([local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5]])
                 csv_file.flush()
                 
                 
@@ -164,7 +173,7 @@ def readData(task, rate, list_of_qs, path):
             return
 
 def startProcesses(path, rate, task):
-    list_of_qs = [capture_q, trackstar_q, smartwatch_1_q, smartwatch_2_q]
+    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q]
 
     video_capture_process = Process(target=send_vid_data, args=(capture_q, path))
     video_capture_process.daemon = True
@@ -186,6 +195,7 @@ def startProcesses(path, rate, task):
     read_process.daemon = True
 
     video_capture_process.start()
+    camera_capture_process.start()
     trakstar_process.start()
     
     smartwatch_1_process.start()
@@ -195,6 +205,7 @@ def startProcesses(path, rate, task):
 
     try:
         video_capture_process.join()
+        camera_capture_process.join()
         trakstar_process.join()
         smartwatch_1_process.join()
         smartwatch_2_process.join()
@@ -202,6 +213,7 @@ def startProcesses(path, rate, task):
         read_process.join()
 
     except KeyboardInterrupt:
+        camera_handler.finish()
         print("KeyboardInterrupt received. Exiting main program.")
         exit(-1)
 

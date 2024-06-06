@@ -1,17 +1,39 @@
+import os
+from typing import Tuple, List
+from abc import ABC, abstractmethod
 
 from multiprocessing import Queue
-from typing import Tuple
-from abc import ABC, abstractmethod
+from time import time_ns
+import csv
 
 import pyrealsense2 as rs
 import numpy as np
 import cv2
 
+
 class Camera3D(ABC):
     def __init__(self, buffer_queue: Queue, root_dir: str, *args, **kwargs) -> None:
-        self._init_camera(*args, **kwargs)
         self._queue = buffer_queue
         self._root_dir = root_dir
+        self.save_path = os.path.join(self._root_dir, "camera")
+        if not os.path.exists(self.save_path):
+            os.makedirs(self.save_path)
+        self.files_path = os.path.join(self.save_path, "frames")
+        if not os.path.exists(self.files_path):
+            os.makedirs(self.files_path)
+
+        # Create a CSV file and write the header row
+        csv_path = os.path.join(self.save_path, 'timestamps.csv')
+        self.csv_file = open(csv_path, 'w', newline='')
+        self.csv_writer = csv.writer(self.csv_file)
+        self.csv_writer.writerow(['Time','ID'])
+
+        self._init_camera(*args, **kwargs)
+
+
+    def _add_record(self, timestamp, id):
+        self.csv_writer.writerow([timestamp, id])
+
 
     def _init_camera(self, *args, **kwargs) -> None:
         '''
@@ -43,6 +65,10 @@ class IntelCamera(Camera3D):
     DEPTH_DIM = (640, 480) # dimension of the depth frames
     DEPTH_FPS = 30 # frame-rate of the depth stream
     ALIGN_FRAMES = True # align the rgb image to the depth image
+    USE_DECIMATION_FILTER = False
+    USE_SPATIAL_FILTER = True
+    USE_TEMPORAL_FILTER = True
+    USE_HOLE_FILLING_FILTER = True
 
     def __init__(self, buffer_queue: Queue, root_dir: str, *args, **kwargs) -> None:
         super().__init__(buffer_queue, root_dir, *args, **kwargs)
@@ -61,6 +87,7 @@ class IntelCamera(Camera3D):
 
         config.enable_stream(rs.stream.depth, *IntelCamera.DEPTH_DIM, rs.format.z16, IntelCamera.DEPTH_FPS)
         config.enable_stream(rs.stream.color, *IntelCamera.RGB_DIM, rs.format.bgr8, IntelCamera.RGB_FPS)
+        config.enable_record_to_file(os.path.join(self.files_path, 'frames.bag'))
 
         # Start streaming
         self.profile = self.pipeline.start(config)
@@ -68,31 +95,95 @@ class IntelCamera(Camera3D):
     def _get_image_depth_PCL(self) -> Tuple:
         pass
 
-    def run(self) -> None:
-        try:
-            _filters = []
-            if IntelCamera.ALIGN_FRAMES:
-                align_to = rs.stream.color
-                align = rs.align(align_to)
-                _filters.append(align)
+    def _save_frames(self):
+        pass
 
+    def _get_filters(self) -> List:
+        # the set of filters to be applied to the frames
+        _filters = []
+
+        # Decimation filter
+        if IntelCamera.USE_DECIMATION_FILTER:
+            decimation = rs.decimation_filter()
+            _filters.append(("decimation", decimation))
+
+        # Spatial filter
+        if IntelCamera.USE_SPATIAL_FILTER:
+            spatial = rs.spatial_filter()
+            _filters.append(("spatial", spatial))
+
+        # Temporal filter
+        if IntelCamera.USE_TEMPORAL_FILTER:
+            temporal = rs.temporal_filter()
+            _filters.append(("temporal", temporal))
+
+        # Hole filling filter
+        if IntelCamera.USE_HOLE_FILLING_FILTER:
+            hole_filling = rs.hole_filling_filter()
+            _filters.append(("hole_filling", hole_filling))
+
+        return _filters
+    
+    def _apply_filters(self, frame, _filters):
+
+        depth_to_disparity = rs.disparity_transform(True)
+        disparity_to_depth = rs.disparity_transform(False)
+
+        filters = {x[0]: x[1] for x in _filters}
+        if "decimation" in filters:
+            frame = filters["decimation"].process(frame)
+
+        if ("spatial" in filters):
+            frame = depth_to_disparity.process(frame)
+            frame = filters["spatial"].process(frame)
+            frame = filters["temporal"].process(frame)
+            frame = disparity_to_depth.process(frame)
+
+        if "hole_filling" in filters:
+            frame = filters["hole_filling"].process(frame)
+
+        return frame
+
+
+    def run(self) -> None:
+        colorizer = rs.colorizer()
+        try:
+            
+            # build the post-processing depth filters
+            _filters = self._get_filters()
+            
             # if distance-based filtering is required. distance_in_meters = scale * depth_map
             depth_sensor = self.profile.get_device().first_depth_sensor()
             depth_scale = depth_sensor.get_depth_scale()
             clipping_distance_in_meters = 1 #1 meter
             clipping_distance = clipping_distance_in_meters / depth_scale
 
+            # indexing the captured frames
+            frame_num = -1
+
             while True:
 
                 # Wait for a coherent pair of frames: depth and color
                 frames = self.pipeline.wait_for_frames()
-                for f in _filters:
-                    frames = f.process(frames)
+                frame_num += 1
+                timestamp = time_ns()
+
+                # align filter to align the depth frame to the color frame
+                if IntelCamera.ALIGN_FRAMES:
+                    align_to = rs.stream.color
+                    align = rs.align(align_to)
+                    frames = align.process(frames)
+
+                # get the frames
                 depth_frame = frames.get_depth_frame()
                 color_frame = frames.get_color_frame()
                 if not depth_frame or not color_frame:
                     print(f"Error: a frame was missing")
                     continue
+
+                # apply depth filters
+                depth_frame = self._apply_filters(depth_frame, _filters)
+                depth_frame = colorizer.process(depth_frame)
 
                 # Convert images to numpy arrays
                 depth_image = np.asanyarray(depth_frame.get_data())
@@ -100,6 +191,7 @@ class IntelCamera(Camera3D):
 
                 # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
                 depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+                depth_colormap = depth_image
 
                 depth_colormap_dim = depth_colormap.shape
                 color_colormap_dim = color_image.shape
@@ -111,10 +203,20 @@ class IntelCamera(Camera3D):
                 else:
                     images = np.hstack((color_image, depth_colormap))
 
+
                 # Show images
                 cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
                 cv2.imshow('RealSense', images)
-                cv2.waitKey(1)
+
+                key = cv2.waitKey(1)
+                if key & 0xFF == ord('q') or key == 27:
+                    cv2.destroyAllWindows()
+                    self.finish()
+                    break
+
+                self._add_record(timestamp, frame_num)
+                self._queue.put([timestamp, frame_num])
+
 
         finally:
 
@@ -130,6 +232,11 @@ class IntelCamera(Camera3D):
         depth_sensor = self.profile.get_device().first_depth_sensor()
         depth_scale = depth_sensor.get_depth_scale()
         params['depth_scale'] = depth_scale
+    
+    def finish(self):
+        self.pipeline.stop()
+        self.csv_file.close()
+
 
 
 class ZedCamera(Camera3D):
@@ -160,5 +267,6 @@ def get_camera_instance(cam_type: str = "Intel"):
         raise ValueError(f"Camera type is not supported. Choose from [Intel, Zed]")
     
 if __name__ == "__main__":
-    cam = get_camera_instance("Intel")(Queue(), "")
+    cam = get_camera_instance("Intel")(Queue(), "./")
     cam.run()
+    

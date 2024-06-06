@@ -26,12 +26,11 @@ def send_vid_data(q, path):
                 frame_num += 1
                 time = time_ns()
                 
-                
                 filename = f"/{frame_num}_{time}.jpeg"
                 img_path = img_dir + filename
                 cv2.imwrite(img_path, frame)
                 csv_writer.writerow([frame_num, time, frame])
-                data = [frame_num, time, frame, img_path]
+                data = [frame_num, time, img_path]
                 q.put(data)
                 if q.full():
                     _ = q.get() #removes last object from q to keep only a certain amount

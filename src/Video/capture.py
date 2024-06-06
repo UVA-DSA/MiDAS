@@ -17,7 +17,7 @@ def send_vid_data(q, path):
     if not os.path.exists(img_dir):
         os.mkdir(img_dir)
     
-    cap = cv2.VideoCapture(1) #1 for connection to the video capture card
+    cap = cv2.VideoCapture(0) #1 for connection to the video capture card
     frame_num = 0
     while cap.isOpened():
         try:
@@ -26,12 +26,11 @@ def send_vid_data(q, path):
                 frame_num += 1
                 time = time_ns()
                 
-                
                 filename = f"/{frame_num}_{time}.jpeg"
                 img_path = img_dir + filename
                 cv2.imwrite(img_path, frame)
                 csv_writer.writerow([frame_num, time, img_path])
-                data = [frame_num, time, img_path]
+                data = [ time, img_path]
                 q.put(data)
                 if q.full():
                     _ = q.get() #removes last object from q to keep only a certain amount

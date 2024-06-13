@@ -4,6 +4,7 @@ import os
 import csv
 from Video.capture import send_vid_data 
 from Trakstar.trackstarWriter import get_trakstar_data
+from PDS.PDS import get_PDS_data
 
 
 from queue import Queue
@@ -16,11 +17,13 @@ import sys
 #defines
 CAPTURE_Q_SIZE = 10
 TRACKSTAR_Q_SIZE = 100
+PDS_Q_SIZE = 100
 
 
 #global variables
 capture_q = Queue(CAPTURE_Q_SIZE)
 trackstar_q = Queue(TRACKSTAR_Q_SIZE)
+PDS_q = Queue(PDS_Q_SIZE)
 thread_stop = True
 
 eel.init('web')
@@ -139,7 +142,7 @@ def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
 
 def startThreads(path, rate, task):
 
-    list_of_qs = [capture_q, trackstar_q]
+    list_of_qs = [capture_q, trackstar_q,PDS_q]
 
     capture_thread = Thread(target = send_vid_data, args=(capture_q, path))
     capture_thread.daemon = True
@@ -147,6 +150,8 @@ def startThreads(path, rate, task):
     trakstar_thread.daemon = True
     read_thread = Thread(target = readData, args = (task, rate, list_of_qs))
     read_thread.daemon = True
+    PDS_thread = Thread(target=get_PDS_data, args = (PDS_q,path))
+    PDS_thread.daemon = True
     
     #future threads go here 
 
@@ -154,12 +159,14 @@ def startThreads(path, rate, task):
     capture_thread.start()
     trakstar_thread.start()
     read_thread.start()
+    PDS_thread.start()
 
     try:
         # Wait for threads to finish
         capture_thread.join()
         trakstar_thread.join()
         read_thread.join()
+        PDS_thread.join()
 
     except KeyboardInterrupt:
         print("KeyboardInterrupt received. Exiting main program.")

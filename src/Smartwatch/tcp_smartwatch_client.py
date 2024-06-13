@@ -62,7 +62,7 @@ def receive_smartwatch_data(server_ip, server_port, fifo_queue, recording_dir, s
                         print(f"Received from server: {sw_data}")
                         
                         # Add it to the queue to be processed by the main process
-                        fifo_queue.put(sw_data)
+                        fifo_queue.put(sw_data, block=False)
                     
                     except Exception as e:
                         print("Error occurred while communicating with server:", e)

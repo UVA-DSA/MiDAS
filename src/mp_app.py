@@ -42,10 +42,10 @@ camera_type = "Intel"
 thread_stop = Event()
 
 # Replace these values with your smartwatch's IP, port
-smartwatch_1_ip = '172.27.191.158'
+smartwatch_1_ip = '192.168.0.103'
 smartwatch_1_id = 'right'
 
-smartwatch_2_ip = '172.27.176.73'
+smartwatch_2_ip = '192.168.0.101'
 smartwatch_2_id = 'left'
 
 smartwatch_port = 7889

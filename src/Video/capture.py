@@ -17,7 +17,7 @@ def send_vid_data(q, path):
     if not os.path.exists(img_dir):
         os.mkdir(img_dir)
     
-    cap = cv2.VideoCapture(0) #1 for connection to the video capture card
+    cap = cv2.VideoCapture(2) #2 for connection to the video capture card if using realsense too.
     frame_num = 0
     while cap.isOpened():
         try:

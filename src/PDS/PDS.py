@@ -13,7 +13,7 @@ def get_PDS_data(q,path):
 
     arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
 
-    while arduino.is_open():
+    while arduino.is_open:
         try:
             out = arduino.readline().decode()
             print(out, end = '')

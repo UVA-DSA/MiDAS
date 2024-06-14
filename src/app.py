@@ -5,6 +5,7 @@ import csv
 from Video.capture import send_vid_data 
 from Trakstar.trackstarWriter import get_trakstar_data
 from PDS.PDS import get_PDS_data
+from newGUI import startGui
 
 
 from queue import Queue
@@ -26,9 +27,9 @@ trackstar_q = Queue(TRACKSTAR_Q_SIZE)
 PDS_q = Queue(PDS_Q_SIZE)
 thread_stop = True
 
-eel.init('web')
+#eel.init('web')
 
-@eel.expose
+#@eel.expose
 def sendData(subject, trial, task, rate):
     '''
     Takes data in from frontend, puts it in a dictionary, and passes dictionary into function 
@@ -69,7 +70,7 @@ def sendData(subject, trial, task, rate):
     send_data_thread.start()
     return 
 
-@eel.expose
+# @eel.expose
 def endProgram():
     global thread_stop
     print("Program ended")
@@ -174,4 +175,5 @@ def startThreads(path, rate, task):
 
     return
 
-eel.start('index.html')
+#eel.start('index.html')
+startGui()

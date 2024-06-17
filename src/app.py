@@ -57,7 +57,7 @@ def sendData(subject, trial, task, rate):
     print(data)
     path = f"{data['Task']}_S{data['Subject']}_T{data['Trial']}_{data['Date']}/" 
     
-    mydir = "./Data/"
+    mydir = "./src/Data/"
     myfile = path
     path = os.path.join(mydir, myfile)
 
@@ -144,7 +144,7 @@ def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
 def startThreads(path, rate, task):
 
     list_of_qs = [capture_q, trackstar_q,PDS_q]
-
+    print(path)
     capture_thread = Thread(target = send_vid_data, args=(capture_q, path))
     capture_thread.daemon = True
     trakstar_thread = Thread(target = get_trakstar_data, args=(trackstar_q, path ))

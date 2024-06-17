@@ -1,5 +1,7 @@
 import tkinter as tk
 from tkinter import font
+from tkinter import *
+from PIL import ImageTk,Image
 
 win = tk.Tk()
 # Vars for the info of each trial
@@ -16,11 +18,11 @@ def startGui():
     win.minsize(1080, 300)
     
     # set maximum window size value
-    win.maxsize(1200, 900)
+    win.maxsize(1920, 1080)
 
     # Define a larger font
-    large_font = ('Helvetica', 18)
-    large_font_bold = ('Helvetica', 24, 'bold')
+    large_font = ('Helvetica', 16)
+    large_font_bold = ('Helvetica', 20, 'bold')
 
     # Info Frame
     infoFr = tk.LabelFrame(win, text="Information", padx=15, pady=15, font=large_font_bold)
@@ -33,17 +35,17 @@ def startGui():
     tk.Label(infoFr, text="Rate:", font=large_font).grid(column=0, row=3, sticky="w")
 
     # Entry boxes for the info frame
-    tk.Entry(infoFr, textvariable=subject_var, font=large_font, width=25).grid(column=1, row=0, padx=5, pady=5, sticky="ew")
-    tk.Entry(infoFr, textvariable=trial_var, font=large_font, width=25).grid(column=1, row=1, padx=5, pady=5, sticky="ew")
-    tk.Entry(infoFr, textvariable=task_var, font=large_font, width=25).grid(column=1, row=2, padx=5, pady=5, sticky="ew")
-    tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=25).grid(column=1, row=3, padx=5, pady=5, sticky="ew")
+    tk.Entry(infoFr, textvariable=subject_var, font=large_font, width=15).grid(column=1, row=0, padx=5, pady=5, sticky="ew")
+    tk.Entry(infoFr, textvariable=trial_var, font=large_font, width=15).grid(column=1, row=1, padx=5, pady=5, sticky="ew")
+    tk.Entry(infoFr, textvariable=task_var, font=large_font, width=15).grid(column=1, row=2, padx=5, pady=5, sticky="ew")
+    tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=15).grid(column=1, row=3, padx=5, pady=5, sticky="ew")
 
     # Submit Button
-    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=10).grid(column=0, row=4, columnspan=2, pady=10)
+    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=5).grid(column=0, row=4, columnspan=2, pady=10)
 
     # Pedal Indicators Frame
     pedalFr = tk.LabelFrame(win, text="Pedal Indicators", padx=15, pady=15, font=large_font_bold)
-    pedalFr.grid(column=0, row=1, padx=10, pady=10, sticky="nsew")
+    pedalFr.grid(column=0, row=1, padx=10, pady=10, sticky="nsew", columnspan=2)
 
     pedals = [
         ("Upper Left", 0, 2, 1), ("Upper Right", 0, 3, 1),
@@ -55,19 +57,29 @@ def startGui():
         text, row, col, rowspan = pedal
         tk.Label(pedalFr, text=text, bg="red", width=9, height=4, font=large_font).grid(row=row, column=col, padx=10, pady=10, rowspan=rowspan)
 
-    # Diagnostic Frame
-    diagnosticFr = tk.LabelFrame(win, text="Diagnostics", padx=15, pady=15, font=large_font_bold)
-    diagnosticFr.grid(column=1, row=0, rowspan=2, padx=10, pady=10, sticky="nsew")
+    # Capture Frame
+    captureFr = tk.LabelFrame(win, text="Captures", padx=15, pady=15, font=large_font_bold)
+    captureFr.grid(column=2, row=0, rowspan=2, padx=10, pady=10, sticky="nsew")
 
+    capOne = tk.Canvas(captureFr, width = 500, height = 300)
+    capOne.grid(column=0,row=0,padx=10,pady=10,sticky="nsew")
+    image = ImageTk.PhotoImage(Image.open("test/test.jpg"))
+    capOne.create_image(108,72, anchor="center", image = image)
+
+
+    # Diagonstic Frame
+    diagnosticFr = tk.LabelFrame(win, text="Diagnostics", padx=15, pady=15, font=large_font_bold)
+    diagnosticFr.grid(column=1, row=0, rowspan=1, padx=10, pady=10, sticky="nsew")
     devices = [
         ("Capture 1:", "Error"), ("Capture 2:", "Error"),
         ("Watch Left:", "Error"), ("Watch Right:", "Error"),
-        ("Arduino (Pedals):", "Error")
+        ("Arduino (Pedals):", "Error"), ("Trackstar:", "Error"),
+        ("Camera 1:", "Error"), ("Camera 2:", "Error")
     ]
 
     for i, (label, status) in enumerate(devices):
         tk.Label(diagnosticFr, text=label, font=large_font).grid(row=i, column=0, padx=10, pady=5, sticky="w")
-        tk.Label(diagnosticFr, text=status, bg="red", width=15, font=large_font).grid(row=i, column=1, padx=10, pady=5, sticky="w")
+        tk.Label(diagnosticFr, text=status, bg="red", width=8, font=large_font).grid(row=i, column=1, padx=10, pady=5, sticky="w")
 
     # Configure weight for responsiveness
     for i in range(2):

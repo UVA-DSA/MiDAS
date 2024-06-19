@@ -11,7 +11,12 @@ def get_PDS_data(q,path):
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(['Pedals Pressed','Computer Time'])
 
-    arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
+    while True:
+        try:
+            arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
+            break
+        except:
+            print("No Ardiuno Connection")
 
     while arduino.is_open:
         try:
@@ -19,6 +24,7 @@ def get_PDS_data(q,path):
             print(out, end = '')
             time = time_ns()
             csv_writer.writerow([(out.strip()), time])
+            q.put(out)
         except KeyboardInterrupt:
             print("KeyboardInterrupt: Exiting...")
             arduino.release()

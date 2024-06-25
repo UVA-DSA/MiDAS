@@ -4,20 +4,22 @@ from time import time_ns
 import csv
 import os
 
+from PIL import ImageTk,Image
+
 def send_vid_data(q, path):
 
     # Create a CSV file and write the header row
     csv_path = path + '/video.csv'
     csv_file = open(csv_path, 'w', newline='')
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Frame #','Computer Time'])
+    csv_writer.writerow(['Frame #','Computer Time', 'Path'])
 
     img_dir = path + '/imgs'
         
     if not os.path.exists(img_dir):
         os.mkdir(img_dir)
     
-    cap = cv2.VideoCapture(2) #2 for connection to the video capture card if using realsense too.
+    cap = cv2.VideoCapture(0) #2 for connection to the video capture card if using realsense too, set to 0 for testing with web cam
     frame_num = 0
     while cap.isOpened():
         try:
@@ -25,13 +27,20 @@ def send_vid_data(q, path):
             if ret == True: #making sure capture was succesful
                 frame_num += 1
                 time = time_ns()
-                
                 filename = f"/{frame_num}_{time}.jpeg"
                 img_path = img_dir + filename
                 cv2.imwrite(img_path, frame)
                 csv_writer.writerow([frame_num, time, img_path])
-                data = [ time, img_path]
-                q.put(data)
+                csv_file.flush()
+                #old data that was put on the queue
+                #data = [ time, img_path]
+
+                #image compression and conversion to be sent to display
+                image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                image = Image.fromarray(image)
+                image = ImageTk.PhotoImage(image)
+                q.put(image)
+
                 if q.full():
                     _ = q.get() #removes last object from q to keep only a certain amount
 

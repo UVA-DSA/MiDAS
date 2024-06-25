@@ -18,7 +18,6 @@ def startGui():
     win.title("MIDAS V3 - Data Collection System")
     # set minimum window size value
     win.minsize(1080, 300)
-    
     # set maximum window size value
     win.maxsize(1920, 1080)
 
@@ -46,6 +45,7 @@ def startGui():
     tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=5).grid(column=0, row=4, columnspan=2, pady=10)
 
     # Pedal Indicators Frame
+    global pedalFr
     pedalFr = tk.LabelFrame(win, text="Pedal Indicators", padx=15, pady=15, font=large_font_bold)
     pedalFr.grid(column=0, row=1, padx=10, pady=10, sticky="nsew", columnspan=2)
     pUL = tk.Label(pedalFr)
@@ -74,6 +74,7 @@ def startGui():
     capOne.grid(column=0,row=0,padx=10,pady=10,sticky="nsew")
 
     # Diagonstic Frame
+    global diagnosticFr
     diagnosticFr = tk.LabelFrame(win, text="Diagnostics", padx=15, pady=15, font=large_font_bold)
     diagnosticFr.grid(column=1, row=0, rowspan=1, padx=10, pady=10, sticky="nsew")
     capOneInd = tk.Label(diagnosticFr)
@@ -92,7 +93,7 @@ def startGui():
         ("Camera 1:", camOneInd), ("Camera 2:", camTwoInd)
     ]
 
-    for i, (label, status) in enumerate(devices):
+    for i, (label, name) in enumerate(devices):
         tk.Label(diagnosticFr, text=label, font=large_font).grid(row=i, column=0, padx=10, pady=5, sticky="w")
         status.config(bg="yellow", width=8, font=large_font, text="Not Found")
         status.grid(row=i, column=1, padx=10, pady=5, sticky="w")

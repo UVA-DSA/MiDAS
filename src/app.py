@@ -108,9 +108,7 @@ def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(['Trackstar Data + Video Data'])
         while thread_stop:
-            
             try:
-                
                 start_time = time.time()
                 local_time = time.ctime(start_time)
                 print("Adding data to csv")
@@ -133,8 +131,6 @@ def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
                 sleep_time = sample_time - (time.time() - start_time)
                 if(sleep_time > 0):
                     time.sleep(sleep_time)
-                
-        
             except KeyboardInterrupt:
                 print("Keyboard Interrupt!")
                 exit(-1)
@@ -143,7 +139,7 @@ def readData(task, rate, list_of_qs): #add readKinematic, etc flags in future
 
 def startThreads(path, rate, task):
 
-    list_of_qs = [capture_q, trackstar_q,PDS_q]
+    list_of_qs = [capture_q, trackstar_q, PDS_q]
     print(path)
     capture_thread = Thread(target = send_vid_data, args=(capture_q, path))
     capture_thread.daemon = True
@@ -151,7 +147,7 @@ def startThreads(path, rate, task):
     trakstar_thread.daemon = True
     read_thread = Thread(target = readData, args = (task, rate, list_of_qs))
     read_thread.daemon = True
-    PDS_thread = Thread(target=get_PDS_data, args = (PDS_q,path))
+    PDS_thread = Thread(target=get_PDS_data, args = (PDS_q, path))
     PDS_thread.daemon = True
     updateIndicator_thread = Thread(target=newGUI.updateIndicators, args = (PDS_q, capture_q,))
     updateIndicator_thread.daemon = True

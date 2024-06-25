@@ -5,7 +5,7 @@ import csv
 from Video.capture import send_vid_data 
 from Trakstar.trackstarWriter import get_trakstar_data
 from PDS.PDS import get_PDS_data
-from newGUI import startGui
+import newGUI
 
 
 from queue import Queue
@@ -153,21 +153,25 @@ def startThreads(path, rate, task):
     read_thread.daemon = True
     PDS_thread = Thread(target=get_PDS_data, args = (PDS_q,path))
     PDS_thread.daemon = True
+    updateIndicator_thread = Thread(target=newGUI.updateIndicators, args = (PDS_q, capture_q,))
+    updateIndicator_thread.daemon = True
     
     #future threads go here 
 
     #start threads
     capture_thread.start()
-    trakstar_thread.start()
-    read_thread.start()
+    # trakstar_thread.start()
+    # read_thread.start()
     PDS_thread.start()
+    updateIndicator_thread.start()
 
     try:
         # Wait for threads to finish
         capture_thread.join()
-        trakstar_thread.join()
-        read_thread.join()
+        # trakstar_thread.join()
+        # read_thread.join()
         PDS_thread.join()
+        updateIndicator_thread.join()
 
     except KeyboardInterrupt:
         print("KeyboardInterrupt received. Exiting main program.")
@@ -176,4 +180,4 @@ def startThreads(path, rate, task):
     return
 
 #eel.start('index.html')
-startGui()
+newGUI.startGui()

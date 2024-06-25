@@ -8,7 +8,10 @@ from PIL import ImageTk,Image
 import cv2 as cv
 import numpy as np
 
-arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
+try:
+    arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
+except:
+    print("serial not found")
 file = open(".\src\PDS\out.txt", "a")
 
 window = tk.Tk()

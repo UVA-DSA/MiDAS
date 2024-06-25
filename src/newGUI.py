@@ -95,8 +95,8 @@ def startGui():
 
     for i, (label, name) in enumerate(devices):
         tk.Label(diagnosticFr, text=label, font=large_font).grid(row=i, column=0, padx=10, pady=5, sticky="w")
-        status.config(bg="yellow", width=8, font=large_font, text="Not Found")
-        status.grid(row=i, column=1, padx=10, pady=5, sticky="w")
+        name.config(bg="yellow", width=8, font=large_font, text="Not Found")
+        name.grid(row=i, column=1, padx=10, pady=5, sticky="w")
 
     # Configure weight for responsiveness
     for i in range(2):

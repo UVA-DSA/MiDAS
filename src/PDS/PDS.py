@@ -21,11 +21,10 @@ def get_PDS_data(q,path):
 
     while arduino.is_open:
         try:
-            out = arduino.readline().decode()
+            out = arduino.readline().decode().strip()
             #print(out, end = '')
             q.put(out)
-            time = time_ns()
-            csv_writer_PDS.writerow([(out.strip()), str(time)])
+            csv_writer_PDS.writerow([out, time_ns()])
             csv_file.flush()
         except KeyboardInterrupt:
             print("KeyboardInterrupt: Exiting...")

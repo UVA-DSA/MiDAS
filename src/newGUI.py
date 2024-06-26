@@ -13,6 +13,7 @@ task_var = tk.StringVar()
 rate_var = tk.StringVar()
 
 def startGui():
+    #Global vars
     global capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, capTwoInd, trakInd, ardInd, watchLeftInd, watchRightInd
     # Window creation
     win.title("MIDAS V3 - Data Collection System")
@@ -111,17 +112,28 @@ def submitData():
     sendData(subject_var.get(), trial_var.get(), task_var.get(), rate_var.get())
 
 def updateIndicators(PDS_q, capture_q):
+    letters = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'}
     while True:
         try:
             out = PDS_q.get(True,0.1)
             ardInd.config(bg="green",text="Good")
-            pUL.config(bg = "green" if '1' in out else "red")
-            pUR.config(bg = "green" if '2' in out else "red")
-            pLL.config(bg = "green" if '3' in out else "red")
-            pLR.config(bg = "green" if '4' in out else "red")
-            pClutch.config(bg = "green" if '5' in out else "red")
-            pCam.config(bg = "green" if '6' in out else "red")
-            pLong.config(bg = "green" if '7' in out else "red")
+            for let in letters:
+                if (out.find(let) != -1):
+                    temp = int((out[(1 + out.find(let)):(5 + out.find(let))]).strip())
+                    red = int(255 * (1 - (temp - 1) / 1015))
+                    green = int(255 * ((temp - 1) / 1015))
+                    hex_color = f'#{red:02x}{green:02x}00'
+                else:
+                    hex_color = "red"
+                    temp = 0
+                pUL.config(bg = hex_color if let == 'A' else pUL.cget('bg'), text = "Upper Left \n" + str(temp) if let == 'A' else pUL.cget('text'))
+                pUR.config(bg = hex_color if let == 'B' else pUR.cget('bg'), text = "Upper Right \n" + str(temp) if let == 'B' else pUR.cget('text'))
+                pLL.config(bg = hex_color if let == 'C' else pLL.cget('bg'), text = "Lower Left \n" + str(temp) if let == 'C' else pLL.cget('text'))
+                pLR.config(bg = hex_color if let == 'D' else pLR.cget('bg'), text = "Lower Right \n" + str(temp) if let == 'D' else pLR.cget('text'))
+                pClutch.config(bg = hex_color if let == 'E' else pClutch.cget('bg'), text = "Clutch \n" + str(temp) if let == 'E' else pClutch.cget('text'))
+                pCam.config(bg = hex_color if let == 'F' else pCam.cget('bg'), text = "Camera \n" + str(temp) if let == 'F' else pCam.cget('text'))
+                pLong.config(bg = hex_color if let == 'G' else pLong.cget('bg'), text = "Long\n" + str(temp) if let == 'G' else pLong.cget('text'))
+                
         except KeyboardInterrupt:
             print("KeyboardInterrupt received. Exiting main program.")
             break

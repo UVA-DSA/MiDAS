@@ -7,7 +7,6 @@ from Trakstar.trackstarWriter import get_trakstar_data
 from PDS.PDS import get_PDS_data
 import newGUI
 
-
 from queue import Queue
 from threading import Thread, Event
 import threading

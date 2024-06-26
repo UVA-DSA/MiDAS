@@ -7,12 +7,17 @@ from tkinter import *
 from PIL import ImageTk,Image
 import cv2 as cv
 import numpy as np
+import csv
 
 try:
     arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
 except:
     print("serial not found")
-file = open(".\src\PDS\out.txt", "a")
+
+csv_path = 'src/PDS/PDS.csv'
+csv_file = open(csv_path, 'w', newline='')
+csv_writer_PDS = csv.writer(csv_file)
+csv_writer_PDS.writerow(['Pedals Pressed','Computer Time'])
 
 window = tk.Tk()
 stopSignal = False
@@ -36,43 +41,33 @@ pLL.grid(row=1, column=2,padx=10,pady=10)
 pUR.grid(row=0, column=3,padx=10,pady=10)
 pLR.grid(row=1, column=3,padx=10,pady=10)
 pLong.grid(row=0, column=0,rowspan=3,padx=10,pady=10)
+letters = {'A', 'B', 'C', 'D', 'E', 'F', 'G'}
 
 def serialReciever():
-    threadCapture.start()
+    #threadCapture.start()
     while True:
         out = arduino.readline().decode()
-        print(out, end = '')
-        file.write(str(round((1000 * time.time()))) + "\t" + out.strip() +"\n")
-        if '1' in out:
-            pUL.config(bg="green")
-        else:
-            pUL.config(bg="red")
-        if '2' in out:
-            pUR.config(bg="green")
-        else:
-            pUR.config(bg="red")
-        if '3' in out:
-            pLL.config(bg="green")
-        else:
-            pLL.config(bg="red")
-        if '4' in out:
-            pLR.config(bg="green")
-        else:
-            pLR.config(bg="red")
-        if '5' in out:
-            pClutch.config(bg="green")
-        else:
-            pClutch.config(bg="red")
-        if '6' in out:
-            pCam.config(bg="green")
-        else:
-            pCam.config(bg="red")
-        if '7' in out:
-            pLong.config(bg="green")
-        else:
-            pLong.config(bg="red")
+        print(out)
+        #csv_writer_PDS.writerow([out.strip(), time.time_ns()])
+        #csv_file.flush()
 
-
+        for let in letters:
+            if (out.find(let) != -1):
+                temp = int((out[(1 + out.find(let)):(5 + out.find(let))]).strip())
+                red = int(255 * (1 - (temp - 1) / 1015))
+                green = int(255 * ((temp - 1) / 1015))
+                hex_color = f'#{red:02x}{green:02x}00'
+            else:
+                hex_color = "red"
+                temp = 0
+            pUL.config(bg = hex_color if let == 'A' else pUL.cget('bg'), text = "Upper Left \n" + str(temp) if let == 'A' else pUL.cget('text'))
+            pUR.config(bg = hex_color if let == 'B' else pUR.cget('bg'), text = "Upper Right \n" + str(temp) if let == 'B' else pUR.cget('text'))
+            pLL.config(bg = hex_color if let == 'C' else pLL.cget('bg'), text = "Lower Left \n" + str(temp) if let == 'C' else pLL.cget('text'))
+            pLR.config(bg = hex_color if let == 'D' else pLR.cget('bg'), text = "Lower Right \n" + str(temp) if let == 'D' else pLR.cget('text'))
+            pClutch.config(bg = hex_color if let == 'E' else pClutch.cget('bg'), text = "Clutch \n" + str(temp) if let == 'E' else pClutch.cget('text'))
+            pCam.config(bg = hex_color if let == 'F' else pCam.cget('bg'), text = "Camera \n" + str(temp) if let == 'F' else pCam.cget('text'))
+            pLong.config(bg = hex_color if let == 'G' else pLong.cget('bg'), text = "Long\n" + str(temp) if let == 'G' else pLong.cget('text'))
+            
 
 def video_playback():
    #checks if file/camera is opened

@@ -64,7 +64,7 @@ def sendData(subject, trial, task, rate):
     if not os.path.exists(path):
         os.makedirs(path)
     
-    
+    print(path)
     send_data_thread = threading.Thread(target=startThreads, args=(path, rate, task))
     send_data_thread.start()
     return 

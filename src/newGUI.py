@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import font
 from tkinter import *
+import tkinter.ttk as ttk
 from PIL import ImageTk,Image
 import queue
 import cv2 as cv
@@ -68,11 +68,19 @@ def startGui():
         label.grid(row=row, column=col, padx=10, pady=10, rowspan=rowspan)
 
     # Capture Frame
-    captureFr = tk.LabelFrame(win, text="Captures", padx=15, pady=15, font=large_font_bold)
-    captureFr.grid(column=2, row=0, rowspan=2, padx=10, pady=10, sticky="nsew")
+    notebook = ttk.Notebook(win)
+    notebook.grid(column=2,row=0,padx=10, pady=10,rowspan=2,sticky='n')
+    captureFr = tk.LabelFrame(notebook, text="Captures", padx=15, pady=15, font=large_font_bold)
+    notebook.add(captureFr, text='Captures')
 
     capOne = tk.Label(captureFr, width = 80, height = 30,bg="black")
     capOne.grid(column=0,row=0,padx=10,pady=10,sticky="nsew")
+
+    watchFr = tk.LabelFrame(notebook, text="Watches", padx=15, pady=15, font=large_font_bold)
+    notebook.add(watchFr,text='Watches')
+
+    trakFr = tk.LabelFrame(notebook,text="Trakstar",padx=15,pady=15,font=large_font_bold)
+    notebook.add(trakFr,text='Trakstar')
 
     # Diagonstic Frame
     global diagnosticFr
@@ -108,42 +116,47 @@ def startGui():
     win.mainloop()
 
 def submitData():
-    from app import sendData
+    from mp_app import sendData
     sendData(subject_var.get(), trial_var.get(), task_var.get(), rate_var.get())
 
-def updateIndicators(PDS_q, capture_q):
-    letters = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'}
+def updateIndicators(gui_q,capture_q):
+    global capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, capTwoInd, trakInd, ardInd, watchLeftInd, watchRightInd
     while True:
         try:
-            out = PDS_q.get(True,0.1)
-            ardInd.config(bg="green",text="Good")
-            for let in letters:
-                if (out.find(let) != -1):
-                    temp = int((out[(1 + out.find(let)):(5 + out.find(let))]).strip())
+            out = gui_q.get()
+            for i in range(26,33):
+                temp = out[i]
+                if (temp>-1):
+                    ardInd.config(bg="green",text="Good")
                     red = int(255 * (1 - (temp - 1) / 1015))
                     green = int(255 * ((temp - 1) / 1015))
                     hex_color = f'#{red:02x}{green:02x}00'
+                elif(temp == -2):
+                    ardInd.config(text="No Data")
                 else:
                     hex_color = "red"
                     temp = 0
-                pUL.config(bg = hex_color if let == 'A' else pUL.cget('bg'), text = "Upper Left \n" + str(temp) if let == 'A' else pUL.cget('text'))
-                pUR.config(bg = hex_color if let == 'B' else pUR.cget('bg'), text = "Upper Right \n" + str(temp) if let == 'B' else pUR.cget('text'))
-                pLL.config(bg = hex_color if let == 'C' else pLL.cget('bg'), text = "Lower Left \n" + str(temp) if let == 'C' else pLL.cget('text'))
-                pLR.config(bg = hex_color if let == 'D' else pLR.cget('bg'), text = "Lower Right \n" + str(temp) if let == 'D' else pLR.cget('text'))
-                pClutch.config(bg = hex_color if let == 'E' else pClutch.cget('bg'), text = "Clutch \n" + str(temp) if let == 'E' else pClutch.cget('text'))
-                pCam.config(bg = hex_color if let == 'F' else pCam.cget('bg'), text = "Camera \n" + str(temp) if let == 'F' else pCam.cget('text'))
-                pLong.config(bg = hex_color if let == 'G' else pLong.cget('bg'), text = "Long\n" + str(temp) if let == 'G' else pLong.cget('text'))
-                
+                pUL.config(bg = hex_color if i == 26 and temp != -2 else pUL.cget('bg'), text = "Upper Left \n" + str(temp) if i == 26 and temp != -2 else pUL.cget('text'))
+                pUR.config(bg = hex_color if i == 27 and temp != -2 else pUR.cget('bg'), text = "Upper Right \n" + str(temp) if i == 27 and temp != -2 else pUR.cget('text'))
+                pLL.config(bg = hex_color if i == 28 and temp != -2 else pLL.cget('bg'), text = "Lower Left \n" + str(temp) if i == 28 and temp != -2 else pLL.cget('text'))
+                pLR.config(bg = hex_color if i == 29 and temp != -2 else pLR.cget('bg'), text = "Lower Right \n" + str(temp) if i == 29 and temp != -2 else pLR.cget('text'))
+                pClutch.config(bg = hex_color if i == 30 and temp != -2 else pClutch.cget('bg'), text = "Clutch \n" + str(temp) if i == 30 and temp != -2 else pClutch.cget('text'))
+                pCam.config(bg = hex_color if i == 31 and temp != -2 else pCam.cget('bg'), text = "Camera \n" + str(temp) if i == 31 and temp != -2 else pCam.cget('text'))
+                pLong.config(bg = hex_color if i == 32 and temp != -2 else pLong.cget('bg'), text = "Long \n" + str(temp) if i == 32 and temp != -2 else pLong.cget('text'))
         except KeyboardInterrupt:
             print("KeyboardInterrupt received. Exiting main program.")
             break
-        except queue.Empty:
+        except:
             ardInd.config(bg="red", text="Error")
         try:
-            image = capture_q.get(True,0.1)
+            image = capture_q.get(False)
+            image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+            image = Image.fromarray(image)
+            image = ImageTk.PhotoImage(image)
             capOneInd.config(bg="green", text="Good")
             capOne.configure(image=image, height=300, width=500)
             capOne.image = image
         except queue.Empty:
             capOneInd.config(bg="red",text="Error")
+
     win.destroy()

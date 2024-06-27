@@ -10,6 +10,9 @@ import pyrealsense2 as rs
 import numpy as np
 import cv2
 
+import queue
+from PIL import ImageTk,Image
+
 
 class Camera3D(ABC):
     def __init__(self, buffer_queue: Queue, root_dir: str, *args, **kwargs) -> None:
@@ -308,7 +311,7 @@ def _get_filters() -> List:
 
     return _filters
 
-def intel_camera_handler(q: Queue, path: str):
+def intel_camera_handler(q: Queue, path: str, img_q: Queue):
     _root_dir = path
     save_path = os.path.join(_root_dir, "camera")
     if not os.path.exists(save_path):
@@ -397,15 +400,17 @@ def intel_camera_handler(q: Queue, path: str):
             else:
                 images = np.hstack((color_image, depth_colormap))
 
+            # # Show images
+            # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+            # cv2.imshow('RealSense', images)
 
-            # Show images
-            cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('RealSense', images)
+            # key = cv2.waitKey(1)
+            # if key & 0xFF == ord('q') or key == 27:
+            #     cv2.destroyAllWindows()
+            #     break
 
-            key = cv2.waitKey(1)
-            if key & 0xFF == ord('q') or key == 27:
-                cv2.destroyAllWindows()
-                break
+            # image compression and conversion to be sent to display
+            img_q.put(images)
 
             _add_record(csv_writer, timestamp, frame_num)
             q.put([timestamp, frame_num], block=False)
@@ -431,6 +436,8 @@ def get_camera_handler(cam_type: str = "Intel"):
         raise ValueError(f"Camera type is not supported. Choose from [Intel, Zed]")
     
 if __name__ == "__main__":
-    cam = get_camera_handler("Intel")(Queue(), "./")
-    cam.run()
+    test = Queue()
+    path = "/test"
+
+    intel_camera_handler(test, path)
     

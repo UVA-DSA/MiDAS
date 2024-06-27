@@ -2,14 +2,18 @@ import eel
 import datetime
 import os 
 import csv
+import newGUI
+import threading
 from Video.capture import send_vid_data 
 from Video.camera import get_camera_handler
 from Trakstar.trackstarWriter import get_trakstar_data
 from Smartwatch.tcp_smartwatch_client import receive_smartwatch_data
+from PDS.PDS import get_PDS_data
 from multiprocessing import Process, Queue, Event
 from multiprocessing.managers import BaseManager
 from time import sleep
 from queue import LifoQueue
+
 
 import time
 import sys
@@ -18,6 +22,8 @@ import sys
 CAPTURE_Q_SIZE = 10
 TRACKSTAR_Q_SIZE = 100
 SMARTWATCH_Q_SIZE = 100
+PDS_Q_SIZE = 100
+GUI_Q_SIZE = 100
 
 # global variables
 # capture_q = LifoQueue(CAPTURE_Q_SIZE)
@@ -50,9 +56,9 @@ smartwatch_2_id = 'left'
 
 smartwatch_port = 7889
 
-eel.init('web')
+# eel.init('web')
 
-@eel.expose
+# @eel.expose
 def sendData(subject, trial, task, rate):
     '''
     Takes data in from frontend, puts it in a dictionary, and passes dictionary into function 
@@ -77,18 +83,19 @@ def sendData(subject, trial, task, rate):
     print(data)
     path = f"{data['Task']}_S{data['Subject']}_T{data['Trial']}_{data['Date']}/" 
     
-    mydir = "./Data/"
+    mydir = "src/Data/"
     myfile = path
     path = os.path.join(mydir, myfile)
 
     if not os.path.exists(path):
         os.makedirs(path)
 
-    send_data_process = Process(target=startProcesses, args=(path, rate, task))
+    print(path)
+    send_data_process = threading.Thread(target=startProcesses, args=(path, rate, task))
     send_data_process.start()
     return 
 
-@eel.expose
+# @eel.expose
 def endProgram():
     global thread_stop
     print("Program ended")
@@ -108,7 +115,7 @@ def readData(task, rate, list_of_qs, path):
 
     with open(csv_path, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["server_time",  "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_atime", "video_time", "video_id", "3d_camera_time", "3d_camera_frame_id", 'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis', 'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis'])
+        csv_writer.writerow(["server_time",  "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_atime", "video_time", "video_id", "3d_camera_time", "3d_camera_frame_id", 'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis', 'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis', 'PDS_time','pedal_1', 'pedal_2', 'pedal_3', 'pedal_4', 'pedal_5', 'pedal_6', 'pedal_7'])
     
         while not thread_stop.is_set():
             try:
@@ -122,35 +129,41 @@ def readData(task, rate, list_of_qs, path):
                 smartwatch_1_data = None
                 smartwatch_2_data = None
                 video_data = None
+                PDS_data = None
+                indicator_data = [1,1,1,1,1,1]
         
                 try:
                     video_data = list_of_qs[0].get(block=False)
                 except:
-                    pass
+                    indicator_data[0] = 0
 
                 try:
                     camera_data = list_of_qs[1].get(block=False)
                 except:
-                    pass
+                    indicator_data[1] = 0
   
                     
                 try:
                     trackstar_data = list_of_qs[2].get(block=False)
                 except:
-                    pass
+                    indicator_data[2] = 0
                 
                 
                 try:
                     smartwatch_1_data = list_of_qs[3].get(block=False)
                 except:
-                    pass
+                    indicator_data[3] = 0
                 
                 
                 try:
                     smartwatch_2_data = list_of_qs[4].get(block=False)
                 except:
-                    pass
-                
+                    indicator_data[4] = 0
+
+                try:
+                    PDS_data = list_of_qs[5].get(block=False)
+                except:
+                    indicator_data[5] = 0
                 
                 # Add logic to handle the case where trackstar_data or video_data is None
                 # if video_data is None or smartwatch_data is None or trackstar_data is None:
@@ -171,10 +184,15 @@ def readData(task, rate, list_of_qs, path):
                 if trackstar_data is None:
                     trackstar_data = [0, 0, 0, 0, 0, 0, 0, 0, 0]
                 
+                if PDS_data is None:
+                    PDS_data = [-2,-2,-2,-2,-2,-2,-2,-2]
+                
                 
                 # print("Writing to csv file ..")
-                csv_writer.writerow([local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5]])
+                collectedData = [local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5],PDS_data[0],PDS_data[1],PDS_data[2],PDS_data[3],PDS_data[4],PDS_data[5],PDS_data[6],PDS_data[7]]
+                csv_writer.writerow(collectedData)
                 csv_file.flush()
+                list_of_qs[6].put(collectedData)
                 
                 
                 # sleep_time = sample_time - (time.time() - start_time)
@@ -194,17 +212,20 @@ def startProcesses(path, rate, task):
     
     camera_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     capture_q = manager.LifoQueue(CAPTURE_Q_SIZE)
+    capture_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     trackstar_q = manager.LifoQueue(TRACKSTAR_Q_SIZE)
     smartwatch_1_q = manager.LifoQueue(SMARTWATCH_Q_SIZE)
     smartwatch_2_q = manager.LifoQueue(SMARTWATCH_Q_SIZE)
+    PDS_q = manager.LifoQueue(PDS_Q_SIZE)
+    gui_q = manager.LifoQueue(GUI_Q_SIZE)
 
-    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q]
+    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, capture_img_q]
 
     video_capture_process = Process(target=send_vid_data, args=(capture_q, path))
     video_capture_process.daemon = True
 
     camera_handler = get_camera_handler(camera_type)
-    camera_capture_process = Process(target=camera_handler, args=(camera_q, path))
+    camera_capture_process = Process(target=camera_handler, args=(camera_q, path, capture_img_q))
     camera_capture_process.daemon = True
     
     trakstar_process = Process(target=get_trakstar_data, args=(trackstar_q, path))
@@ -219,30 +240,42 @@ def startProcesses(path, rate, task):
     read_process = Process(target=readData, args=(task, rate, list_of_qs, path))
     read_process.daemon = True
 
-    video_capture_process.start()
+    PDS_process = Process(target=get_PDS_data, args = (PDS_q, path))
+    PDS_process.daemon = True
+
+    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,capture_img_q))
+    updateIndicator_process.daemon = True
+
+    # video_capture_process.start()
     camera_capture_process.start()
-    trakstar_process.start()
+    # trakstar_process.start()
     
-    smartwatch_1_process.start()
-    smartwatch_2_process.start()
+    # smartwatch_1_process.start()
+    # smartwatch_2_process.start()
 
     read_process.start()
 
+    PDS_process.start()
+
+    updateIndicator_process.start()
+
     try:
-        video_capture_process.join()
+        # video_capture_process.join()
         camera_capture_process.join()
-        trakstar_process.join()
-        smartwatch_1_process.join()
-        smartwatch_2_process.join()
-        
+        # trakstar_process.join()
+        # smartwatch_1_process.join()
+        # smartwatch_2_process.join()
         read_process.join()
+        PDS_process.join()
+        updateIndicator_process.join()
 
     except KeyboardInterrupt:
-        camera_handler.finish()
+        # camera_handler.finish()
         print("KeyboardInterrupt received. Exiting main program.")
         exit(-1)
 
     return
 
 if __name__ == "__main__":
-    eel.start('index.html')
+    # eel.start('index.html')
+    newGUI.startGui()

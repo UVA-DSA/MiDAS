@@ -243,24 +243,21 @@ def startProcesses(path, rate, task):
     PDS_process = Process(target=get_PDS_data, args = (PDS_q, path))
     PDS_process.daemon = True
 
+    #Has to be thread since shares memory with GUI, has to be on same process
     updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,capture_img_q))
     updateIndicator_process.daemon = True
 
-    # video_capture_process.start()
+    video_capture_process.start()
     camera_capture_process.start()
     # trakstar_process.start()
-    
     # smartwatch_1_process.start()
     # smartwatch_2_process.start()
-
     read_process.start()
-
     PDS_process.start()
-
     updateIndicator_process.start()
 
     try:
-        # video_capture_process.join()
+        video_capture_process.join()
         camera_capture_process.join()
         # trakstar_process.join()
         # smartwatch_1_process.join()

@@ -1,10 +1,11 @@
 __pycache__
 
+# Data Files
 src/Data/
 src/Video/camera/
+src/Video/images/
 
 main.exe
-
 .vscode/
 
 # Gradle files

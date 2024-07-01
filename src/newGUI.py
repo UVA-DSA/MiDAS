@@ -26,26 +26,29 @@ def startGui():
     large_font = ('Helvetica', 14)
     large_font_bold = ('Helvetica', 18, 'bold')
 
+    notebook = ttk.Notebook(win)
+    notebook.grid(row=0,column=1,rowspan=1,sticky='ne')
+
     # Info Frame
     infoFr = tk.LabelFrame(win, text="Information", padx=10, pady=10, font=large_font_bold)
-    infoFr.grid(column=0, row=0, padx=10, pady=10, sticky="nsew")
+    notebook.add(infoFr, text="Info")
     # Labels for the info frame
     tk.Label(infoFr, text="Subject:", font=large_font).grid(column=0, row=0, sticky="w")
-    tk.Label(infoFr, text="Trial:", font=large_font).grid(column=0, row=1, sticky="w")
+    tk.Label(infoFr, text="Trial:", font=large_font).grid(column=2, row=0, sticky="w")
     tk.Label(infoFr, text="Task:", font=large_font).grid(column=0, row=2, sticky="w")
-    tk.Label(infoFr, text="Rate:", font=large_font).grid(column=0, row=3, sticky="w")
+    tk.Label(infoFr, text="Rate:", font=large_font).grid(column=2, row=2, sticky="w")
     # Entry boxes for the info frame
     tk.Entry(infoFr, textvariable=subject_var, font=large_font, width=10).grid(column=1, row=0, padx=5, pady=5, sticky="ew")
-    tk.Entry(infoFr, textvariable=trial_var, font=large_font, width=10).grid(column=1, row=1, padx=5, pady=5, sticky="ew")
+    tk.Entry(infoFr, textvariable=trial_var, font=large_font, width=10).grid(column=3, row=0, padx=5, pady=5, sticky="ew")
     tk.Entry(infoFr, textvariable=task_var, font=large_font, width=10).grid(column=1, row=2, padx=5, pady=5, sticky="ew")
-    tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=10).grid(column=1, row=3, padx=5, pady=5, sticky="ew")
+    tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=10).grid(column=3, row=2, padx=5, pady=5, sticky="ew")
     # Submit Button
-    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=5).grid(column=0, row=4, columnspan=2, pady=10)
+    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=5).grid(column=4, row=0, rowspan=2, pady=10,padx=10, sticky='ns')
 
     # Pedal Indicators Frame
     #Makes the pedal frame and grids it
     pedalFr = tk.LabelFrame(win, text="Pedal Indicators", padx=10, pady=10, font=large_font_bold)
-    pedalFr.grid(column=1, row=0, padx=10, pady=10, sticky="nsew", columnspan=1)
+    pedalFr.grid(column=2, row=0, padx=10, pady=10, sticky="nsew", columnspan=1)
     #Makes vars for each pedal indicator
     pUL = tk.Label(pedalFr)
     pLL = tk.Label(pedalFr)
@@ -68,16 +71,22 @@ def startGui():
 
     # Camera Frame
     #Creates Frame for the camera displays as well as the cam display itself and grids them
-    camFr = tk.LabelFrame(win, text="Camera", padx=10, pady=10, font=large_font_bold)
-    camFr.grid(column=2,row=0, padx=10,pady=10,sticky='nw')
-    camOne = tk.Label(camFr, width = 80, height = 20,bg="black")
+    camFr = tk.LabelFrame(win, text="Cameras", padx=10, pady=10, font=large_font_bold)
+    camFr.grid(column=1,row=1, padx=10,pady=10,sticky='ne', rowspan=2, columnspan=2)
+    camOne = tk.Label(camFr, width = 80, height = 15,bg="black")
+    camTwo = tk.Label(camFr, width = 80, height = 15,bg="black")
+    camThree =  tk.Label(camFr, width = 80, height = 15,bg="black")
+    camFour =  tk.Label(camFr, width = 80, height = 15,bg="black")
     camOne.grid(column=0,row=0,padx=10,pady=10,sticky="nsew")
+    camTwo.grid(column=0,row=1,padx=10,pady=10,sticky="nsew")
+    camThree.grid(column=1,row=0,padx=10,pady=10,sticky="nsew")
+    camFour.grid(column=1,row=1,padx=10,pady=10,sticky="nsew")
 
     # Data Frame
     #Creates the two frames which will hold data and grids them
     dataFr = tk.LabelFrame(win, text="Data", padx=15, pady=15, font=large_font_bold)
-    dataFr.grid(column=1,row=1,padx=10,pady=10,sticky='nw')
-    watchFr = tk.LabelFrame(dataFr, text="Watches",padx=10,pady=10,font=large_font)
+    dataFr.grid(column=0,row=0,padx=10,pady=10,sticky='nw', rowspan=3)
+    watchFr = tk.LabelFrame(dataFr, text="Watches",padx=5,pady=5,font=large_font)
     watchFr.grid(column=0,row=0)
     trakFr = tk.LabelFrame(dataFr,text="Trakstar", padx=10,pady=10,font=large_font)
     trakFr.grid(column=0,row=1)
@@ -90,9 +99,9 @@ def startGui():
     trak4Data = tk.Label(trakFr)
     #List of the devices collecting data with their correspodning vars, positions, and frames
     dataDevices = [
-        ("WatchL:", watchLData, 0, 0,watchFr), ("WatchR:", watchRData, 0, 2,watchFr),
-        ("Trak1:", trak1Data, 0, 0,trakFr), ("Trak2:", trak2Data, 0, 2,trakFr),
-        ("Trak3:", trak3Data, 0, 4,trakFr), ("Trak4:", trak4Data, 0, 6,trakFr)
+        ("WatchL:", watchLData, 0, 0,watchFr), ("WatchR:", watchRData, 1, 0,watchFr),
+        ("Trak1:", trak1Data, 0, 0,trakFr), ("Trak2:", trak2Data, 1, 0,trakFr),
+        ("Trak3:", trak3Data, 2, 0,trakFr), ("Trak4:", trak4Data, 3, 0,trakFr)
     ]
     #Loops through and configures the data displays, creates labels for them, and grids them all in their corresponding frames
     for i, (label, name, r, c,frame) in enumerate(dataDevices):
@@ -103,7 +112,7 @@ def startGui():
     # Diagonstic Frame
     # #Creates the frame on the main window
     diagnosticFr = tk.LabelFrame(win, text="Diagnostics", padx=10, pady=10, font=large_font_bold)
-    diagnosticFr.grid(column=0, row=1, rowspan=1, padx=10, pady=10, sticky="nsew")
+    notebook.add(diagnosticFr,text="Diagnostic")
     #Creates vars for the labels that will be updated with the status of each deivce
     capOneInd = tk.Label(diagnosticFr)
     capTwoInd = tk.Label(diagnosticFr)
@@ -115,16 +124,16 @@ def startGui():
     camTwoInd = tk.Label(diagnosticFr)
     #List of devices with corresponding var
     devices = [
-        ("Capture 1:", capOneInd), ("Capture 2:", capTwoInd),
-        ("Watch Left:", watchLeftInd), ("Watch Right:", watchRightInd),
-        ("Arduino:", ardInd), ("Trackstar:", trakInd),
-        ("Camera 1:", camOneInd), ("Camera 2:", camTwoInd)
+        ("Capture 1:", capOneInd,0,0), ("Capture 2:", capTwoInd,0,2),
+        ("Watch Left:", watchLeftInd,0,4), ("Watch Right:", watchRightInd,1,0),
+        ("Arduino:", ardInd,1,2), ("Trackstar:", trakInd,1,4),
+        ("Camera 1:", camOneInd,2,0), ("Camera 2:", camTwoInd,2,2)
     ]
     #Loops through and creates labels as well as the indicators and grids them in diagonsticFr
-    for i, (label, name) in enumerate(devices):
-        tk.Label(diagnosticFr, text=label, font=large_font).grid(row=i, column=0, padx=5, pady=5, sticky="w")
+    for i, (label, name, r, c) in enumerate(devices):
+        tk.Label(diagnosticFr, text=label, font=large_font).grid(row=r, column=c, padx=5, pady=5, sticky="w")
         name.config(bg="yellow", width=8, font=large_font, text="Not Found")
-        name.grid(row=i, column=1, padx=5, pady=5, sticky="w")
+        name.grid(row=r, column=c+1, padx=5, pady=5, sticky="w")
 
     # Configure weight for responsiveness
     for i in range(2):

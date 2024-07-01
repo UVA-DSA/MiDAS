@@ -1,5 +1,5 @@
 import tkinter as tk
-from time import time_ns
+from time import time_ns, sleep
 import serial
 import csv
 import queue
@@ -16,7 +16,8 @@ def serialConnect():
             arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
             return
         except serial.SerialException:
-            print("Serial Not Found")
+            print("Serial Not Found, Retrying in 5 Seconds")
+            sleep(5)
 
 def get_PDS_data(q,path):
     global arduino

@@ -124,10 +124,10 @@ def startGui():
     camTwoInd = tk.Label(diagnosticFr)
     #List of devices with corresponding var
     devices = [
-        ("Capture 1:", capOneInd,0,0), ("Capture 2:", capTwoInd,0,2),
+        ("Endo Left", capOneInd,0,0), ("Endo Right", capTwoInd,0,2),
         ("Watch Left:", watchLeftInd,0,4), ("Watch Right:", watchRightInd,1,0),
-        ("Arduino:", ardInd,1,2), ("Trackstar:", trakInd,1,4),
-        ("Camera 1:", camOneInd,2,0), ("Camera 2:", camTwoInd,2,2)
+        ("PDS:", ardInd,1,2), ("trakSTAR:", trakInd,1,4),
+        ("HandCam:", camOneInd,2,0), ("SurgicalCam:", camTwoInd,2,2)
     ]
     #Loops through and creates labels as well as the indicators and grids them in diagonsticFr
     for i, (label, name, r, c) in enumerate(devices):
@@ -180,19 +180,21 @@ def updateIndicators(gui_q,cam_q):
                     pCam.config(bg = hex_color if i == 31 and temp != -2 else pCam.cget('bg'), text = "Camera \n" + str(temp) if i == 31 and temp != -2 else pCam.cget('text'))
                     pLong.config(bg = hex_color if i == 32 and temp != -2 else pLong.cget('bg'), text = "Long \n" + str(temp) if i == 32 and temp != -2 else pLong.cget('text'))
             #Trakstar Updator
-            if(out[7] == 0):
+            if(out[8] == 0):
                 trakInd.config(text="No Data")
             else:
+                trakInd.config(text="Good", bg="green")
                 #Formats string of trakstar data to be displayed
-                data = str(out[1]) + '  ' + str(out[4]) + '\n' + str(out[2]) + '  ' + str(out[5]) + '\n' + str(out[3]) + '  ' + str(out[6])
+                data = str(out[2]) + '  ' + str(out[5]) + '\n' + str(out[3]) + '  ' + str(out[6]) + '\n' + str(out[4]) + '  ' + str(out[7])
+                print(data)
                 #Updates the corresponding data field depedning on what sensor the data is from
-                if(out[0] == 0):
-                    trak1Data.config(text= data)
-                elif(out[0] == 1):
+                if(str(out[1]) == "0"):
+                    trak1Data.config(text=data)
+                elif(str(out[1]) == "1"):
                     trak2Data.config(text=data)
-                elif(out[0] == 2):
+                elif(str(out[1]) == "2"):
                     trak3Data.config(text=data)
-                elif(out[0] == 3):
+                elif(str(out[1]) == "3"):
                     trak4Data.config(text=data)
             #WatchL/R Updator
             if(out[14] == 0):

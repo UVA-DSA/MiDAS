@@ -150,7 +150,6 @@ def readData(task, rate, list_of_qs, path):
                 
                 try:
                     smartwatch_1_data = list_of_qs[3].get(block=False)
-                    print(smartwatch_1_data)
                 except:
                     indicator_data[3] = 0
                 
@@ -252,9 +251,9 @@ def startProcesses(path, rate, task):
 
     video_capture_process.start()
     camera_capture_process.start()
-    # trakstar_process.start()
-    # smartwatch_1_process.start()
-    # smartwatch_2_process.start()
+    trakstar_process.start()
+    smartwatch_1_process.start()
+    smartwatch_2_process.start()
     read_process.start()
     PDS_process.start()
     updateIndicator_process.start()
@@ -262,9 +261,9 @@ def startProcesses(path, rate, task):
     try:
         video_capture_process.join()
         camera_capture_process.join()
-        # trakstar_process.join()
-        # smartwatch_1_process.join()
-        # smartwatch_2_process.join()
+        trakstar_process.join()
+        smartwatch_1_process.join()
+        smartwatch_2_process.join()
         read_process.join()
         PDS_process.join()
         updateIndicator_process.join()

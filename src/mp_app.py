@@ -1,4 +1,3 @@
-import eel
 import datetime
 import os 
 import csv

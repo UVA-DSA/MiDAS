@@ -48,10 +48,10 @@ camera_type = "Intel"
 thread_stop = Event()
 
 # Replace these values with your smartwatch's IP, port
-smartwatch_1_ip = '192.168.0.103'
+smartwatch_1_ip = '172.27.191.158'
 smartwatch_1_id = 'right'
 
-smartwatch_2_ip = '192.168.0.101'
+smartwatch_2_ip = '172.27.176.73'
 smartwatch_2_id = 'left'
 
 smartwatch_port = 7889
@@ -151,6 +151,7 @@ def readData(task, rate, list_of_qs, path):
                 
                 try:
                     smartwatch_1_data = list_of_qs[3].get(block=False)
+                    print(smartwatch_1_data)
                 except:
                     indicator_data[3] = 0
                 
@@ -250,8 +251,8 @@ def startProcesses(path, rate, task):
     video_capture_process.start()
     camera_capture_process.start()
     # trakstar_process.start()
-    # smartwatch_1_process.start()
-    # smartwatch_2_process.start()
+    smartwatch_1_process.start()
+    smartwatch_2_process.start()
     read_process.start()
     PDS_process.start()
     updateIndicator_process.start()
@@ -260,8 +261,8 @@ def startProcesses(path, rate, task):
         video_capture_process.join()
         camera_capture_process.join()
         # trakstar_process.join()
-        # smartwatch_1_process.join()
-        # smartwatch_2_process.join()
+        smartwatch_1_process.join()
+        smartwatch_2_process.join()
         read_process.join()
         PDS_process.join()
         updateIndicator_process.join()

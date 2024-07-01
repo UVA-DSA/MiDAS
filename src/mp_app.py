@@ -19,7 +19,7 @@ import time
 import sys
 
 # defines
-CAPTURE_Q_SIZE = 10
+CAPTURE_Q_SIZE = 100
 TRACKSTAR_Q_SIZE = 100
 SMARTWATCH_Q_SIZE = 100
 PDS_Q_SIZE = 100
@@ -195,10 +195,13 @@ def readData(task, rate, list_of_qs, path):
                 csv_file.flush()
                 list_of_qs[6].put(collectedData)
                 
-                
                 # sleep_time = sample_time - (time.time() - start_time)
                 while (time.time() - start_time) < sample_time:
-                    pass 
+                    for i in range(1):
+                        try:
+                            list_of_qs[i+1].get(block=False)
+                        except Exception:
+                            pass 
 
             except KeyboardInterrupt:
                 print("Keyboard Interrupt!")
@@ -251,8 +254,8 @@ def startProcesses(path, rate, task):
     video_capture_process.start()
     camera_capture_process.start()
     # trakstar_process.start()
-    smartwatch_1_process.start()
-    smartwatch_2_process.start()
+    # smartwatch_1_process.start()
+    # smartwatch_2_process.start()
     read_process.start()
     PDS_process.start()
     updateIndicator_process.start()
@@ -261,8 +264,8 @@ def startProcesses(path, rate, task):
         video_capture_process.join()
         camera_capture_process.join()
         # trakstar_process.join()
-        smartwatch_1_process.join()
-        smartwatch_2_process.join()
+        # smartwatch_1_process.join()
+        # smartwatch_2_process.join()
         read_process.join()
         PDS_process.join()
         updateIndicator_process.join()

@@ -198,12 +198,15 @@ def updateIndicators(gui_q,cam_q):
             if(out[14] == 0):
                 watchLeftInd.config(text="No Data")
             else:
-                data = str(out[16]) + '\n' + str(out[17]) + '\n' + str(out[19])
+                watchLeftInd.config(text="Good", bg="green")
+                data = str(round(out[17],4)) + '\n' + str(round(out[18],4)) + '\n' + str(round(out[19],4))
                 watchLData.config(text=data)
             if(out[20]==0):
                 watchRightInd.config(text="No Data")
             else:
-                data = str(out[22]) + '\n' + str(out[23]) + '\n' + str(out[24])
+                watchRightInd.config(text="Good", bg="green")
+                data = str(round(out[23],4)) + '\n' + str(round(out[24],4)) + '\n' + str(round(out[25],4))
+                watchRData.config(text=data)
          
         except KeyboardInterrupt:
             print("KeyboardInterrupt received. Exiting main program.")
@@ -217,7 +220,7 @@ def updateIndicators(gui_q,cam_q):
         #Camera Display Updator
         try:
             #Gets image and converts it from cv2 to pillow formats
-            image = cam_q.get(True,0.05)
+            image = cam_q.get()
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)

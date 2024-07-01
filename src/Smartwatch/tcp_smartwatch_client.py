@@ -46,7 +46,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             client_socket.sendall(message.encode('utf-8'))
 
                             # Receive response from the server
-                            print("I am here")
+                            # print("I am here")
                             response = client_socket.recv(1024)
                             if not response:
                                 raise ConnectionError("Server closed the connection.")
@@ -64,7 +64,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             
                             writer.writerow(sw_data)
                             
-                            print(f"Received from server: {sw_data}")
+                            # print(f"Received from server: {sw_data}")
                             
                             try:
                                 # Add it to the queue to be processed by the main process

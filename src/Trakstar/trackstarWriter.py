@@ -45,9 +45,9 @@ def get_trakstar_data(q, path):
             #convert to correct type
             #use this to get rid of erraneous values?
             print("raw values",values)
-            if(values[0]): 
-                values[0] = int(float(values[0]))
-                for i in range(1, 8):
+            if(values[1]): 
+                values[1] = int(float(values[1]))
+                for i in range(2, 9):
                     if(values[i]):
                         values[i] = float(values[i])
                 

@@ -45,7 +45,7 @@ def startGui():
     # Pedal Indicators Frame
     #Makes the pedal frame and grids it
     pedalFr = tk.LabelFrame(win, text="Pedal Indicators", padx=10, pady=10, font=large_font_bold)
-    pedalFr.grid(column=0, row=1, padx=10, pady=10, sticky="nsew", columnspan=2)
+    pedalFr.grid(column=1, row=0, padx=10, pady=10, sticky="nsew", columnspan=1)
     #Makes vars for each pedal indicator
     pUL = tk.Label(pedalFr)
     pLL = tk.Label(pedalFr)
@@ -76,7 +76,7 @@ def startGui():
     # Data Frame
     #Creates the two frames which will hold data and grids them
     dataFr = tk.LabelFrame(win, text="Data", padx=15, pady=15, font=large_font_bold)
-    dataFr.grid(column=2,row=1,padx=10,pady=10,sticky='nw')
+    dataFr.grid(column=1,row=1,padx=10,pady=10,sticky='nw')
     watchFr = tk.LabelFrame(dataFr, text="Watches",padx=10,pady=10,font=large_font)
     watchFr.grid(column=0,row=0)
     trakFr = tk.LabelFrame(dataFr,text="Trakstar", padx=10,pady=10,font=large_font)
@@ -103,7 +103,7 @@ def startGui():
     # Diagonstic Frame
     # #Creates the frame on the main window
     diagnosticFr = tk.LabelFrame(win, text="Diagnostics", padx=10, pady=10, font=large_font_bold)
-    diagnosticFr.grid(column=1, row=0, rowspan=1, padx=10, pady=10, sticky="nsew")
+    diagnosticFr.grid(column=0, row=1, rowspan=1, padx=10, pady=10, sticky="nsew")
     #Creates vars for the labels that will be updated with the status of each deivce
     capOneInd = tk.Label(diagnosticFr)
     capTwoInd = tk.Label(diagnosticFr)

@@ -14,7 +14,7 @@ rate_var = tk.StringVar()
 
 def startGui():
     #Global vars
-    global camOne,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, capTwoInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLData,watchRData
+    global camOne,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLAcc,watchRAcc,watchLGyr,watchRGyr
     # Window creation
     win.title("MIDAS V3 - Data Collection System")
     # set minimum window size value
@@ -75,12 +75,10 @@ def startGui():
     camFr.grid(column=1,row=1, padx=10,pady=10,sticky='ne', rowspan=2, columnspan=2)
     camOne = tk.Label(camFr, width = 80, height = 15,bg="black")
     camTwo = tk.Label(camFr, width = 80, height = 15,bg="black")
-    capOne =  tk.Label(camFr, width = 80, height = 15,bg="black")
-    capTwo =  tk.Label(camFr, width = 80, height = 15,bg="black")
+    capOne =  tk.Label(camFr, width = 160, height = 15,bg="black")
     camOne.grid(column=0,row=0,padx=10,pady=10,sticky="nsew")
-    camTwo.grid(column=0,row=1,padx=10,pady=10,sticky="nsew")
-    capOne.grid(column=1,row=0,padx=10,pady=10,sticky="nsew")
-    capTwo.grid(column=1,row=1,padx=10,pady=10,sticky="nsew")
+    camTwo.grid(column=1,row=0,padx=10,pady=10,sticky="nsew")
+    capOne.grid(column=0,row=1,padx=10,pady=10,sticky="nsew",columnspan=2)
 
     # Data Frame
     #Creates the two frames which will hold data and grids them
@@ -91,23 +89,32 @@ def startGui():
     trakFr = tk.LabelFrame(dataFr,text="Trakstar", padx=10,pady=10,font=large_font)
     trakFr.grid(column=0,row=1)
     #Creation of the data displays for each of the devices
-    watchLData = tk.Label(watchFr)
-    watchRData = tk.Label(watchFr)
+    watchLAcc = tk.Label(watchFr)
+    watchRAcc = tk.Label(watchFr)
+    watchLGyr = tk.Label(watchFr)
+    watchRGyr = tk.Label(watchFr)
     trak1Data = tk.Label(trakFr)
     trak2Data = tk.Label(trakFr)
     trak3Data = tk.Label(trakFr)
     trak4Data = tk.Label(trakFr)
     #List of the devices collecting data with their correspodning vars, positions, and frames
     dataDevices = [
-        ("WatchL:", watchLData, 0, 0,watchFr), ("WatchR:", watchRData, 1, 0,watchFr),
-        ("Trak1:", trak1Data, 0, 0,trakFr), ("Trak2:", trak2Data, 1, 0,trakFr),
-        ("Trak3:", trak3Data, 2, 0,trakFr), ("Trak4:", trak4Data, 3, 0,trakFr)
+        ("WatchL:", watchLAcc, 1, 0,watchFr), ("WatchR:", watchRAcc ,2, 0,watchFr),
+        ("Trak1:", trak1Data, 1, 0,trakFr), ("Trak2:", trak2Data, 2, 0,trakFr),
+        ("Trak3:", trak3Data, 3, 0,trakFr), ("Trak4:", trak4Data, 4, 0,trakFr)
     ]
+    tk.Label(watchFr, text = "acc  gyro", font = large_font).grid(row=0,column=1,padx=5,pady=5,sticky='nw')
+    tk.Label(trakFr, text = "X   azimuth\nY  elevation\nZ     roll", font = large_font).grid(row=0,column=1,padx=5,pady=5,sticky='nw')
     #Loops through and configures the data displays, creates labels for them, and grids them all in their corresponding frames
     for i, (label, name, r, c,frame) in enumerate(dataDevices):
         tk.Label(frame, text=label, font=large_font).grid(row=r, column=c, padx=5, pady=5, sticky="nw")
         name.config(font=large_font, text="X  X\nY  Y\nZ  Z")
         name.grid(row=r, column=c+1, padx=5, pady=5, sticky="w")
+    watchLGyr.config(font=large_font)
+    watchLGyr.grid(row=1,column=2,padx=5,pady=5,sticky='w')
+    watchRGyr.config(font=large_font)
+    watchRGyr.grid(row=2,column=2,padx=5,pady=5,sticky='w')
+
 
     # Diagonstic Frame
     # #Creates the frame on the main window
@@ -115,7 +122,6 @@ def startGui():
     notebook.add(diagnosticFr,text="Diagnostic")
     #Creates vars for the labels that will be updated with the status of each deivce
     capOneInd = tk.Label(diagnosticFr)
-    capTwoInd = tk.Label(diagnosticFr)
     watchLeftInd = tk.Label(diagnosticFr)
     watchRightInd = tk.Label(diagnosticFr)
     ardInd = tk.Label(diagnosticFr)
@@ -124,7 +130,7 @@ def startGui():
     camTwoInd = tk.Label(diagnosticFr)
     #List of devices with corresponding var
     devices = [
-        ("Endo Left", capOneInd,0,0), ("Endo Right", capTwoInd,0,2),
+        ("Endo", capOneInd,0,0),
         ("Watch Left:", watchLeftInd,0,4), ("Watch Right:", watchRightInd,1,0),
         ("PDS:", ardInd,1,2), ("trakSTAR:", trakInd,1,4),
         ("HandCam:", camOneInd,2,0), ("SurgicalCam:", camTwoInd,2,2)
@@ -153,9 +159,9 @@ def updateIndicators(gui_q,cam_q, OBS_q):
     while True:
         try:
             out = gui_q.get(True, 0.05)
+            print(out)
             
             # out = [sw_epoch_ms, wrist_position, sensor_type, value_X_Axis, value_Y_Axis, value_Z_Axis, server_epoch_ms, sw_id]
-            
             
             #PDS GUI Update
             #-2 corresponds to no data from pedals in pulled data
@@ -166,7 +172,9 @@ def updateIndicators(gui_q,cam_q, OBS_q):
                 for i in range(26,33):
                     ardInd.config(bg="green",text="Good")
                     temp = out[i]
-                    if (temp>-1):
+                    if out[i+7] == 1:
+                        hex_color = green
+                    elif (temp>-1):
                         #Sets hexcolor to be a hex color from red to green depedning on how much pressure
                         red = int(255 * (1 - (temp - 1) / 1015))
                         green = int(255 * ((temp - 1) / 1015))
@@ -184,26 +192,22 @@ def updateIndicators(gui_q,cam_q, OBS_q):
                     pCam.config(bg = hex_color if i == 31 and temp != -2 else pCam.cget('bg'), text = "Camera \n" + str(temp) if i == 31 and temp != -2 else pCam.cget('text'))
                     pLong.config(bg = hex_color if i == 32 and temp != -2 else pLong.cget('bg'), text = "Long \n" + str(temp) if i == 32 and temp != -2 else pLong.cget('text'))
             
-            
-            
             #Trakstar Updator
             if(str(out[8]) == "0"):
                 trakInd.config(text="No Data")
             else:
                 trakInd.config(text="Good", bg="green")
                 #Formats string of trakstar data to be displayed
-                data = str(out[2]) + '  ' + str(out[5]) + '\n' + str(out[3]) + '  ' + str(out[6]) + '\n' + str(out[4]) + '  ' + str(out[7])
-                print(data)
+                data = str(out[3]) + '  ' + str(out[6]) + '\n' + str(out[4]) + '  ' + str(out[7]) + '\n' + str(out[5]) + '  ' + str(out[8])
                 #Updates the corresponding data field depedning on what sensor the data is from
-                if(str(out[1]) == "0"):
+                if(str(out[2]) == "0"):
                     trak1Data.config(text=data)
-                elif(str(out[1]) == "1"):
+                elif(str(out[2]) == "1"):
                     trak2Data.config(text=data)
-                elif(str(out[1]) == "2"):
+                elif(str(out[2]) == "2"):
                     trak3Data.config(text=data)
-                elif(str(out[1]) == "3"):
+                elif(str(out[2]) == "3"):
                     trak4Data.config(text=data)
-            
             
             #WatchL/R Updator
             if(out[14] == 0):
@@ -211,14 +215,20 @@ def updateIndicators(gui_q,cam_q, OBS_q):
             else:
                 watchLeftInd.config(text="Good", bg="green")
                 data = str(round(out[17],4)) + '\n' + str(round(out[18],4)) + '\n' + str(round(out[19],4))
-                watchLData.config(text=data)
+                if(str(out[16]) == 'acc'):
+                    watchLAcc.config(text=data)
+                else:
+                    watchLGyr.config(text=data)
                 
             if(out[20]==0):
                 watchRightInd.config(text="No Data")
             else:
                 watchRightInd.config(text="Good", bg="green")
                 data = str(round(out[23],4)) + '\n' + str(round(out[24],4)) + '\n' + str(round(out[25],4))
-                watchRData.config(text=data)
+                if(str(out[22]) == 'acc'):
+                    watchRAcc.config(text=data)
+                else:
+                    watchRGyr.config(text=data)
          
 
         #Sets indicators if queue has no data
@@ -232,34 +242,40 @@ def updateIndicators(gui_q,cam_q, OBS_q):
         #     print("KeyboardInterrupt received. Exiting main program.")
         #     break
         #Camera Display Updator
+        colorBars = Image.open("src/video/colorbars.png")
+        colorBarstk = ImageTk.PhotoImage(colorBars)
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = cam_q.get(False)
+            image = cv.resize(image, (0,0),fx=0.25,fy=0.25)
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
-            image.thumbnail((600,300))
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
             camOneInd.config(bg="green", text="Good")
-            camOne.configure(image=image, height=300, width=600)
+            camOne.configure(image=image,width=160,height=15)
             camOne.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
             camOneInd.config(bg="red",text="Error")
+            camOne.configure(image = colorBarstk,width=160,height=15)
+            camOne.image=colorBarstk
          #OBS Display Updator
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = OBS_q.get(False)
-            image = cv.resize(image,(600,300))
+            image = cv.resize(image, (0,0),fx=0.25,fy=0.25)
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
             capOneInd.config(bg="green", text="Good")
-            capOne.configure(image=image, height=300, width=600)
+            capOne.configure(image=image,width=160,height=15)
             capOne.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
             capOneInd.config(bg="red",text="Error")
+            capOne.configure(image=colorBarstk,width=160,height=15)
+            capOne.image=colorBarstk
 
-    win.destroy()
+    # win.destroy()

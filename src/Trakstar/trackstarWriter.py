@@ -44,8 +44,8 @@ def get_trakstar_data(q, path):
             
             #convert to correct type
             #use this to get rid of erraneous values?
-            print("raw values",values)
-            if(values[1]): 
+            # print("raw values",values)
+            if(values[1]):
                 values[1] = int(float(values[1]))
                 for i in range(2, 9):
                     if(values[i]):
@@ -56,7 +56,7 @@ def get_trakstar_data(q, path):
                 start_time = time.time()
                 local_time = time.ctime(start_time)
                 values.append(local_time)
-                print(values)
+                # print(values)
                 
                 #is this just writing all the values at once or each set of sensor values?
                 csv_writer.writerow(values)

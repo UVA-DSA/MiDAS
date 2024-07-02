@@ -183,10 +183,10 @@ def readData(task, rate, list_of_qs, path):
                     trackstar_data = [0, 0, 0, 0, 0, 0, 0, 0, 0]
                 
                 if PDS_data is None:
-                    PDS_data = [-2,-2,-2,-2,-2,-2,-2,-2]
+                    PDS_data = [-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2]
                 
                 # print("Writing to csv file ..")
-                collectedData = [local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5],PDS_data[0],PDS_data[1],PDS_data[2],PDS_data[3],PDS_data[4],PDS_data[5],PDS_data[6],PDS_data[7]]
+                collectedData = [local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5],PDS_data[0],PDS_data[1],PDS_data[2],PDS_data[3],PDS_data[4],PDS_data[5],PDS_data[6],PDS_data[7],PDS_data[8],PDS_data[9],PDS_data[10],PDS_data[11],PDS_data[12],PDS_data[13],PDS_data[14]]
                 csv_writer.writerow(collectedData)
                 csv_file.flush()
                 
@@ -195,7 +195,7 @@ def readData(task, rate, list_of_qs, path):
                     list_of_qs[6].put(collectedData, block=False)
                 except:
                     while not list_of_qs[6].empty():
-                        _ = list_of_qs[6].get()
+                        list_of_qs[6].get()
                 
                 
                 # sleep_time = sample_time - (time.time() - start_time)
@@ -254,7 +254,7 @@ def startProcesses(path, rate, task):
 
     video_capture_process.start()
     camera_capture_process.start()
-    # trakstar_process.start()
+    trakstar_process.start()
     smartwatch_1_process.start()
     smartwatch_2_process.start()
     read_process.start()
@@ -264,11 +264,11 @@ def startProcesses(path, rate, task):
     try:
         video_capture_process.join()
         camera_capture_process.join()
-        # trakstar_process.join()
+        trakstar_process.join()
         smartwatch_1_process.join()
         smartwatch_2_process.join()
         read_process.join()
-        # PDS_process.join()
+        PDS_process.join()
         updateIndicator_process.join()
 
     except KeyboardInterrupt:

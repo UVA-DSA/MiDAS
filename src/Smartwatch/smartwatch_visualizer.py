@@ -3,8 +3,11 @@ import os
 import csv
 import time
 from datetime import datetime
-from multiprocessing import Queue
+from multiprocessing import Queue, Process
 from typing import List
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import numpy as np
 
 def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue, recording_dir: str, smartwatch_id: str) -> None:
     try:
@@ -46,7 +49,6 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             client_socket.sendall(message.encode('utf-8'))
 
                             # Receive response from the server
-                            # print("I am here")
                             response = client_socket.recv(1024)
                             if not response:
                                 raise ConnectionError("Server closed the connection.")
@@ -64,15 +66,12 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             
                             writer.writerow(sw_data)
                             
-                            
                             try:
                                 # Add it to the queue to be processed by the main process
                                 fifo_queue.put(sw_data, block=False)
                             except Exception as e:
-                                print("Error when writing to the FIFO: Clearing the queue ",e)
-                                
+                                print("Error when writing to the FIFO: Clearing the queue ", e)
                                 while not fifo_queue.empty():
-                                    # print("Queue size: ", fifo_queue.qsize())
                                     fifo_queue.get()
                         
                         except Exception as e:
@@ -92,16 +91,51 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
         print("Interrupted by user. Exiting...")
         return
 
+def plot_smartwatch_data(fifo_queue: Queue) -> None:
+    # Initialize the plot
+    fig, ax = plt.subplots()
+    xdata, ydata_x, ydata_y, ydata_z = [], [], [], []
+    ln_x, = plt.plot([], [], 'r-', label='X-Axis')
+    ln_y, = plt.plot([], [], 'g-', label='Y-Axis')
+    ln_z, = plt.plot([], [], 'b-', label='Z-Axis')
 
-# smartwatch_1_ip = '172.27.191.158'
-# smartwatch_port = 7889
-# smartwatch_1_id = 'right'
+    def init():
+        ax.set_xlim(0, 1000)
+        ax.set_ylim(-10, 10)  # Adjust the Y-axis limits based on expected data range
+        ax.legend()
+        return ln_x, ln_y, ln_z
 
-# smartwatch_2_ip = '172.27.176.73'
-# smartwatch_2_id = 'left'
+    def update(frame):
+        while not fifo_queue.empty():
+            data = fifo_queue.get()
+            if len(xdata) > 1000:
+                xdata.pop(0)
+                ydata_x.pop(0)
+                ydata_y.pop(0)
+                ydata_z.pop(0)
+            xdata.append(data[0])
+            ydata_x.append(data[3])
+            ydata_y.append(data[4])
+            ydata_z.append(data[5])
+        ln_x.set_data(np.arange(len(ydata_x)), ydata_x)
+        ln_y.set_data(np.arange(len(ydata_y)), ydata_y)
+        ln_z.set_data(np.arange(len(ydata_z)), ydata_z)
+        return ln_x, ln_y, ln_z
 
-# smartwatch_1_q = Queue()
-# smartwatch_2_q = Queue()
+    ani = animation.FuncAnimation(fig, update, init_func=init, blit=True, interval=50)
+    plt.show()
 
-# # Call the function to send the message
-# receive_smartwatch_data(smartwatch_2_ip, smartwatch_port, smartwatch_2_q, './test/', smartwatch_2_id)
+if __name__ == '__main__':
+    smartwatch_ip = '172.27.176.73'
+    smartwatch_port = 7889
+    smartwatch_id = 'left'
+    fifo_queue = Queue()
+
+    # Start the data receiving process
+    data_process = Process(target=receive_smartwatch_data, args=(smartwatch_ip, smartwatch_port, fifo_queue, './test/', smartwatch_id))
+    data_process.start()
+
+    # Start the plotting
+    plot_smartwatch_data(fifo_queue)
+
+    data_process.join()

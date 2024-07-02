@@ -153,7 +153,11 @@ def updateIndicators(gui_q,cam_q, OBS_q):
     while True:
         try:
             out = gui_q.get(True, 0.05)
-            #Pedal Updator
+            
+            # out = [sw_epoch_ms, wrist_position, sensor_type, value_X_Axis, value_Y_Axis, value_Z_Axis, server_epoch_ms, sw_id]
+            
+            
+            #PDS GUI Update
             #-2 corresponds to no data from pedals in pulled data
             if(out[26] == -2):
                 ardInd.config(text="No Data")
@@ -179,6 +183,9 @@ def updateIndicators(gui_q,cam_q, OBS_q):
                     pClutch.config(bg = hex_color if i == 30 and temp != -2 else pClutch.cget('bg'), text = "Clutch \n" + str(temp) if i == 30 and temp != -2 else pClutch.cget('text'))
                     pCam.config(bg = hex_color if i == 31 and temp != -2 else pCam.cget('bg'), text = "Camera \n" + str(temp) if i == 31 and temp != -2 else pCam.cget('text'))
                     pLong.config(bg = hex_color if i == 32 and temp != -2 else pLong.cget('bg'), text = "Long \n" + str(temp) if i == 32 and temp != -2 else pLong.cget('text'))
+            
+            
+            
             #Trakstar Updator
             if(str(out[8]) == "0"):
                 trakInd.config(text="No Data")
@@ -196,6 +203,8 @@ def updateIndicators(gui_q,cam_q, OBS_q):
                     trak3Data.config(text=data)
                 elif(str(out[1]) == "3"):
                     trak4Data.config(text=data)
+            
+            
             #WatchL/R Updator
             if(out[14] == 0):
                 watchLeftInd.config(text="No Data")
@@ -203,6 +212,7 @@ def updateIndicators(gui_q,cam_q, OBS_q):
                 watchLeftInd.config(text="Good", bg="green")
                 data = str(round(out[17],4)) + '\n' + str(round(out[18],4)) + '\n' + str(round(out[19],4))
                 watchLData.config(text=data)
+                
             if(out[20]==0):
                 watchRightInd.config(text="No Data")
             else:
@@ -210,15 +220,17 @@ def updateIndicators(gui_q,cam_q, OBS_q):
                 data = str(round(out[23],4)) + '\n' + str(round(out[24],4)) + '\n' + str(round(out[25],4))
                 watchRData.config(text=data)
          
-        except KeyboardInterrupt:
-            print("KeyboardInterrupt received. Exiting main program.")
-            break
+
         #Sets indicators if queue has no data
         except queue.Empty:
             ardInd.config(bg="red", text="Error")
             watchLeftInd.config(bg="red", text="Error")
             watchRightInd.config(bg="red", text="Error")
             trakInd.config(bg="red", text="Error")
+            
+        # except KeyboardInterrupt:
+        #     print("KeyboardInterrupt received. Exiting main program.")
+        #     break
         #Camera Display Updator
         try:
             #Gets image and converts it from cv2 to pillow formats

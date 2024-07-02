@@ -413,7 +413,13 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue):
             img_q.put(images)
 
             _add_record(csv_writer, timestamp, frame_num)
-            q.put([timestamp, frame_num], block=False)
+            
+            try:
+                q.put([timestamp, frame_num], block=False)
+            except:
+                print("Error when writing to the FIFO: Clearing the queue ")
+                while not q.empty():
+                    q.get() # clear the queue
 
 
     finally:

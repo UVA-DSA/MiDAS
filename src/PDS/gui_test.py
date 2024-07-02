@@ -37,7 +37,7 @@ pLong = tk.Label(text="Long", bg="red",width=10,height=10)
 #Label to display camera capture
 capOne = tk.Label()
 capOne.grid(column=4,row=0,padx=10,pady=10,sticky="nsew", rowspan=2)
-cap = cv.VideoCapture(0)    #Capture object (0 is webcam)
+# cap = cv.VideoCapture(0)    #Capture object (0 is webcam)
 
 #Places all the pedals on the root window grid
 pClutch.grid(row=0, column=1,padx=10,pady=10)
@@ -55,17 +55,21 @@ def serialReciever():
     #threadCapture.start()
     while True:
         out = arduino.readline().decode()
-        print(out)
-        #csv_writer_PDS.writerow([out.strip(), time.time_ns()])
-        #csv_file.flush()
+        print(out)  
+        # csv_writer_PDS.writerow([out.strip(), time.time_ns()])
+        # csv_file.flush()
         #Cycles through each potienital letter and sees if present in output
         for let in letters:
             if (out.find(let) != -1):
-                temp = int((out[(1 + out.find(let)):(5 + out.find(let))]).strip())
+                temp = float((out[(1 + out.find(let)):(5 + out.find(let))]).strip())
                 #If it is, sets a color from red to green depedning on how much pressure
-                red = int(255 * (1 - (temp - 1) / 1015))
-                green = int(255 * ((temp - 1) / 1015))
-                hex_color = f'#{red:02x}{green:02x}00'
+                red = int(255 * (1 - (temp - 1) / 11000))
+                green = int(255 * ((temp - 1) / 11000))
+                if(temp > 2000):
+                    hex_color = 'green'
+                else:
+                    hex_color = f'#{red:02x}{green:02x}00'
+
             else:
                 hex_color = "red"
                 temp = 0

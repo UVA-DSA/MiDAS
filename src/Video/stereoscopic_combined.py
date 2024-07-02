@@ -3,8 +3,8 @@ import cv2
 import numpy as np
 
 # define video capture objects for both cameras
-vid1 = cv2.VideoCapture(2)
-vid2 = cv2.VideoCapture(3)
+vid1 = cv2.VideoCapture(1)
+vid2 = cv2.VideoCapture(2)
 
 while True: 
     # Capture the video frame from both cameras

@@ -3,7 +3,9 @@ import cv2
 
 
 # define a video capture object 0
-vid = cv2.VideoCapture(1) 
+vid = cv2.VideoCapture(4, apiPreference=cv2.CAP_ANY, params=[
+    cv2.CAP_PROP_FRAME_WIDTH, 3840,
+    cv2.CAP_PROP_FRAME_HEIGHT, 1080]) 
 num = 0
 
 while(True): 
@@ -14,7 +16,7 @@ while(True):
 
 	if(ret == True):
 	# Display the resulting frame 
-		# frame = cv2.resize(frame, (640, 480))
+		# frame = cv2.resize(frame, (3840, 1080))
 		cv2.imshow('frame', frame) 
 
 		#reads first image from queue, will wait 0.5 seconds before declaring the queue empty
@@ -34,4 +36,4 @@ while(True):
 # After the loop release the cap object 
 vid.release() 
 # Destroy all the windows 
-cv2.destroyAllWindows() 
+cv2.destroyAllWindows()

@@ -6,7 +6,7 @@ import os
 
 from PIL import ImageTk,Image
 
-def send_vid_data(q, path):
+def send_vid_data(q, path, img_q):
 
     # Create a CSV file and write the header row
     csv_path = path + '/video.csv'
@@ -19,7 +19,9 @@ def send_vid_data(q, path):
     if not os.path.exists(img_dir):
         os.mkdir(img_dir)
     
-    cap = cv2.VideoCapture(2) #2 for connection to the video capture card if using realsense too, set to 0 for testing with web cam
+    cap = cv2.VideoCapture(4, apiPreference=cv2.CAP_ANY, params=[
+    cv2.CAP_PROP_FRAME_WIDTH, 3840,
+    cv2.CAP_PROP_FRAME_HEIGHT, 1080]) #2 for connection to the video capture card if using realsense too, set to 0 for testing with web cam
     frame_num = 0
     while cap.isOpened():
         try:
@@ -38,7 +40,7 @@ def send_vid_data(q, path):
                 # image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 # image = Image.fromarray(image)
                 # image = ImageTk.PhotoImage(image)
-                # q.put(image)
+                img_q.put(frame)
 
                 q.put(data)
 

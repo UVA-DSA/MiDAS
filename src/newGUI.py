@@ -14,7 +14,7 @@ rate_var = tk.StringVar()
 
 def startGui():
     #Global vars
-    global camOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, capTwoInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLData,watchRData
+    global camOne,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, capTwoInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLData,watchRData
     # Window creation
     win.title("MIDAS V3 - Data Collection System")
     # set minimum window size value
@@ -75,18 +75,18 @@ def startGui():
     camFr.grid(column=1,row=1, padx=10,pady=10,sticky='ne', rowspan=2, columnspan=2)
     camOne = tk.Label(camFr, width = 80, height = 15,bg="black")
     camTwo = tk.Label(camFr, width = 80, height = 15,bg="black")
-    camThree =  tk.Label(camFr, width = 80, height = 15,bg="black")
-    camFour =  tk.Label(camFr, width = 80, height = 15,bg="black")
+    capOne =  tk.Label(camFr, width = 80, height = 15,bg="black")
+    capTwo =  tk.Label(camFr, width = 80, height = 15,bg="black")
     camOne.grid(column=0,row=0,padx=10,pady=10,sticky="nsew")
     camTwo.grid(column=0,row=1,padx=10,pady=10,sticky="nsew")
-    camThree.grid(column=1,row=0,padx=10,pady=10,sticky="nsew")
-    camFour.grid(column=1,row=1,padx=10,pady=10,sticky="nsew")
+    capOne.grid(column=1,row=0,padx=10,pady=10,sticky="nsew")
+    capTwo.grid(column=1,row=1,padx=10,pady=10,sticky="nsew")
 
     # Data Frame
     #Creates the two frames which will hold data and grids them
     dataFr = tk.LabelFrame(win, text="Data", padx=15, pady=15, font=large_font_bold)
     dataFr.grid(column=0,row=0,padx=10,pady=10,sticky='nw', rowspan=3)
-    watchFr = tk.LabelFrame(dataFr, text="Watches",padx=5,pady=5,font=large_font)
+    watchFr = tk.LabelFrame(dataFr, text="Watches",padx=5,pady=5,font=large_font, width=30)
     watchFr.grid(column=0,row=0)
     trakFr = tk.LabelFrame(dataFr,text="Trakstar", padx=10,pady=10,font=large_font)
     trakFr.grid(column=0,row=1)
@@ -149,7 +149,7 @@ def submitData():
     sendData(subject_var.get(), trial_var.get(), task_var.get(), rate_var.get())
 
 #Function that is run by a thread to update the GUI created above
-def updateIndicators(gui_q,cam_q):
+def updateIndicators(gui_q,cam_q, OBS_q):
     while True:
         try:
             out = gui_q.get(True, 0.05)
@@ -180,7 +180,7 @@ def updateIndicators(gui_q,cam_q):
                     pCam.config(bg = hex_color if i == 31 and temp != -2 else pCam.cget('bg'), text = "Camera \n" + str(temp) if i == 31 and temp != -2 else pCam.cget('text'))
                     pLong.config(bg = hex_color if i == 32 and temp != -2 else pLong.cget('bg'), text = "Long \n" + str(temp) if i == 32 and temp != -2 else pLong.cget('text'))
             #Trakstar Updator
-            if(out[8] == 0):
+            if(str(out[8]) == "0"):
                 trakInd.config(text="No Data")
             else:
                 trakInd.config(text="Good", bg="green")
@@ -222,9 +222,10 @@ def updateIndicators(gui_q,cam_q):
         #Camera Display Updator
         try:
             #Gets image and converts it from cv2 to pillow formats
-            image = cam_q.get()
+            image = cam_q.get(False)
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
+            image.thumbnail((600,300))
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
             camOneInd.config(bg="green", text="Good")
@@ -233,5 +234,20 @@ def updateIndicators(gui_q,cam_q):
         #Sets indicator is queue has no data
         except queue.Empty:
             camOneInd.config(bg="red",text="Error")
+         #OBS Display Updator
+        try:
+            #Gets image and converts it from cv2 to pillow formats
+            image = OBS_q.get(False)
+            image = cv.resize(image,(600,300))
+            image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+            image = Image.fromarray(image)
+            image = ImageTk.PhotoImage(image)
+            #Displays image and sets indicator as good
+            capOneInd.config(bg="green", text="Good")
+            capOne.configure(image=image, height=300, width=600)
+            capOne.image = image
+        #Sets indicator is queue has no data
+        except queue.Empty:
+            capOneInd.config(bg="red",text="Error")
 
     win.destroy()

@@ -13,7 +13,7 @@ while True:
     for let in letters:
         num = ord(let) - ord('A')
         if (out.find(let) != -1):
-            temp = int((out[(1 + out.find(let)):(5 + out.find(let))]).strip())
+            temp = float((out[(1 + out.find(let)):(5 + out.find(let))]).strip())
         else:
             temp = -1
         ret[num]= temp

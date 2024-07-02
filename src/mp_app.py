@@ -129,40 +129,39 @@ def readData(task, rate, list_of_qs, path):
                 smartwatch_2_data = None
                 video_data = None
                 PDS_data = None
-                indicator_data = [1,1,1,1,1,1]
         
                 try:
                     video_data = list_of_qs[0].get(block=False)
                 except:
-                    indicator_data[0] = 0
+                    pass
 
                 try:
                     camera_data = list_of_qs[1].get(block=False)
                 except:
-                    indicator_data[1] = 0
+                    pass
   
                     
                 try:
                     trackstar_data = list_of_qs[2].get(block=False)
                 except:
-                    indicator_data[2] = 0
+                    pass
                 
                 
                 try:
-                    smartwatch_1_data = list_of_qs[3].get(block=False)
+                    smartwatch_1_data = list_of_qs[4].get(block=False)
                 except:
-                    indicator_data[3] = 0
+                    pass
                 
                 
                 try:
-                    smartwatch_2_data = list_of_qs[4].get(block=False)
+                    smartwatch_2_data = list_of_qs[3].get(block=False)
                 except:
-                    indicator_data[4] = 0
+                    pass
 
                 try:
                     PDS_data = list_of_qs[5].get(block=False)
                 except:
-                    indicator_data[5] = 0
+                    pass
                 
                 # Add logic to handle the case where trackstar_data or video_data is None
                 # if video_data is None or smartwatch_data is None or trackstar_data is None:
@@ -214,20 +213,21 @@ def startProcesses(path, rate, task):
     
     camera_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     capture_q = manager.LifoQueue(CAPTURE_Q_SIZE)
-    capture_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
+    depth_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
+    OBS_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     trackstar_q = manager.LifoQueue(TRACKSTAR_Q_SIZE)
     smartwatch_1_q = manager.LifoQueue(SMARTWATCH_Q_SIZE)
     smartwatch_2_q = manager.LifoQueue(SMARTWATCH_Q_SIZE)
     PDS_q = manager.LifoQueue(PDS_Q_SIZE)
     gui_q = manager.LifoQueue(GUI_Q_SIZE)
 
-    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, capture_img_q]
+    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q]
 
-    video_capture_process = Process(target=send_vid_data, args=(capture_q, path))
+    video_capture_process = Process(target=send_vid_data, args=(capture_q, path, OBS_img_q))
     video_capture_process.daemon = True
 
     camera_handler = get_camera_handler(camera_type)
-    camera_capture_process = Process(target=camera_handler, args=(camera_q, path, capture_img_q))
+    camera_capture_process = Process(target=camera_handler, args=(camera_q, path, depth_img_q))
     camera_capture_process.daemon = True
     
     trakstar_process = Process(target=get_trakstar_data, args=(trackstar_q, path))
@@ -246,22 +246,22 @@ def startProcesses(path, rate, task):
     PDS_process.daemon = True
 
     #Has to be thread since shares memory with GUI, has to be on same process
-    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,capture_img_q))
+    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q))
     updateIndicator_process.daemon = True
 
     video_capture_process.start()
     camera_capture_process.start()
-    trakstar_process.start()
+    # trakstar_process.start()
     smartwatch_1_process.start()
     smartwatch_2_process.start()
     read_process.start()
-    PDS_process.start()
+    PDS_process.start() 
     updateIndicator_process.start()
 
     try:
         video_capture_process.join()
         camera_capture_process.join()
-        trakstar_process.join()
+        # trakstar_process.join()
         smartwatch_1_process.join()
         smartwatch_2_process.join()
         read_process.join()

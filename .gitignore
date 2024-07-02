@@ -4,6 +4,7 @@ __pycache__
 src/Data/
 src/Video/camera/
 src/Video/images/
+src/Smartwatch/test
 
 main.exe
 .vscode/

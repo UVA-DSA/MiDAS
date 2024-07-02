@@ -328,13 +328,16 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue):
 
     pipeline = rs.pipeline()
     config = rs.config()
-
-    # Get device product line for setting a supporting resolution
-    pipeline_wrapper = rs.pipeline_wrapper(pipeline)
-    pipeline_profile = config.resolve(pipeline_wrapper)
-    device = pipeline_profile.get_device()
-    device_product_line = str(device.get_info(rs.camera_info.product_line))
-    print(f"Camera device: {device_product_line} is connected")
+    try:
+        # Get device product line for setting a supporting resolution
+        pipeline_wrapper = rs.pipeline_wrapper(pipeline)
+        pipeline_profile = config.resolve(pipeline_wrapper)
+        device = pipeline_profile.get_device()
+        device_product_line = str(device.get_info(rs.camera_info.product_line))
+        print(f"Camera device: {device_product_line} is connected")
+    except:
+        print("Intel Camera Not Found")
+        return
 
     config.enable_stream(rs.stream.depth, *IntelCamera.DEPTH_DIM, rs.format.z16, IntelCamera.DEPTH_FPS)
     config.enable_stream(rs.stream.color, *IntelCamera.RGB_DIM, rs.format.bgr8, IntelCamera.RGB_FPS)
@@ -410,14 +413,18 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue):
             #     break
 
             # image compression and conversion to be sent to display
-            img_q.put(images)
+            try:
+                img_q.put(images)
+            except:
+                while not img_q.empty():
+                    q.get()
 
             _add_record(csv_writer, timestamp, frame_num)
             
             try:
                 q.put([timestamp, frame_num], block=False)
             except:
-                print("Error when writing to the FIFO: Clearing the queue ")
+                # print("Error when writing to the FIFO: Clearing the queue ")
                 while not q.empty():
                     q.get() # clear the queue
 

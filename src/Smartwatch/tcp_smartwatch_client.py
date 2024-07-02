@@ -64,14 +64,15 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             
                             writer.writerow(sw_data)
                             
-                            # print(f"Received from server: {sw_data}")
                             
                             try:
                                 # Add it to the queue to be processed by the main process
                                 fifo_queue.put(sw_data, block=False)
                             except Exception as e:
                                 print("Error when writing to the FIFO: Clearing the queue ",e)
+                                
                                 while not fifo_queue.empty():
+                                    # print("Queue size: ", fifo_queue.qsize())
                                     fifo_queue.get()
                         
                         except Exception as e:

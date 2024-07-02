@@ -19,8 +19,8 @@ import sys
 
 # defines
 CAPTURE_Q_SIZE = 100
-TRACKSTAR_Q_SIZE = 100
-SMARTWATCH_Q_SIZE = 100
+TRACKSTAR_Q_SIZE = 128
+SMARTWATCH_Q_SIZE = 128
 PDS_Q_SIZE = 100
 GUI_Q_SIZE = 100
 
@@ -186,20 +186,23 @@ def readData(task, rate, list_of_qs, path):
                 if PDS_data is None:
                     PDS_data = [-2,-2,-2,-2,-2,-2,-2,-2]
                 
-                
                 # print("Writing to csv file ..")
                 collectedData = [local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5],PDS_data[0],PDS_data[1],PDS_data[2],PDS_data[3],PDS_data[4],PDS_data[5],PDS_data[6],PDS_data[7]]
                 csv_writer.writerow(collectedData)
                 csv_file.flush()
-                list_of_qs[6].put(collectedData)
+                
+                
+                try:
+                    list_of_qs[6].put(collectedData, block=False)
+                except:
+                    while not list_of_qs[6].empty():
+                        _ = list_of_qs[6].get()
+                
                 
                 # sleep_time = sample_time - (time.time() - start_time)
                 while (time.time() - start_time) < sample_time:
-                    for i in range(1):
-                        try:
-                            list_of_qs[i+1].get(block=False)
-                        except Exception:
-                            pass 
+                    pass
+
 
             except KeyboardInterrupt:
                 print("Keyboard Interrupt!")
@@ -250,22 +253,22 @@ def startProcesses(path, rate, task):
     updateIndicator_process.daemon = True
 
     video_capture_process.start()
-    camera_capture_process.start()
-    trakstar_process.start()
-    smartwatch_1_process.start()
+    # camera_capture_process.start()
+    # trakstar_process.start()
+    # smartwatch_1_process.start()
     smartwatch_2_process.start()
     read_process.start()
-    PDS_process.start()
+    # PDS_process.start()
     updateIndicator_process.start()
 
     try:
-        video_capture_process.join()
-        camera_capture_process.join()
-        trakstar_process.join()
-        smartwatch_1_process.join()
+        # video_capture_process.join()
+        # camera_capture_process.join()
+        # trakstar_process.join()
+        # smartwatch_1_process.join()
         smartwatch_2_process.join()
         read_process.join()
-        PDS_process.join()
+        # PDS_process.join()
         updateIndicator_process.join()
 
     except KeyboardInterrupt:

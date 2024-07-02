@@ -3,7 +3,7 @@ import cv2
 
 
 # define a video capture object 0
-vid = cv2.VideoCapture(4, apiPreference=cv2.CAP_ANY, params=[
+vid = cv2.VideoCapture(3, apiPreference=cv2.CAP_ANY, params=[
     cv2.CAP_PROP_FRAME_WIDTH, 3840,
     cv2.CAP_PROP_FRAME_HEIGHT, 1080]) 
 num = 0
@@ -16,7 +16,7 @@ while(True):
 
 	if(ret == True):
 	# Display the resulting frame 
-		# frame = cv2.resize(frame, (3840, 1080))
+		frame = cv2.resize(frame, (0,0),fx=0.25,fy=0.25)
 		cv2.imshow('frame', frame) 
 
 		#reads first image from queue, will wait 0.5 seconds before declaring the queue empty

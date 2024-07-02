@@ -3,7 +3,7 @@ from queue import Queue
 from time import time_ns
 import csv
 import os
-
+from config import OBS_CAPTURE_PORT
 from PIL import ImageTk,Image
 
 def send_vid_data(q, path, img_q):
@@ -19,7 +19,7 @@ def send_vid_data(q, path, img_q):
     if not os.path.exists(img_dir):
         os.mkdir(img_dir)
     
-    cap = cv2.VideoCapture(4, apiPreference=cv2.CAP_ANY, params=[
+    cap = cv2.VideoCapture(OBS_CAPTURE_PORT, apiPreference=cv2.CAP_ANY, params=[
     cv2.CAP_PROP_FRAME_WIDTH, 3840,
     cv2.CAP_PROP_FRAME_HEIGHT, 1080]) #2 for connection to the video capture card if using realsense too, set to 0 for testing with web cam
     frame_num = 0
@@ -40,12 +40,19 @@ def send_vid_data(q, path, img_q):
                 # image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 # image = Image.fromarray(image)
                 # image = ImageTk.PhotoImage(image)
-                img_q.put(frame)
+                try:
+                    img_q.put(frame)
+                except:
+                    while not img_q.empty():
+                        q.get()
+                try:
+                    q.put(data)
+                except:
+                    while not q.empty():
+                        q.get()
 
-                q.put(data)
-
-                if q.full():
-                    _ = q.get() #removes last object from q to keep only a certain amount
+                # if q.full():
+                #     _ = q.get() #removes last object from q to keep only a certain amount
 
         except KeyboardInterrupt:
             print("KeyboardInterrupt: Exiting...")

@@ -3,7 +3,7 @@ from time import time_ns, sleep
 import serial
 import csv
 import queue
-
+from config import PDS_ON_THRESHOLD
 #Each letter corresopnds to a pedal output. Arduino will output pedal data as single string
 #format if 'A123' meaning the first pedal was pressed at pressure of 123. 'F999 G200' means last two pedals pressed, second to last being pressed harder
 letters = {'A', 'B', 'C', 'D', 'E', 'F', 'G'}
@@ -25,14 +25,14 @@ def get_PDS_data(q,path):
     csv_path = path + '/PDS.csv'
     csv_file = open(csv_path, 'w', newline='')
     csv_writer_PDS = csv.writer(csv_file)
-    csv_writer_PDS.writerow(['Pedals Pressed', 'Computer Time'])
+    csv_writer_PDS.writerow(['Pedal 1 Pressure', 'Pedal 2 Pressure','Pedal 3 Pressure','Pedal 4 Pressure','Pedal 6 Pressure', 'Pedal 7 Pressure','Pedal 1 Pressed','Pedal 2 Pressed','Pedal 3 Pressed','Pedal 4 Pressed','Pedal 5 Pressesd','Pedal 6 Pressed', 'Pedal 7 Pressed', 'Computer Time'])
     #Main loop that constantly collects serial data and sends it through the PDS queue, sends -1's for any pedal not presssed
     while True:
         serialConnect()
         while arduino.is_open:
             try:
                 out = arduino.readline().decode().strip()
-                ret = [-1,-1,-1,-1,-1,-1,-1]
+                ret = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]
                 #print(out, end = '')
                 for let in letters:
                     num = ord(let) - ord('A')
@@ -41,9 +41,17 @@ def get_PDS_data(q,path):
                     else:
                         temp = -1
                     ret[num] = temp
+                    if temp >= PDS_ON_THRESHOLD:
+                        ret[num+7] = 1
+                    else:
+                        ret[num+7] = 0
                 #inserts the current time at the end of the data
-                ret.insert(7,time_ns())
-                q.put(ret)
+                ret.insert(14,time_ns())
+                try:
+                    q.put(ret)
+                except:
+                    while not q.empty():
+                        q.get()
                 csv_writer_PDS.writerow(ret)
                 csv_file.flush()
             except KeyboardInterrupt:

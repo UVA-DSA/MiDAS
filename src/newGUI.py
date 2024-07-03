@@ -159,7 +159,7 @@ def updateIndicators(gui_q,cam_q, OBS_q):
     while True:
         try:
             out = gui_q.get(True, 0.05)
-            print(out)
+            # print(out)
             
             # out = [sw_epoch_ms, wrist_position, sensor_type, value_X_Axis, value_Y_Axis, value_Z_Axis, server_epoch_ms, sw_id]
             
@@ -173,11 +173,11 @@ def updateIndicators(gui_q,cam_q, OBS_q):
                     ardInd.config(bg="green",text="Good")
                     temp = out[i]
                     if out[i+7] == 1:
-                        hex_color = green
+                        hex_color = "green"
                     elif (temp>-1):
                         #Sets hexcolor to be a hex color from red to green depedning on how much pressure
-                        red = int(255 * (1 - (temp - 1) / 1015))
-                        green = int(255 * ((temp - 1) / 1015))
+                        red = int(255 * (1 - (round(temp) - 1) / 2000))
+                        green = int(255 * ((round(temp) - 1) / 2000))
                         hex_color = f'#{red:02x}{green:02x}00'
                     else:
                         #If pedal data was -1 (no pressure) sets it to red
@@ -238,27 +238,29 @@ def updateIndicators(gui_q,cam_q, OBS_q):
             watchRightInd.config(bg="red", text="Error")
             trakInd.config(bg="red", text="Error")
             
-        # except KeyboardInterrupt:
-        #     print("KeyboardInterrupt received. Exiting main program.")
-        #     break
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt received. Exiting main program.")
+            break
+
         #Camera Display Updator
         colorBars = Image.open("src/video/colorbars.png")
+        colorBars = colorBars.resize((640,480))
         colorBarstk = ImageTk.PhotoImage(colorBars)
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = cam_q.get(False)
-            image = cv.resize(image, (0,0),fx=0.25,fy=0.25)
+            image = cv.resize(image, (0,0))
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
             camOneInd.config(bg="green", text="Good")
-            camOne.configure(image=image,width=160,height=15)
+            camOne.configure(image=image,width=300,height=200)
             camOne.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
             camOneInd.config(bg="red",text="Error")
-            camOne.configure(image = colorBarstk,width=160,height=15)
+            camOne.configure(image = colorBarstk,width=600,height=240)
             camOne.image=colorBarstk
          #OBS Display Updator
         try:
@@ -270,12 +272,12 @@ def updateIndicators(gui_q,cam_q, OBS_q):
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
             capOneInd.config(bg="green", text="Good")
-            capOne.configure(image=image,width=160,height=15)
+            capOne.configure(image = colorBarstk,width=1200,height=240)
             capOne.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
             capOneInd.config(bg="red",text="Error")
-            capOne.configure(image=colorBarstk,width=160,height=15)
+            capOne.configure(image=colorBarstk)
             capOne.image=colorBarstk
 
     # win.destroy()

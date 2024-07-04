@@ -29,6 +29,7 @@ def get_PDS_data(q,path):
     #Main loop that constantly collects serial data and sends it through the PDS queue, sends -1's for any pedal not presssed
     while True:
         serialConnect()
+        print("PDS Connected")
         while arduino.is_open:
             try:
                 out = arduino.readline().decode().strip()
@@ -48,15 +49,15 @@ def get_PDS_data(q,path):
                 #inserts the current time at the end of the data
                 ret.insert(14,time_ns())
                 try:
-                    q.put(ret)
+                    q.put(ret, block=False)
                     # print(ret)
-                except queue.Empty:
+                except:
                     while not q.empty():
                         q.get()
                 csv_writer_PDS.writerow(ret)
                 csv_file.flush()
             except KeyboardInterrupt:
-                print("KeyboardInterrupt: Exiting...")
+                print("PDS KeyboardInterrupt: Exiting...")
                 arduino.close()
                 csv_file.close()
                 return

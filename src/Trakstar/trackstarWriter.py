@@ -27,8 +27,13 @@ def get_trakstar_data(q, path):
     
 
 
+    trakstar_dir = path + 'Trakstar'
+    if not os.path.exists(trakstar_dir):
+        os.mkdir(trakstar_dir)
+    
     # Create a CSV file and write the header row
-    csv_path = os.path.join(path, '/trakstar.csv')
+    csv_path = trakstar_dir +'/trakstar.csv'
+
     csv_file = open(csv_path, 'w', newline='')
     csv_writer = csv.writer(csv_file)
     # So the line below is asking to append 10 items per line to the CSV but 9 values are being sent
@@ -60,6 +65,9 @@ def get_trakstar_data(q, path):
                 
                 #is this just writing all the values at once or each set of sensor values?
                 csv_writer.writerow(values)
+                csv_file.flush()
+
+
                 q.put(values)
                 if q.full():
                     _ = q.get() #removes last object from q to keep only a certain amount
@@ -74,6 +82,6 @@ def get_trakstar_data(q, path):
             csv_file.close()
             exit(-1)
         
-if __name__ == "__main__":
-    q = Queue()
-    get_trakstar_data(q, "./test.csv")
+# if __name__ == "__main__":
+#     q = Queue()
+#     get_trakstar_data(q, "./test.csv")

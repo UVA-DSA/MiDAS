@@ -12,6 +12,7 @@ from multiprocessing import Process, Queue, Event
 from multiprocessing.managers import BaseManager
 from time import sleep
 from queue import LifoQueue
+from config import smartwatch_1_id, smartwatch_1_ip,smartwatch_2_id,smartwatch_2_ip,smartwatch_port,camera_type
 
 
 import time
@@ -41,19 +42,7 @@ class MyManager(BaseManager):
     pass
 MyManager.register('LifoQueue', LifoQueue)
 
-
-camera_type = "Intel"
-
 thread_stop = Event()
-
-# Replace these values with your smartwatch's IP, port
-smartwatch_1_ip = '172.27.191.158'
-smartwatch_1_id = 'right'
-
-smartwatch_2_ip = '172.27.176.73'
-smartwatch_2_id = 'left'
-
-smartwatch_port = 7889
 
 # eel.init('web')
 

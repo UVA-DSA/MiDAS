@@ -16,7 +16,7 @@ while(True):
 
 	if(ret == True):
 	# Display the resulting frame 
-		frame = cv2.resize(frame, (0,0),fx=0.25,fy=0.25)
+		# frame = cv2.resize(frame, (0,0),fx=0.25,fy=0.25)
 		cv2.imshow('frame', frame) 
 
 		#reads first image from queue, will wait 0.5 seconds before declaring the queue empty

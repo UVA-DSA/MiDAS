@@ -71,7 +71,7 @@ def sendData(subject, trial, task, rate):
     print(data)
     path = f"{data['Task']}_S{data['Subject']}_T{data['Trial']}_{data['Date']}/" 
     
-    mydir = "src/Data/"
+    mydir = "./Data/"
     myfile = path
     path = os.path.join(mydir, myfile)
 
@@ -215,26 +215,26 @@ def startProcesses(path, rate, task):
 
     list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q]
 
-    video_capture_process = Process(target=send_vid_data, args=(capture_q, path, OBS_img_q))
-    video_capture_process.daemon = True
+    video_capture_process = Process(name="OBS Virtual Camera Capture", target=send_vid_data, args=(capture_q, path, OBS_img_q))
+    # video_capture_process.daemon = True,
 
     camera_handler = get_camera_handler(camera_type)
-    camera_capture_process = Process(target=camera_handler, args=(camera_q, path, depth_img_q))
+    camera_capture_process = Process(name="Depth Camera Intel Capture", target=camera_handler, args=(camera_q, path, depth_img_q))
     camera_capture_process.daemon = True
     
-    trakstar_process = Process(target=get_trakstar_data, args=(trackstar_q, path))
+    trakstar_process = Process(name="TrakStar Capture", target=get_trakstar_data, args=(trackstar_q, path))
     trakstar_process.daemon = True
     
-    smartwatch_1_process = Process(target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_1_q,path, smartwatch_1_id))
+    smartwatch_1_process = Process(name="Smartwatch Left Capture", target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_1_q,path, smartwatch_1_id))
     smartwatch_1_process.daemon = True
     
-    smartwatch_2_process = Process(target=receive_smartwatch_data, args=(smartwatch_2_ip,smartwatch_port,smartwatch_2_q,path, smartwatch_2_id))
+    smartwatch_2_process = Process(name="Smartwatch Right Capture", target=receive_smartwatch_data, args=(smartwatch_2_ip,smartwatch_port,smartwatch_2_q,path, smartwatch_2_id))
     smartwatch_2_process.daemon = True
     
-    read_process = Process(target=readData, args=(task, rate, list_of_qs, path))
+    read_process = Process(name="Main Data Saver", target=readData, args=(task, rate, list_of_qs, path))
     read_process.daemon = True
 
-    PDS_process = Process(target=get_PDS_data, args = (PDS_q, path))
+    PDS_process = Process(name="PDS Capture", target=get_PDS_data, args = (PDS_q, path))
     PDS_process.daemon = True
 
     #Has to be thread since shares memory with GUI, has to be on same process

@@ -17,7 +17,7 @@ def startGui():
     global camOne, camTwo,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLAcc,watchRAcc,watchLGyr,watchRGyr
     # Window creation
     win.title("MIDAS V3 - Data Collection System")
-    win.geometry("1600x900")
+    win.geometry("1500x900")
     win.resizable(False,False)
     # Define a larger font
     large_font = ('Helvetica', 14)
@@ -25,7 +25,7 @@ def startGui():
 
 
     notebook = ttk.Notebook(win)
-    notebook.grid(row=0,column=0,rowspan=1, padx=10, sticky='nw')
+    notebook.grid(row=0,column=0,rowspan=1, padx=10, sticky='news')
     # Info Frame
     infoFr = tk.LabelFrame(win, text="Information", padx=0, pady=0, font=large_font_bold)
     notebook.add(infoFr, text="Info")
@@ -40,7 +40,7 @@ def startGui():
     tk.Entry(infoFr, textvariable=task_var, font=large_font, width=10).grid(column=1, row=2, padx=0, pady=0)
     tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=10).grid(column=3, row=2, padx=0, pady=0)
     # Submit Button
-    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=5).grid(column=4, row=0, rowspan=2, pady=10,padx=10)
+    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=15).grid(column=4, row=0, rowspan=2, pady=10,padx=10)
 
 
     # Pedal Indicators Frame
@@ -259,7 +259,7 @@ def updateIndicators(gui_q,cam_q, OBS_q):
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = cam_q.get(False)
-            image = cv.resize(image, (0,0))
+            image = cv.resize(image, (320,240))
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)
@@ -280,7 +280,7 @@ def updateIndicators(gui_q,cam_q, OBS_q):
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = cam_q.get(False)
-            image = cv.resize(image, (0,0))
+            image = cv.resize(image, (320,240))
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)
@@ -299,22 +299,21 @@ def updateIndicators(gui_q,cam_q, OBS_q):
 
          #OBS Display Updator
 
-
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = OBS_q.get(False)
-            image = cv.resize(image, (0,0))
+            image = cv.resize(image, (640,240))
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
             capOneInd.config(bg="green", text="Good")
-            capOne.configure(image = colorBarstk,width=640,height=480)
+            capOne.configure(image = image,width=640,height=240)
             capOne.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
             capOneInd.config(bg="red",text="Error")
-            capOne.configure(image=colorBarCombinedstk,width=640,height=480)
+            capOne.configure(image=colorBarCombinedstk,width=640,height=240)
             capOne.image=colorBarCombinedstk
 
     # win.destroy()

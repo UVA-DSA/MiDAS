@@ -126,7 +126,7 @@ def plot_smartwatch_data(fifo_queue: Queue) -> None:
     plt.show()
 
 if __name__ == '__main__':
-    smartwatch_ip = '172.27.176.73'
+    smartwatch_ip = '172.27.191.158'
     smartwatch_port = 7889
     smartwatch_id = 'left'
     fifo_queue = Queue()

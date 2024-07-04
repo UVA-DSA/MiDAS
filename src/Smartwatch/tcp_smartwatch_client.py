@@ -79,9 +79,17 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             print(f"Error occurred while communicating with server: {e}")
                             break  # Exit the inner loop and attempt to reconnect
 
+                        except KeyboardInterrupt:
+                            print("Smartwatch receival interrupted by user. Exiting...")
+                            break
+
                 except Exception as e:
                     print(f"Error: {e}")
                 
+                except KeyboardInterrupt:
+                    print("Smartwatch receival interrupted by user. Exiting...")
+                    break
+
                 finally:
                     if client_socket:
                         client_socket.close()
@@ -89,7 +97,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                         break
 
     except KeyboardInterrupt:
-        print("Interrupted by user. Exiting...")
+        print("Smartwatch receival interrupted by user. Exiting...")
         return
 
 

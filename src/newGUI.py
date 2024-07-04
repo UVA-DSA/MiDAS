@@ -14,41 +14,39 @@ rate_var = tk.StringVar()
 
 def startGui():
     #Global vars
-    global camOne,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLAcc,watchRAcc,watchLGyr,watchRGyr
+    global camOne, camTwo,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLAcc,watchRAcc,watchLGyr,watchRGyr
     # Window creation
     win.title("MIDAS V3 - Data Collection System")
-    # set minimum window size value
-    win.minsize(1080, 300)
-    # set maximum window size value
-    win.maxsize(1920, 1080)
-
+    win.geometry("1600x900")
+    win.resizable(False,False)
     # Define a larger font
     large_font = ('Helvetica', 14)
     large_font_bold = ('Helvetica', 18, 'bold')
 
-    notebook = ttk.Notebook(win)
-    notebook.grid(row=0,column=1,rowspan=1,sticky='ne')
 
+    notebook = ttk.Notebook(win)
+    notebook.grid(row=0,column=0,rowspan=1, padx=10, sticky='nw')
     # Info Frame
-    infoFr = tk.LabelFrame(win, text="Information", padx=10, pady=10, font=large_font_bold)
+    infoFr = tk.LabelFrame(win, text="Information", padx=0, pady=0, font=large_font_bold)
     notebook.add(infoFr, text="Info")
     # Labels for the info frame
-    tk.Label(infoFr, text="Subject:", font=large_font).grid(column=0, row=0, sticky="w")
-    tk.Label(infoFr, text="Trial:", font=large_font).grid(column=2, row=0, sticky="w")
-    tk.Label(infoFr, text="Task:", font=large_font).grid(column=0, row=2, sticky="w")
-    tk.Label(infoFr, text="Rate:", font=large_font).grid(column=2, row=2, sticky="w")
+    tk.Label(infoFr, text="Subject:", font=large_font).grid(column=0, row=0)
+    tk.Label(infoFr, text="Trial:", font=large_font).grid(column=2, row=0)
+    tk.Label(infoFr, text="Task:", font=large_font).grid(column=0, row=2)
+    tk.Label(infoFr, text="Rate:", font=large_font).grid(column=2, row=2)
     # Entry boxes for the info frame
-    tk.Entry(infoFr, textvariable=subject_var, font=large_font, width=10).grid(column=1, row=0, padx=5, pady=5, sticky="ew")
-    tk.Entry(infoFr, textvariable=trial_var, font=large_font, width=10).grid(column=3, row=0, padx=5, pady=5, sticky="ew")
-    tk.Entry(infoFr, textvariable=task_var, font=large_font, width=10).grid(column=1, row=2, padx=5, pady=5, sticky="ew")
-    tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=10).grid(column=3, row=2, padx=5, pady=5, sticky="ew")
+    tk.Entry(infoFr, textvariable=subject_var, font=large_font, width=10).grid(column=1, row=0, padx=0, pady=0)
+    tk.Entry(infoFr, textvariable=trial_var, font=large_font, width=10).grid(column=3, row=0, padx=0, pady=0)
+    tk.Entry(infoFr, textvariable=task_var, font=large_font, width=10).grid(column=1, row=2, padx=0, pady=0)
+    tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=10).grid(column=3, row=2, padx=0, pady=0)
     # Submit Button
-    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=5).grid(column=4, row=0, rowspan=2, pady=10,padx=10, sticky='ns')
+    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=5).grid(column=4, row=0, rowspan=2, pady=10,padx=10)
+
 
     # Pedal Indicators Frame
     #Makes the pedal frame and grids it
     pedalFr = tk.LabelFrame(win, text="Pedal Indicators", padx=10, pady=10, font=large_font_bold)
-    pedalFr.grid(column=2, row=0, padx=10, pady=10, sticky="nsew", columnspan=1)
+    pedalFr.grid(column=1, row=0, padx=10, pady=10, sticky="nsew", columnspan=1)
     #Makes vars for each pedal indicator
     pUL = tk.Label(pedalFr)
     pLL = tk.Label(pedalFr)
@@ -67,27 +65,28 @@ def startGui():
     for pedal in pedals:
         text, row, col, rowspan, label = pedal
         label.config(text=text, bg="red", width=8, height=3, font=large_font)
-        label.grid(row=row, column=col, padx=5, pady=5, rowspan=rowspan)
+        label.grid(row=row, column=col, padx=1, pady=1, rowspan=rowspan)
 
     # Camera Frame
     #Creates Frame for the camera displays as well as the cam display itself and grids them
-    camFr = tk.LabelFrame(win, text="Cameras", padx=10, pady=10, font=large_font_bold)
-    camFr.grid(column=1,row=1, padx=10,pady=10,sticky='ne', rowspan=2, columnspan=2)
-    camOne = tk.Label(camFr, width = 80, height = 15,bg="black")
-    camTwo = tk.Label(camFr, width = 80, height = 15,bg="black")
-    capOne =  tk.Label(camFr, width = 160, height = 15,bg="black")
-    camOne.grid(column=0,row=0,padx=10,pady=10,sticky="nsew")
-    camTwo.grid(column=1,row=0,padx=10,pady=10,sticky="nsew")
-    capOne.grid(column=0,row=1,padx=10,pady=10,sticky="nsew",columnspan=2)
+    camFr = tk.LabelFrame(win, text="Cameras", padx=5, pady=5, font=large_font_bold)
+    camFr.grid(column=1,row=1, padx=5,pady=5,sticky='nw', rowspan=3, columnspan=2)
+    camOne = tk.Label(camFr, width = 45, height = 15,bg="black")
+    camTwo = tk.Label(camFr, width = 45, height = 15,bg="black")
+    capOne =  tk.Label(camFr, width = 90, height = 15,bg="black")
+    camOne.grid(column=0,row=0,padx=10,pady=10,sticky="nw")
+    camTwo.grid(column=1,row=0,padx=0,pady=10,sticky="nw")
+    capOne.grid(column=0,row=1,padx=15,pady=10,sticky="nw",columnspan=2)
 
     # Data Frame
     #Creates the two frames which will hold data and grids them
     dataFr = tk.LabelFrame(win, text="Data", padx=15, pady=15, font=large_font_bold)
-    dataFr.grid(column=0,row=0,padx=10,pady=10,sticky='nw', rowspan=3)
+    dataFr.grid(column=0,row=1,padx=15,pady=10,sticky='nw', rowspan=3, columnspan=2)
     watchFr = tk.LabelFrame(dataFr, text="Watches",padx=5,pady=5,font=large_font, width=30)
-    watchFr.grid(column=0,row=0)
-    trakFr = tk.LabelFrame(dataFr,text="Trakstar", padx=10,pady=10,font=large_font)
-    trakFr.grid(column=0,row=1)
+    watchFr.grid(column=0,row=0, sticky='ne')
+
+    trakFr = tk.LabelFrame(dataFr,text="Trakstar", padx=5,pady=5,font=large_font)
+    trakFr.grid(column=1,row=0)
     #Creation of the data displays for each of the devices
     watchLAcc = tk.Label(watchFr)
     watchRAcc = tk.Label(watchFr)
@@ -103,17 +102,19 @@ def startGui():
         ("Trak1:", trak1Data, 1, 0,trakFr), ("Trak2:", trak2Data, 2, 0,trakFr),
         ("Trak3:", trak3Data, 3, 0,trakFr), ("Trak4:", trak4Data, 4, 0,trakFr)
     ]
-    tk.Label(watchFr, text = "acc  gyro", font = large_font).grid(row=0,column=1,padx=5,pady=5,sticky='nw')
-    tk.Label(trakFr, text = "X   azimuth\nY  elevation\nZ     roll", font = large_font).grid(row=0,column=1,padx=5,pady=5,sticky='nw')
+    tk.Label(watchFr, text = "acc  gyro", font = large_font).grid(row=0,column=1,padx=5,pady=5,sticky='ne')
+    tk.Label(trakFr, text = "X   azimuth\nY  elevation\nZ     roll", font = large_font).grid(row=0,column=1,padx=5,pady=5,sticky='ne')
     #Loops through and configures the data displays, creates labels for them, and grids them all in their corresponding frames
     for i, (label, name, r, c,frame) in enumerate(dataDevices):
-        tk.Label(frame, text=label, font=large_font).grid(row=r, column=c, padx=5, pady=5, sticky="nw")
+        tk.Label(frame, text=label, font=large_font).grid(row=r, column=c, padx=5, pady=5, sticky="ne")
         name.config(font=large_font, text="X  X\nY  Y\nZ  Z")
-        name.grid(row=r, column=c+1, padx=5, pady=5, sticky="w")
+        name.grid(row=r, column=c+1, padx=5, pady=5, sticky="e")
+    
+    
     watchLGyr.config(font=large_font)
-    watchLGyr.grid(row=1,column=2,padx=5,pady=5,sticky='w')
+    watchLGyr.grid(row=1,column=2,padx=5,pady=5,sticky='e')
     watchRGyr.config(font=large_font)
-    watchRGyr.grid(row=2,column=2,padx=5,pady=5,sticky='w')
+    watchRGyr.grid(row=2,column=2,padx=5,pady=5,sticky='e')
 
 
     # Diagonstic Frame
@@ -142,10 +143,10 @@ def startGui():
         name.grid(row=r, column=c+1, padx=5, pady=5, sticky="w")
 
     # Configure weight for responsiveness
-    for i in range(2):
-        win.grid_columnconfigure(i, weight=1)
-    for i in range(3):
-        win.grid_rowconfigure(i, weight=1)
+    # for i in range(2):
+    #     win.grid_columnconfigure(i, weight=1)
+    # for i in range(3):
+    #     win.grid_rowconfigure(i, weight=1)
     #Main process runs GUI, submit button triggers the new thread/processes
     win.mainloop()
 
@@ -242,10 +243,19 @@ def updateIndicators(gui_q,cam_q, OBS_q):
             print("KeyboardInterrupt received. Exiting main program.")
             break
 
-        #Camera Display Updator
-        colorBars = Image.open("src/video/colorbars.png")
-        colorBars = colorBars.resize((640,480))
+
+        # asset management
+        colorBars = Image.open("./Video/colorbars.png")
+        colorBars = colorBars.resize((320,240))
         colorBarstk = ImageTk.PhotoImage(colorBars)
+
+
+        colorBars_combined = Image.new('RGB', (640, 240))
+        colorBars_combined.paste(colorBars, (0, 0))
+        colorBars_combined.paste(colorBars, (320, 0))
+        colorBarCombinedstk = ImageTk.PhotoImage(colorBars_combined)
+        ### Camera 1 Display Updator ###
+
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = cam_q.get(False)
@@ -255,29 +265,56 @@ def updateIndicators(gui_q,cam_q, OBS_q):
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
             camOneInd.config(bg="green", text="Good")
-            camOne.configure(image=image,width=300,height=200)
+            camOne.configure(image=image,width=320,height=240)
             camOne.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
             camOneInd.config(bg="red",text="Error")
-            camOne.configure(image = colorBarstk,width=600,height=240)
+
+            camOne.configure(image = colorBarstk,width=320,height=240)
             camOne.image=colorBarstk
+
+
+
+        ### Camera 2 Display Updator ###
+        try:
+            #Gets image and converts it from cv2 to pillow formats
+            image = cam_q.get(False)
+            image = cv.resize(image, (0,0))
+            image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+            image = Image.fromarray(image)
+            image = ImageTk.PhotoImage(image)
+            #Displays image and sets indicator as good
+            camTwoInd.config(bg="green", text="Good")
+            camTwo.configure(image=image,width=320,height=240)
+            camTwo.image = image
+        #Sets indicator is queue has no data
+        except queue.Empty:
+            camTwoInd.config(bg="red",text="Error")
+            camTwo.configure(image = colorBarstk,width=320,height=240)
+            camTwo.image=colorBarstk
+
+
+
+
          #OBS Display Updator
+
+
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = OBS_q.get(False)
-            image = cv.resize(image, (0,0),fx=0.25,fy=0.25)
+            image = cv.resize(image, (0,0))
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
             capOneInd.config(bg="green", text="Good")
-            capOne.configure(image = colorBarstk,width=1200,height=240)
+            capOne.configure(image = colorBarstk,width=640,height=480)
             capOne.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
             capOneInd.config(bg="red",text="Error")
-            capOne.configure(image=colorBarstk)
-            capOne.image=colorBarstk
+            capOne.configure(image=colorBarCombinedstk,width=640,height=480)
+            capOne.image=colorBarCombinedstk
 
     # win.destroy()

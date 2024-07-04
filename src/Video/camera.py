@@ -6,7 +6,7 @@ from time import time_ns
 import csv
 
 import pyrealsense2 as rs
-import pyzed.sl as sl
+# import pyzed.sl as sl
 import numpy as np
 import cv2
 

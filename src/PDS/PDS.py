@@ -20,7 +20,7 @@ def serialConnect(thread_stop):
             arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
             return
         except serial.SerialException:
-            print("Serial Not Found, Retrying in 5 Seconds")
+            print("[PDS: Serial Not Found, Retrying in 5 Seconds..]")
             sleep(5)
 
 def get_PDS_data(q,path,thread_stop):
@@ -71,7 +71,7 @@ def get_PDS_data(q,path,thread_stop):
                 csv_writer_PDS.writerow(ret)
                 csv_file.flush()
             except KeyboardInterrupt:
-                print("PDS KeyboardInterrupt: Exiting...")
+                print("[PDS: KeyboardInterrupt: Exiting...]")
                 arduino.close()
                 csv_file.close()
                 return

@@ -95,7 +95,7 @@ public class SensorData  implements SensorEventListener {
         sensor_gyro = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
         Log.d(LOG_TAG, "Sensors" + sensor_acc);
         sensorManager.registerListener(this, sensor_acc, SensorManager.SENSOR_DELAY_GAME);
-//        sensorManager.registerListener(this, sensor_gyro, SensorManager.SENSOR_DELAY_GAME);
+        sensorManager.registerListener(this, sensor_gyro, SensorManager.SENSOR_DELAY_GAME);
 
     }
 

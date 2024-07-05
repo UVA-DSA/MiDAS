@@ -9,6 +9,7 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkRequest;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
@@ -35,6 +36,10 @@ public class MainActivity extends Activity  {
     private SensorData mSensor;
 //    private String watchArm = "Left Wrist";
     private String message = "DCS - Right Wrist";
+
+    private PowerManager.WakeLock wakeLock;
+    private static final String TAG = "myapp:GestureRecognition";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -71,6 +76,18 @@ public class MainActivity extends Activity  {
         mIPTextView.setText(SendSensorDataWorker.getLocalIpAddress());
         mSensor.startSensor();
 
+        PowerManager powerMgr = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        wakeLock = powerMgr.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
+        wakeLock.acquire();
+
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+        }
     }
 
     public boolean isOnline() {

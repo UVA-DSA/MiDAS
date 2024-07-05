@@ -25,7 +25,6 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
             while True:
                 client_socket = None
                 connected = False
-                
  
                 while not connected:
                     if thread_stop.is_set():
@@ -33,13 +32,12 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                         break
                     try:
                         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        client_socket.settimeout(5)
-                        print(f"Attempting to connect to server {server_ip}:{server_port}")
+                        print(f"[Smartwatch: Attempting to connect to server {server_ip}:{server_port}]")
                         client_socket.connect((server_ip, server_port))
                         connected = True
-                        print(f"Successfully connected to server {server_ip}:{server_port}")
+                        print(f"[Smartwatch: Successfully connected to server {server_ip}:{server_port}")
                     except Exception as e:
-                        print(f"Connection failed: {e}. Retrying in 5 seconds...")
+                        print(f"[Smartwatch: Connection failed: {e}. Retrying in 5 seconds...]")
                         time.sleep(5)
                 
                 message = "Hello, Smart Watch!"
@@ -51,6 +49,11 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                 try:
                     while True:
                         try:
+
+                            if thread_stop.is_set():
+                                print("[Smartwatch: Thread stop set, exiting..]")
+                                break
+                
                             # Send the message
                             client_socket.sendall(message.encode('utf-8'))
 
@@ -58,7 +61,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             # print("I am here")
                             response = client_socket.recv(1024)
                             if not response:
-                                raise ConnectionError("Server closed the connection.")
+                                raise ConnectionError("[Smartwatch: Server closed the connection.]")
                             
                             sw_data = response.decode('utf-8').split(',')
 
@@ -85,28 +88,26 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                                     fifo_queue.get()
                         
                         except Exception as e:
-                            print(f"Error occurred while communicating with server: {e}")
+                            print(f"[Error occurred while communicating with server: {e}]")
                             break  # Exit the inner loop and attempt to reconnect
 
                         except KeyboardInterrupt:
-                            print("Smartwatch receival interrupted by user. Exiting...")
+                            print("[Smartwatch receival interrupted by user. Exiting...]")
                             break
 
                 except Exception as e:
-                    print(f"Error: {e}")
+                    print(f"[Smartwatch: Error: {e}]")
                 
                 except KeyboardInterrupt:
-                    print("Smartwatch receival interrupted by user. Exiting...")
+                    print("[Smartwatch: Smartwatch receival interrupted by user. Exiting...]")
                     break
 
-                finally:
-                    if client_socket:
-                        client_socket.close()
-                        print("Smartwatch connection closed!")
-                        break
+                if client_socket:
+                    client_socket.close()
+                    print("[Smartwatch: Smartwatch connection closed!]")
 
     except KeyboardInterrupt:
-        print("Smartwatch receival interrupted by user. Exiting...")
+        print("[Smartwatch: Smartwatch receival interrupted by user. Exiting...]")
         return
 
 

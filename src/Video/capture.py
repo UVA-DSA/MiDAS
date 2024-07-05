@@ -87,11 +87,16 @@ def send_vid_data(q, path, img_q, thread_stop):
                 try:
                     img_q.put(frame, block=False)
                 except:
-                    while not img_q.empty():
-                        q.get()
+                    # print(f"[Video Capture: img_q full]")
+                    continue
+                    # while not img_q.empty():
+                    #     print("[Video Capture: img_q size: ]", img_q.qsize())
+                    #     q.get()
+                    
                 try:
                     q.put(data, block=False)
                 except:
+                    # print("[Video Capture: q full]")
                     while not q.empty():
                         q.get()
 

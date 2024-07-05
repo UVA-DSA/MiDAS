@@ -283,7 +283,8 @@ def startProcesses(path, rate, task):
     finally:
         manager.shutdown()
         
-    print("[Main Program: Exiting...]")
+    print("[Main Program: All Resources Released!.]")
+    print("[Main Program: Ready for Recording!.]")
     return
 
 if __name__ == "__main__":

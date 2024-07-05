@@ -18,6 +18,8 @@ from config import smartwatch_1_id, smartwatch_1_ip,smartwatch_2_id,smartwatch_2
 import time
 import sys
 
+
+
 # defines
 CAPTURE_Q_SIZE = 100
 TRACKSTAR_Q_SIZE = 128
@@ -44,10 +46,15 @@ MyManager.register('LifoQueue', LifoQueue)
 
 thread_stop = Event()
 
-# eel.init('web')
+def killAllProcesses():
+    global thread_stop
+    thread_stop.set()
+    
 
-# @eel.expose
+
 def sendData(subject, trial, task, rate):
+    thread_stop.clear()
+    
     '''
     Takes data in from frontend, puts it in a dictionary, and passes dictionary into function 
     getInputStreams(). All data values come in as strings and are converted into respective 
@@ -89,8 +96,7 @@ def endProgram():
     print("Program ended")
     thread_stop.set()
 
-def readData(task, rate, list_of_qs, path):
-    global thread_stop
+def readData(task, rate, list_of_qs, path, thread_stop):
     if rate == 0:
         print("Rate not valid")
         exit(-1)
@@ -105,7 +111,11 @@ def readData(task, rate, list_of_qs, path):
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["server_time",  "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_atime", "video_time", "video_id", "3d_camera_time", "3d_camera_frame_id", 'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis', 'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis', 'PDS_time','pedal_1', 'pedal_2', 'pedal_3', 'pedal_4', 'pedal_5', 'pedal_6', 'pedal_7'])
     
-        while not thread_stop.is_set():
+        while True:
+            if thread_stop.is_set():
+                print("[Main Data Saver: Thread stop set, exiting..]")
+                csv_file.close()
+                break
             try:
                 start_time = time.time()
                 local_time = time.ctime(start_time)
@@ -128,7 +138,6 @@ def readData(task, rate, list_of_qs, path):
                     camera_data = list_of_qs[1].get(block=False)
                 except:
                     pass
-  
                     
                 try:
                     trackstar_data = list_of_qs[2].get(block=False)
@@ -195,8 +204,8 @@ def readData(task, rate, list_of_qs, path):
             except KeyboardInterrupt:
                 print("Keyboard Interrupt!")
                 exit(-1)
-        else:
-            return
+
+
 
 def startProcesses(path, rate, task):
     
@@ -215,56 +224,66 @@ def startProcesses(path, rate, task):
 
     list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q]
 
-    video_capture_process = Process(name="OBS Virtual Camera Capture", target=send_vid_data, args=(capture_q, path, OBS_img_q))
+    video_capture_process = Process(name="OBS Virtual Camera Capture", target=send_vid_data, args=(capture_q, path, OBS_img_q, thread_stop))
     # video_capture_process.daemon = True,
 
     camera_handler = get_camera_handler(camera_type)
-    camera_capture_process = Process(name="Depth Camera Intel Capture", target=camera_handler, args=(camera_q, path, depth_img_q))
+    camera_capture_process = Process(name="Depth Camera Intel Capture", target=camera_handler, args=(camera_q, path, depth_img_q, thread_stop))
     camera_capture_process.daemon = True
     
-    trakstar_process = Process(name="TrakStar Capture", target=get_trakstar_data, args=(trackstar_q, path))
+    trakstar_process = Process(name="TrakStar Capture", target=get_trakstar_data, args=(trackstar_q, path, thread_stop))
     trakstar_process.daemon = True
     
-    smartwatch_1_process = Process(name="Smartwatch Left Capture", target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_1_q,path, smartwatch_1_id))
+    smartwatch_1_process = Process(name="Smartwatch Left Capture", target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_1_q,path, smartwatch_1_id, thread_stop))
     smartwatch_1_process.daemon = True
     
-    smartwatch_2_process = Process(name="Smartwatch Right Capture", target=receive_smartwatch_data, args=(smartwatch_2_ip,smartwatch_port,smartwatch_2_q,path, smartwatch_2_id))
+    smartwatch_2_process = Process(name="Smartwatch Right Capture", target=receive_smartwatch_data, args=(smartwatch_2_ip,smartwatch_port,smartwatch_2_q,path, smartwatch_2_id, thread_stop))
     smartwatch_2_process.daemon = True
     
-    read_process = Process(name="Main Data Saver", target=readData, args=(task, rate, list_of_qs, path))
+    read_process = Process(name="Main Data Saver", target=readData, args=(task, rate, list_of_qs, path, thread_stop))
     read_process.daemon = True
 
-    PDS_process = Process(name="PDS Capture", target=get_PDS_data, args = (PDS_q, path))
+    PDS_process = Process(name="PDS Capture", target=get_PDS_data, args = (PDS_q, path, thread_stop))
     PDS_process.daemon = True
 
     #Has to be thread since shares memory with GUI, has to be on same process
-    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q))
+    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q, thread_stop))
     updateIndicator_process.daemon = True
 
-    video_capture_process.start()
-    camera_capture_process.start()
-    trakstar_process.start()
-    smartwatch_1_process.start()
-    smartwatch_2_process.start()
-    read_process.start()
-    PDS_process.start() 
-    updateIndicator_process.start()
+    # camera_capture_process
+    processes = [video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
+    threads = [updateIndicator_process]
 
+    for process in processes:
+        process.start()
+
+    for thread in threads:
+        thread.start()
+
+    print("[Main Program: Processes started]")
     try:
-        video_capture_process.join()
-        camera_capture_process.join()
-        trakstar_process.join()
-        smartwatch_1_process.join()
-        smartwatch_2_process.join()
-        read_process.join()
-        PDS_process.join()
-        updateIndicator_process.join()
-
+        for process in processes:
+            process.join()
+            
+        print("[Main Program: All processes have completed]")
+        
+        print("[Main Program: Closing all queues]")
+        
+        for q in list_of_qs:
+            q.close()
+            
+            
     except KeyboardInterrupt:
         # camera_handler.finish()
         print("KeyboardInterrupt received. Exiting main program.")
+        for process in processes:
+            process.terminate()
         exit(-1)
 
+    finally:
+        manager.shutdown()
+        
+    print("[Main Program: Exiting...]")
     return
 
 if __name__ == "__main__":

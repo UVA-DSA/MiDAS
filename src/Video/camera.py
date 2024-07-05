@@ -5,7 +5,7 @@ from multiprocessing import Queue
 from time import time_ns
 import csv
 
-import pyrealsense2 as rs
+# import pyrealsense2 as rs
 # import pyzed.sl as sl
 import numpy as np
 import cv2
@@ -81,7 +81,7 @@ def _get_filters() -> List:
 
     return _filters
 
-def intel_camera_handler(q: Queue, path: str, img_q: Queue):
+def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
     _root_dir = path
     save_path = os.path.join(_root_dir, "camera")
     if not os.path.exists(save_path):

@@ -6,7 +6,7 @@ from datetime import datetime
 from multiprocessing import Queue
 from typing import List
 
-def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue, recording_dir: str, smartwatch_id: str) -> None:
+def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue, recording_dir: str, smartwatch_id: str, thread_stop) -> None:
     try:
         # Create the necessary directories and CSV file for recording data
         columns: List[str] = ['sw_epoch_ms', 'wrist_position', 'sensor_type', 'value_X_Axis', 'value_Y_Axis', 'value_Z_Axis', 'server_epoch_ms']
@@ -26,9 +26,14 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                 client_socket = None
                 connected = False
                 
+ 
                 while not connected:
+                    if thread_stop.is_set():
+                        # print("[Smartwatch: Thread stop set, exiting..]")
+                        break
                     try:
                         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        client_socket.settimeout(5)
                         print(f"Attempting to connect to server {server_ip}:{server_port}")
                         client_socket.connect((server_ip, server_port))
                         connected = True
@@ -38,6 +43,10 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                         time.sleep(5)
                 
                 message = "Hello, Smart Watch!"
+                
+                if thread_stop.is_set():
+                    print("[Smartwatch: Thread stop set, exiting..]")
+                    break
                 
                 try:
                     while True:

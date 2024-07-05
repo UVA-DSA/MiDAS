@@ -39,7 +39,7 @@ def startGui():
     global submitButton, stopRecordingButton, camOne, camTwo,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLAcc,watchRAcc,watchLGyr,watchRGyr
     # Window creation
     win.title("MIDAS V3 - Data Collection System")
-    win.geometry("1200x600")
+    win.geometry("1600x900")
     win.resizable(False,False)
     # Define a larger font
     large_font = ('Helvetica', 14)

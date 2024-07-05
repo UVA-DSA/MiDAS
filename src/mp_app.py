@@ -270,7 +270,7 @@ def startProcesses(path, rate, task):
         print("[Main Program: Closing all queues]")
         
         for q in list_of_qs:
-            q.close()
+            q = None
             
             
     except KeyboardInterrupt:

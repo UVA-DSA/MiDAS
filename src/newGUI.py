@@ -62,7 +62,7 @@ def startGui():
     tk.Entry(infoFr, textvariable=task_var, font=large_font, width=10).grid(column=1, row=2, padx=0, pady=0)
     tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=10).grid(column=3, row=2, padx=0, pady=0)
     # Submit Button
-    submitButton = Button(infoFr, text='Submit', command=submitData, font=large_font, width=15)
+    submitButton = Button(infoFr, text='Start Recording', command=submitData, font=large_font, width=15)
     submitButton.grid(column=4, row=0, rowspan=2, pady=10, padx=10)
     
     # Stop Button

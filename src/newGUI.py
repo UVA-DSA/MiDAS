@@ -182,7 +182,7 @@ def startGui():
 
 
 #Function that is run by a thread to update the GUI created above
-def updateIndicators(gui_q,cam_q, OBS_q, thread_stop):
+def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
     while True:
         if thread_stop.is_set():
             print("[GUI: Thread stop set, exiting..]")

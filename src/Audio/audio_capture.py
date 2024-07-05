@@ -1,4 +1,5 @@
 import pyaudio
+import time
 import wave
 
 # Parameters for audio recording
@@ -10,7 +11,7 @@ RECORD_SECONDS = 5        # Duration of recording
 OUTPUT_FILENAME = "output.wav"  # Output file name
 
 
-def capture_audio_transmit(audio_q, data_path):
+def capture_audio_transmit(audio_q, data_path, thread_stop):
     # Initialize PyAudio
     audio = pyaudio.PyAudio()
 
@@ -20,8 +21,10 @@ def capture_audio_transmit(audio_q, data_path):
                         frames_per_buffer=CHUNK)
 
     print("Recording...")
+    
+    time_ns = time.time_ns()
 
-    OUTPUT_FILENAME = data_path + "/surgeon_evaluation.wav"
+    OUTPUT_FILENAME = f"{data_path}{time_ns}_surgeon_evaluation.wav"
 
     # Open the wave file in write mode
     wf = wave.open(OUTPUT_FILENAME, 'wb')
@@ -30,10 +33,19 @@ def capture_audio_transmit(audio_q, data_path):
     wf.setframerate(RATE)
 
     while True:
+        
+        if thread_stop.is_set():
+            print("[Audio: Thread stop set, exiting..]")
+            break
+        
         try:
             data = stream.read(CHUNK)
             wf.writeframes(data)
-            audio_q.put(data)
+            
+            try:
+                audio_q.put(data, block=False)
+            except:
+                continue
             
         except KeyboardInterrupt:
             print("Recording stopped by user")
@@ -46,21 +58,29 @@ def capture_audio_transmit(audio_q, data_path):
             # Close the wave file
             wf.close()
 
-            print("Recording saved to", OUTPUT_FILENAME)
+            print("[Audio: Recording saved to", OUTPUT_FILENAME, "]")
             break
     
-    
+        # Stop and close the stream
+    stream.stop_stream()
+    stream.close()
+    audio.terminate()
+
+    # Close the wave file
+    wf.close()
+    print("[Audio: Recording saved to", OUTPUT_FILENAME, "]")
+
 # test the above function
 
-from queue import Queue   
-import os
-import time
+# from queue import Queue   
+# import os
+# import time
 
-audio_q = Queue()
+# audio_q = Queue()
 
-data_path = os.path.join(os.getcwd(), "data")
+# data_path = os.path.join(os.getcwd(), "data")
 
-if not os.path.exists(data_path):
-    os.makedirs(data_path)
+# if not os.path.exists(data_path):
+#     os.makedirs(data_path)
     
-capture_audio_transmit(audio_q, data_path)
+# capture_audio_transmit(audio_q, data_path)

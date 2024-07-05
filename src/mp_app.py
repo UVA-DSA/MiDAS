@@ -13,7 +13,7 @@ from multiprocessing.managers import BaseManager
 from time import sleep
 from queue import LifoQueue
 from config import smartwatch_1_id, smartwatch_1_ip,smartwatch_2_id,smartwatch_2_ip,smartwatch_port,camera_type
-
+from Audio.audio_capture import capture_audio_transmit
 
 import time
 import sys
@@ -22,6 +22,7 @@ import sys
 
 # defines
 CAPTURE_Q_SIZE = 100
+AUDIO_Q_SIZE = 1024
 TRACKSTAR_Q_SIZE = 128
 SMARTWATCH_Q_SIZE = 128
 PDS_Q_SIZE = 100
@@ -221,8 +222,9 @@ def startProcesses(path, rate, task):
     smartwatch_2_q = manager.LifoQueue(SMARTWATCH_Q_SIZE)
     PDS_q = manager.LifoQueue(PDS_Q_SIZE)
     gui_q = manager.LifoQueue(GUI_Q_SIZE)
+    audio_q = manager.LifoQueue(AUDIO_Q_SIZE)
 
-    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q]
+    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q, audio_q]
 
     video_capture_process = Process(name="OBS Virtual Camera Capture", target=send_vid_data, args=(capture_q, path, OBS_img_q, thread_stop))
     # video_capture_process.daemon = True,
@@ -245,13 +247,16 @@ def startProcesses(path, rate, task):
 
     PDS_process = Process(name="PDS Capture", target=get_PDS_data, args = (PDS_q, path, thread_stop))
     PDS_process.daemon = True
+    
+    audio_recorder_process = Process(name="Audio Capture", target=capture_audio_transmit, args=(audio_q, path, thread_stop))
+    audio_recorder_process.daemon = True
 
     #Has to be thread since shares memory with GUI, has to be on same process
-    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q, thread_stop))
+    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q,audio_q, thread_stop))
     updateIndicator_process.daemon = True
 
-    # camera_capture_process
-    processes = [video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
+    # camera_capture_process - add this to enable depth cam
+    processes = [audio_recorder_process, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
     threads = [updateIndicator_process]
 
     for process in processes:

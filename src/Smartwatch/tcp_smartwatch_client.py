@@ -32,6 +32,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                         break
                     try:
                         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        client_socket.settimeout(5)
                         print(f"[Smartwatch: Attempting to connect to server {server_ip}:{server_port}]")
                         client_socket.connect((server_ip, server_port))
                         connected = True

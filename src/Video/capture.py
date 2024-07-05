@@ -40,7 +40,7 @@ def save_images(q, path):
     csv_file.close()
 
 
-def send_vid_data(q, path, img_q):
+def send_vid_data(q, path, img_q, thread_stop):
 
 
     img_dir = path + 'imgs'
@@ -59,6 +59,9 @@ def send_vid_data(q, path, img_q):
 
     while cap.isOpened():
         try:
+            if thread_stop.is_set():
+                print("[Video Capture: Thread stop set, exiting..]")
+                break
             ret, frame = cap.read()
             if ret == True: #making sure capture was succesful
                 frame_num += 1
@@ -82,12 +85,12 @@ def send_vid_data(q, path, img_q):
                 # image = Image.fromarray(image)
                 # image = ImageTk.PhotoImage(image)
                 try:
-                    img_q.put(frame)
+                    img_q.put(frame, block=False)
                 except:
                     while not img_q.empty():
                         q.get()
                 try:
-                    q.put(data)
+                    q.put(data, block=False)
                 except:
                     while not q.empty():
                         q.get()

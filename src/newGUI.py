@@ -4,6 +4,7 @@ import tkinter.ttk as ttk
 from PIL import ImageTk,Image
 import queue
 import cv2 as cv
+from mp_app import sendData, killAllProcesses
 
 win = tk.Tk()
 # Vars for the info of each trial
@@ -12,12 +13,33 @@ trial_var = tk.StringVar()
 task_var = tk.StringVar()
 rate_var = tk.StringVar()
 
+submitButton = None
+stopRecordingButton = None
+
+
+#Function triggered by the submit button that forwards the infoFr fields into the main function in mp_app
+def submitData():
+    global submitButton, stopRecordingButton
+    print(submitButton)
+    sendData(subject_var.get(), trial_var.get(), task_var.get(), rate_var.get())
+    submitButton["state"] = "disabled"
+    stopRecordingButton["state"] = "normal"
+    
+
+#Function triggered by the submit button that forwards the infoFr fields into the main function in mp_app
+def stopRecording():
+    global submitButton
+    stopRecordingButton["state"] = "disabled"
+    submitButton["state"] = "normal"
+    killAllProcesses()
+
+
 def startGui():
     #Global vars
-    global camOne, camTwo,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLAcc,watchRAcc,watchLGyr,watchRGyr
+    global submitButton, stopRecordingButton, camOne, camTwo,capOne, pUL, pUR, pLL, pLR, pClutch, pCam, pLong, camOneInd, camTwoInd, capOneInd, trakInd, ardInd, watchLeftInd, watchRightInd, trak1Data, trak2Data,trak3Data,trak4Data,watchLAcc,watchRAcc,watchLGyr,watchRGyr
     # Window creation
     win.title("MIDAS V3 - Data Collection System")
-    win.geometry("1500x900")
+    win.geometry("1200x600")
     win.resizable(False,False)
     # Define a larger font
     large_font = ('Helvetica', 14)
@@ -40,9 +62,14 @@ def startGui():
     tk.Entry(infoFr, textvariable=task_var, font=large_font, width=10).grid(column=1, row=2, padx=0, pady=0)
     tk.Entry(infoFr, textvariable=rate_var, font=large_font, width=10).grid(column=3, row=2, padx=0, pady=0)
     # Submit Button
-    tk.Button(infoFr, text='Submit', command=submitData, font=large_font, width=15).grid(column=4, row=0, rowspan=2, pady=10,padx=10)
-
-
+    submitButton = Button(infoFr, text='Submit', command=submitData, font=large_font, width=15)
+    submitButton.grid(column=4, row=0, rowspan=2, pady=10, padx=10)
+    
+    # Stop Button
+    stopRecordingButton = Button(infoFr, text='Stop Recording', command=stopRecording, font=large_font, width=15)
+    stopRecordingButton.grid(column=4, row=1, rowspan=2, pady=10, padx=10)
+    stopRecordingButton["state"] = "disabled"
+    
     # Pedal Indicators Frame
     #Makes the pedal frame and grids it
     pedalFr = tk.LabelFrame(win, text="Pedal Indicators", padx=10, pady=10, font=large_font_bold)
@@ -150,14 +177,16 @@ def startGui():
     #Main process runs GUI, submit button triggers the new thread/processes
     win.mainloop()
 
-#Function triggered by the submit button that forwards the infoFr fields into the main function in mp_app
-def submitData():
-    from mp_app import sendData
-    sendData(subject_var.get(), trial_var.get(), task_var.get(), rate_var.get())
+
+
+
 
 #Function that is run by a thread to update the GUI created above
-def updateIndicators(gui_q,cam_q, OBS_q):
+def updateIndicators(gui_q,cam_q, OBS_q, thread_stop):
     while True:
+        if thread_stop.is_set():
+            print("[GUI: Thread stop set, exiting..]")
+            break
         try:
             out = gui_q.get(True, 0.05)
             # print(out)
@@ -315,5 +344,3 @@ def updateIndicators(gui_q,cam_q, OBS_q):
             capOneInd.config(bg="red",text="Error")
             capOne.configure(image=colorBarCombinedstk,width=640,height=240)
             capOne.image=colorBarCombinedstk
-
-    # win.destroy()

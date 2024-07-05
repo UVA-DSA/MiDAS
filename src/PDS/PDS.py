@@ -9,9 +9,13 @@ from config import PDS_ON_THRESHOLD
 letters = {'A', 'B', 'C', 'D', 'E', 'F', 'G'}
 
 #Loop that constantly looks for connection, is called whenever arduino is not connected
-def serialConnect():
+def serialConnect(thread_stop):
     global arduino
     while True:
+        if thread_stop.is_set():
+            print("[PDS: Thread stop set, exiting..]")
+            arduino = None
+            return  
         try:
             arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
             return
@@ -19,7 +23,7 @@ def serialConnect():
             print("Serial Not Found, Retrying in 5 Seconds")
             sleep(5)
 
-def get_PDS_data(q,path):
+def get_PDS_data(q,path,thread_stop):
     global arduino
     # Create a CSV file and write the header row
     csv_path = path + '/PDS.csv'
@@ -28,9 +32,19 @@ def get_PDS_data(q,path):
     csv_writer_PDS.writerow(['Pedal 1 Pressure', 'Pedal 2 Pressure','Pedal 3 Pressure','Pedal 4 Pressure','Pedal 6 Pressure', 'Pedal 7 Pressure','Pedal 1 Pressed','Pedal 2 Pressed','Pedal 3 Pressed','Pedal 4 Pressed','Pedal 5 Pressesd','Pedal 6 Pressed', 'Pedal 7 Pressed', 'Computer Time'])
     #Main loop that constantly collects serial data and sends it through the PDS queue, sends -1's for any pedal not presssed
     while True:
-        serialConnect()
-        print("PDS Connected")
+      
+        serialConnect(thread_stop)
+        
+        if(arduino == None): # thread_stop is set
+            break
+
+        
         while arduino.is_open:
+            
+            if thread_stop.is_set():
+                print("[PDS: Thread stop set, exiting..]")
+                arduino.close() 
+                break  
             try:
                 out = arduino.readline().decode().strip()
                 ret = [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]

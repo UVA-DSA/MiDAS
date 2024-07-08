@@ -195,11 +195,11 @@ def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
             
             #PDS GUI Update
             #-2 corresponds to no data from pedals in pulled data
-            if(out[26] == -2):
+            if(out[53] == -2):
                 ardInd.config(text="No Data")
             else:
                 #Loops through all of the pedal data
-                for i in range(26,33):
+                for i in range(53,60):
                     ardInd.config(bg="green",text="Good")
                     temp = out[i]
                     if out[i+7] == 1:
@@ -214,13 +214,13 @@ def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
                         hex_color = "red"
                         temp = 0
                     #Displays the hexcolor and text to the corresponding pedal indicator determined by the letter/which data point the loop is on
-                    pUL.config(bg = hex_color if i == 26 and temp != -2 else pUL.cget('bg'), text = "U Left \n" + str(temp) if i == 26 and temp != -2 else pUL.cget('text'))
-                    pUR.config(bg = hex_color if i == 27 and temp != -2 else pUR.cget('bg'), text = "U Right \n" + str(temp) if i == 27 and temp != -2 else pUR.cget('text'))
-                    pLL.config(bg = hex_color if i == 28 and temp != -2 else pLL.cget('bg'), text = "L Left \n" + str(temp) if i == 28 and temp != -2 else pLL.cget('text'))
-                    pLR.config(bg = hex_color if i == 29 and temp != -2 else pLR.cget('bg'), text = "L Right \n" + str(temp) if i == 29 and temp != -2 else pLR.cget('text'))
-                    pClutch.config(bg = hex_color if i == 30 and temp != -2 else pClutch.cget('bg'), text = "Clutch \n" + str(temp) if i == 30 and temp != -2 else pClutch.cget('text'))
-                    pCam.config(bg = hex_color if i == 31 and temp != -2 else pCam.cget('bg'), text = "Camera \n" + str(temp) if i == 31 and temp != -2 else pCam.cget('text'))
-                    pLong.config(bg = hex_color if i == 32 and temp != -2 else pLong.cget('bg'), text = "Long \n" + str(temp) if i == 32 and temp != -2 else pLong.cget('text'))
+                    pUL.config(bg = hex_color if i == 53 and temp != -2 else pUL.cget('bg'), text = "U Left \n" + str(temp) if i == 53 and temp != -2 else pUL.cget('text'))
+                    pUR.config(bg = hex_color if i == 54 and temp != -2 else pUR.cget('bg'), text = "U Right \n" + str(temp) if i == 54 and temp != -2 else pUR.cget('text'))
+                    pLL.config(bg = hex_color if i == 55 and temp != -2 else pLL.cget('bg'), text = "L Left \n" + str(temp) if i == 55 and temp != -2 else pLL.cget('text'))
+                    pLR.config(bg = hex_color if i == 56 and temp != -2 else pLR.cget('bg'), text = "L Right \n" + str(temp) if i == 56 and temp != -2 else pLR.cget('text'))
+                    pClutch.config(bg = hex_color if i == 57 and temp != -2 else pClutch.cget('bg'), text = "Clutch \n" + str(temp) if i == 57 and temp != -2 else pClutch.cget('text'))
+                    pCam.config(bg = hex_color if i == 58 and temp != -2 else pCam.cget('bg'), text = "Camera \n" + str(temp) if i == 58 and temp != -2 else pCam.cget('text'))
+                    pLong.config(bg = hex_color if i == 59 and temp != -2 else pLong.cget('bg'), text = "Long \n" + str(temp) if i == 59 and temp != -2 else pLong.cget('text'))
             
             #Trakstar Updator
             if(str(out[8]) == "0"):
@@ -228,34 +228,29 @@ def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
             else:
                 trakInd.config(text="Good", bg="green")
                 #Formats string of trakstar data to be displayed
-                data = str(out[3]) + '  ' + str(out[6]) + '\n' + str(out[4]) + '  ' + str(out[7]) + '\n' + str(out[5]) + '  ' + str(out[8])
                 #Updates the corresponding data field depedning on what sensor the data is from
-                if(str(out[2]) == "0"):
-                    trak1Data.config(text=data)
-                elif(str(out[2]) == "1"):
-                    trak2Data.config(text=data)
-                elif(str(out[2]) == "2"):
-                    trak3Data.config(text=data)
-                elif(str(out[2]) == "3"):
-                    trak4Data.config(text=data)
+                trak1Data.config(text=str(out[3]) + '  ' + str(out[6]) + '\n' + str(out[4]) + '  ' + str(out[7]) + '\n' + str(out[5]) + '  ' + str(out[8]))
+                trak2Data.config(text=str(out[12]) + '  ' + str(out[15]) + '\n' + str(out[13]) + '  ' + str(out[16]) + '\n' + str(out[14]) + '  ' + str(out[17]))
+                trak3Data.config(text=str(out[21]) + '  ' + str(out[24]) + '\n' + str(out[22]) + '  ' + str(out[25]) + '\n' + str(out[23]) + '  ' + str(out[26]))
+                trak4Data.config(text=str(out[30]) + '  ' + str(out[33]) + '\n' + str(out[31]) + '  ' + str(out[34]) + '\n' + str(out[32]) + '  ' + str(out[35]))
             
             #WatchL/R Updator
-            if(out[14] == 0):
+            if(out[41] == 0):
                 watchLeftInd.config(text="No Data")
             else:
                 watchLeftInd.config(text="Good", bg="green")
-                data = str(round(out[17],4)) + '\n' + str(round(out[18],4)) + '\n' + str(round(out[19],4))
-                if(str(out[16]) == 'acc'):
+                data = str(round(out[44],4)) + '\n' + str(round(out[45],4)) + '\n' + str(round(out[46],4))
+                if(str(out[43]) == 'acc'):
                     watchLAcc.config(text=data)
                 else:
                     watchLGyr.config(text=data)
                 
-            if(out[20]==0):
+            if(out[47]==0):
                 watchRightInd.config(text="No Data")
             else:
                 watchRightInd.config(text="Good", bg="green")
-                data = str(round(out[23],4)) + '\n' + str(round(out[24],4)) + '\n' + str(round(out[25],4))
-                if(str(out[22]) == 'acc'):
+                data = str(round(out[50],4)) + '\n' + str(round(out[51],4)) + '\n' + str(round(out[52],4))
+                if(str(out[49]) == 'acc'):
                     watchRAcc.config(text=data)
                 else:
                     watchRGyr.config(text=data)

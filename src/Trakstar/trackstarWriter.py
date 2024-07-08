@@ -27,7 +27,7 @@ def get_trakstar_data(q, path, thread_stop):
 
     csv_file = open(csv_path, 'w', newline='')
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Computer Time'])
+    csv_writer.writerow(['Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Computer Time'])
     connect = -1
     out = []
     while True:
@@ -60,7 +60,6 @@ def get_trakstar_data(q, path, thread_stop):
                         for i in range(2, 9):
                             if values[i]:
                                 values[i] = float(values[i])
-                    print("check",values)
                     if(values[1] == 0):
                         connect = 4
                         out = []
@@ -74,16 +73,16 @@ def get_trakstar_data(q, path, thread_stop):
                     start_time = time.time()
                     local_time = time.ctime(start_time)
                     values.append(local_time)
-                        
                     csv_writer.writerow(values)
                     csv_file.flush()
+                    
                     if(connect == 0):   
-                        print('FINAL:::', out)
-                        out.append(time_ns())  # TODO: replace with the actual trakstar time
+                        out.append(time_ns())  # TODO: replace with the actual computer time
                         start_time = time.time()
                         local_time = time.ctime(start_time)
                         out.append(local_time)
-                        q.put(values)
+                        
+                        q.put(out)
                     if q.full():
                         _ = q.get()  # Removes last object from q to keep only a certain amount
                     acknowledgment_message = "ACK"

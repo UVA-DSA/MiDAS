@@ -27,7 +27,7 @@ def get_trakstar_data(q, path, thread_stop):
 
     csv_file = open(csv_path, 'w', newline='')
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Computer Time'])
+    csv_writer.writerow(['Bytes','SensorID', 'x', 'y', 'z', 'azimuth', 'elevation', 'roll', 'TrakStar Time', 'Computer Time'])
     connect = -1
     out = []
     while True:
@@ -69,7 +69,7 @@ def get_trakstar_data(q, path, thread_stop):
                         connect = connect - 1
             
                     # Add in alienware time
-                    values.append(time_ns())  # TODO: replace with the actual trakstar time
+                    # values.append(time_ns())  # TODO: replace with the actual trakstar time
                     start_time = time.time()
                     local_time = time.ctime(start_time)
                     values.append(local_time)
@@ -77,11 +77,10 @@ def get_trakstar_data(q, path, thread_stop):
                     csv_file.flush()
                     
                     if(connect == 0):   
-                        out.append(time_ns())  # TODO: replace with the actual computer time
+                        # out.append(time_ns())  # TODO: replace with the actual computer time
                         start_time = time.time()
                         local_time = time.ctime(start_time)
                         out.append(local_time)
-                        
                         q.put(out)
                     if q.full():
                         _ = q.get()  # Removes last object from q to keep only a certain amount

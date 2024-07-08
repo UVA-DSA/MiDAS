@@ -5,6 +5,7 @@ from PIL import ImageTk,Image
 import queue
 import cv2 as cv
 from mp_app import sendData, killAllProcesses
+from config import PDS_ON_THRESHOLD
 
 win = tk.Tk()
 # Vars for the info of each trial
@@ -206,8 +207,8 @@ def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
                         hex_color = "green"
                     elif (temp>-1):
                         #Sets hexcolor to be a hex color from red to green depedning on how much pressure
-                        red = int(255 * (1 - (round(temp) - 1) / 2000))
-                        green = int(255 * ((round(temp) - 1) / 2000))
+                        red = int(255 * (1 - (round(temp) - 1) / PDS_ON_THRESHOLD))
+                        green = int(255 * ((round(temp) - 1) / PDS_ON_THRESHOLD))
                         hex_color = f'#{red:02x}{green:02x}00'
                     else:
                         #If pedal data was -1 (no pressure) sets it to red
@@ -235,7 +236,7 @@ def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
                 trak4Data.config(text=str(out[30]) + '  ' + str(out[33]) + '\n' + str(out[31]) + '  ' + str(out[34]) + '\n' + str(out[32]) + '  ' + str(out[35]))
             
             #WatchL/R Updator
-            if(out[41] == 0):
+            if(out[42] == 0):
                 watchLeftInd.config(text="No Data")
             else:
                 watchLeftInd.config(text="Good", bg="green")
@@ -245,7 +246,7 @@ def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
                 else:
                     watchLGyr.config(text=data)
                 
-            if(out[47]==0):
+            if(out[48]==0):
                 watchRightInd.config(text="No Data")
             else:
                 watchRightInd.config(text="Good", bg="green")

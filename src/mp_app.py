@@ -185,7 +185,7 @@ def readData(task, rate, list_of_qs, path, thread_stop):
                     PDS_data = [-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2]
                 
                 # print("Writing to csv file ..")
-                collectedData = [local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5],PDS_data[0],PDS_data[1],PDS_data[2],PDS_data[3],PDS_data[4],PDS_data[5],PDS_data[6],PDS_data[7],PDS_data[8],PDS_data[9],PDS_data[10],PDS_data[11],PDS_data[12],PDS_data[13],PDS_data[14]]
+                collectedData = [local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], trackstar_data[9], trackstar_data[10], trackstar_data[11], trackstar_data[12], trackstar_data[13], trackstar_data[14], trackstar_data[15], trackstar_data[16], trackstar_data[17], trackstar_data[18], trackstar_data[19], trackstar_data[20], trackstar_data[21], trackstar_data[22], trackstar_data[23], trackstar_data[24], trackstar_data[25], trackstar_data[26], trackstar_data[27], trackstar_data[28], trackstar_data[29], trackstar_data[30], trackstar_data[31], trackstar_data[32], trackstar_data[33], trackstar_data[34], trackstar_data[35],video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5],PDS_data[0],PDS_data[1],PDS_data[2],PDS_data[3],PDS_data[4],PDS_data[5],PDS_data[6],PDS_data[7],PDS_data[8],PDS_data[9],PDS_data[10],PDS_data[11],PDS_data[12],PDS_data[13],PDS_data[14]]
                 csv_writer.writerow(collectedData)
                 csv_file.flush()
                 
@@ -248,15 +248,15 @@ def startProcesses(path, rate, task):
     PDS_process = Process(name="PDS Capture", target=get_PDS_data, args = (PDS_q, path, thread_stop))
     PDS_process.daemon = True
     
-    audio_recorder_process = Process(name="Audio Capture", target=capture_audio_transmit, args=(audio_q, path, thread_stop))
-    audio_recorder_process.daemon = True
+    # audio_recorder_process = Process(name="Audio Capture", target=capture_audio_transmit, args=(audio_q, path, thread_stop))
+    # audio_recorder_process.daemon = True
 
     #Has to be thread since shares memory with GUI, has to be on same process
     updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q,audio_q, thread_stop))
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
-    processes = [audio_recorder_process, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
+    processes = [video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
     threads = [updateIndicator_process]
 
     for process in processes:

@@ -1,12 +1,12 @@
 import cv2  
 from queue import Queue
-from time import time_ns
+from time import time_ns, sleep
 import csv
 import os
-from config import OBS_CAPTURE_PORT
+from config import OBS_CAPTURE_PORT, OBS_PORT, OBS_WS_PASSWORD, OBS_HOST
 from PIL import ImageTk,Image
 import multiprocessing as mp
-
+from .obs_controller import OBSController
 
 def save_images(q, path):
     image_sequence_num = 0
@@ -43,10 +43,25 @@ def save_images(q, path):
 def send_vid_data(q, path, img_q, thread_stop):
 
 
-    img_dir = path + 'imgs'
+    obs_controller = OBSController(OBS_HOST,OBS_PORT,OBS_WS_PASSWORD)
+
+    obs_controller.connect()
+
+    sleep(2)
+
+    img_dir = path + 'obs'
         
-    if not os.path.exists(img_dir):
-        os.mkdir(img_dir)
+    # Correctly join the paths and normalize
+    full_path = os.path.abspath(os.path.join(os.getcwd(), img_dir))
+
+    if not os.path.exists(full_path):
+        os.mkdir(full_path)
+
+    obs_controller.set_record_directory(full_path)
+
+    obs_controller.start_virtualcam()
+
+    obs_controller.start_recording()
     
     cap = cv2.VideoCapture(OBS_CAPTURE_PORT, apiPreference=cv2.CAP_ANY, params=[
     cv2.CAP_PROP_FRAME_WIDTH, 3840,
@@ -60,6 +75,10 @@ def send_vid_data(q, path, img_q, thread_stop):
     while cap.isOpened():
         try:
             if thread_stop.is_set():
+                obs_controller.stop_recording()
+                obs_controller.stop_virtualcam()
+                obs_controller.disconnect()
+                
                 print("[Video Capture: Thread stop set, exiting..]")
                 break
             ret, frame = cap.read()

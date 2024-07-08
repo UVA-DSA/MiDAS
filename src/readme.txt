@@ -15,3 +15,4 @@ Compiling Trakstar
 OBS Web Socket Controller
 
 1. Enable OBS websocket (Tools->WebSocket Server Settings->Enable Websocket Server)
+2. Enter the OBS password and port according to the values stored in "config.py" file

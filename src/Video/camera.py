@@ -5,15 +5,39 @@ from multiprocessing import Queue
 from time import time_ns
 import csv
 
-# import pyrealsense2 as rs
-# import pyzed.sl as sl
+import pyrealsense2 as rs
+import pyzed.sl as sl
 import numpy as np
 import cv2
 
 import queue
 from PIL import ImageTk,Image
 
-        
+
+
+def _add_record(csv_writer: csv.writer, cam_type: str, timestamp, id):
+    csv_writer.writerow([timestamp, id])
+
+def _init_filesystem(path, cam_type: str):
+    _root_dir = path
+    save_path = os.path.join(_root_dir, "camera", cam_type)
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    files_path = os.path.join(save_path, "frames")
+    if not os.path.exists(files_path):
+        os.makedirs(files_path)
+
+    # Create a CSV file and write the header row
+    csv_path = os.path.join(save_path, 'timestamps.csv')
+    csv_file = open(csv_path, 'w', newline='')
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(['Time','ID'])
+
+    return csv_writer, csv_file, files_path
+
+
+################################################### Intel ################################################
+     
 class IntelCamera:
 
     # configs for the intel 3D camera capture
@@ -27,12 +51,6 @@ class IntelCamera:
     USE_TEMPORAL_FILTER = True
     USE_HOLE_FILLING_FILTER = True
 
-class ZedCamera:
-    pass
-
-
-def _add_record(csv_writer, timestamp, id):
-    csv_writer.writerow([timestamp, id])
 
 
 def _apply_filters(frame, _filters):
@@ -81,20 +99,9 @@ def _get_filters() -> List:
 
     return _filters
 
-def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
-    _root_dir = path
-    save_path = os.path.join(_root_dir, "camera")
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    files_path = os.path.join(save_path, "frames")
-    if not os.path.exists(files_path):
-        os.makedirs(files_path)
-
-    # Create a CSV file and write the header row
-    csv_path = os.path.join(save_path, 'timestamps.csv')
-    csv_file = open(csv_path, 'w', newline='')
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(['Time','ID'])
+def intel_camera_handler(q: Queue, path: str, img_q: Queue):
+    
+    csv_writer, csv_file, files_path = _init_filesystem(path, "Intel")
 
     pipeline = rs.pipeline()
     config = rs.config()
@@ -189,7 +196,7 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
                 while not img_q.empty():
                     q.get()
 
-            _add_record(csv_writer, timestamp, frame_num)
+            _add_record(csv_writer, "Intel", timestamp, frame_num)
             
             try:
                 q.put([timestamp, frame_num], block=False)
@@ -203,10 +210,88 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
 
         # Stop streaming
         pipeline.stop()
+        csv_file.close()
+
+
+################################################### ZED ################################################
+class ZedCamera:
+    RESOLUTION = sl.RESOLUTION.HD1080
+    FPS = 30
+    EXPOSURE = -1 # % of framerate
+    BRIGHTNESS = -1 # 0-8
+    CONTRAST = -1 # 0-8
+    DEPTH = sl.DEPTH_MODE.ULTRA # ULTRA, NEURAL
+    COMPRESSION = sl.SVO_COMPRESSION_MODE.H265
+    
 
 def zed_camera_handler(q: Queue, path: str, img_q: Queue):
     
-    init = sl.InitParameters()
+    csv_writer, csv_file, files_path = _init_filesystem(path, "Zed")
+
+    # configs
+    init_params = sl.InitParameters()
+    init_params.camera_resolution = ZedCamera.RESOLUTION
+    init_params.camera_fps = ZedCamera.FPS
+    init_params.depth_mode = ZedCamera.DEPTH
+    init_params.coordinate_units = sl.UNIT.MILLIMETER # Use millimeter units (for depth measurements)
+    init_params.depth_minimum_distance = 120.0 # Set the minimum depth perception distance to 12cm
+    
+    recordingParameters = sl.RecordingParameters()
+    recordingParameters.compression_mode = ZedCamera.COMPRESSION
+    recordingParameters.video_filename = os.path.join(files_path, "frames.svo")
+
+    zed = sl.Camera()
+
+    if ZedCamera.EXPOSURE != -1:
+        zed.set_camera_settings(sl.VIDEO_SETTINGS.EXPOSURE, ZedCamera.EXPOSURE)
+    if ZedCamera.BRIGHTNESS != -1:
+        zed.set_camera_settings(sl.VIDEO_SETTINGS.BRIGHTNESS, ZedCamera.BRIGHTNESS)
+    if ZedCamera.CONTRAST != -1:
+        zed.set_camera_settings(sl.VIDEO_SETTINGS.CONTRAST, ZedCamera.CONTRAST)
+
+    try:
+        # Open the camera
+        err = zed.open(init_params)
+        if err != sl.ERROR_CODE.SUCCESS:
+            exit(-1)
+        zed_serial = zed.get_camera_information().serial_number
+        err = zed.enable_recording(recordingParameters)
+
+        frame_num = -1
+
+        while True:
+            image = sl.Mat()
+            depth_map = sl.Mat()
+
+            runtime_parameters = sl.RuntimeParameters()
+            if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS :
+                # A new image and depth is available if grab() returns SUCCESS
+                zed.retrieve_image(image, sl.VIEW.LEFT) # Retrieve left image
+                zed.retrieve_measure(depth_map, sl.MEASURE.DEPTH) # Retrieve depth
+                timestamp = zed.get_timestamp(sl.TIME_REFERENCE.CURRENT)  # Get the timestamp at the time the image was captured
+
+                try:
+                    img_q.put(image.get_data())
+                except:
+                    while not img_q.empty():
+                        q.get()
+
+                frame_num += 1
+                _add_record(csv_writer, "Zed", timestamp, frame_num)
+                
+                try:
+                    q.put([timestamp, frame_num], block=False)
+                except:
+                    # print("Error when writing to the FIFO: Clearing the queue ")
+                    while not q.empty():
+                        q.get() # clear the queue
+
+    except Exception as e:
+        print(e)
+    finally:
+        zed.disable_recording()
+        zed.close()
+
 
 
 def get_camera_handler(cam_type: str = "Intel"):
@@ -218,8 +303,10 @@ def get_camera_handler(cam_type: str = "Intel"):
         raise ValueError(f"Camera type is not supported. Choose from [Intel, Zed]")
     
 if __name__ == "__main__":
-    test = Queue()
-    path = "/test"
+    cam_type = "Zed"
+    q, iq = Queue(), Queue()
+    path = "./test"
 
-    intel_camera_handler(test, path)
+    handler = get_camera_handler("Zed")
+    handler(q, path, iq)
     

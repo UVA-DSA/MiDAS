@@ -183,7 +183,7 @@ def startGui():
 
 
 #Function that is run by a thread to update the GUI created above
-def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
+def updateIndicators(gui_q,cam_q, OBS_q, zed_q, thread_stop):
     while True:
         if thread_stop.is_set():
             print("[GUI: Thread stop set, exiting..]")
@@ -304,7 +304,7 @@ def updateIndicators(gui_q,cam_q, OBS_q, audio_q, thread_stop):
         ### Camera 2 Display Updator ###
         try:
             #Gets image and converts it from cv2 to pillow formats
-            image = cam_q.get(False)
+            image = zed_q.get(False)
             image = cv.resize(image, (320,240))
             image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
             image = Image.fromarray(image)

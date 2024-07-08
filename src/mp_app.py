@@ -12,7 +12,7 @@ from multiprocessing import Process, Queue, Event
 from multiprocessing.managers import BaseManager
 from time import sleep
 from queue import LifoQueue
-from config import smartwatch_1_id, smartwatch_1_ip,smartwatch_2_id,smartwatch_2_ip,smartwatch_port,camera_type
+from config import smartwatch_1_id, smartwatch_1_ip,smartwatch_2_id,smartwatch_2_ip,smartwatch_port,camera_type_1, camera_type_2
 from Audio.audio_capture import capture_audio_transmit
 
 import time
@@ -216,6 +216,7 @@ def startProcesses(path, rate, task):
     camera_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     capture_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     depth_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
+    zed_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     OBS_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     trackstar_q = manager.LifoQueue(TRACKSTAR_Q_SIZE)
     smartwatch_1_q = manager.LifoQueue(SMARTWATCH_Q_SIZE)
@@ -224,14 +225,18 @@ def startProcesses(path, rate, task):
     gui_q = manager.LifoQueue(GUI_Q_SIZE)
     audio_q = manager.LifoQueue(AUDIO_Q_SIZE)
 
-    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q, audio_q]
+    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q, audio_q, zed_img_q]
 
     video_capture_process = Process(name="OBS Virtual Camera Capture", target=send_vid_data, args=(capture_q, path, OBS_img_q, thread_stop))
     video_capture_process.daemon = True
 
-    camera_handler = get_camera_handler(camera_type)
-    camera_capture_process = Process(name="Depth Camera Intel Capture", target=camera_handler, args=(camera_q, path, depth_img_q, thread_stop))
+    camera_handler_intel = get_camera_handler(camera_type_1)
+    camera_capture_process = Process(name="Depth Camera Intel Capture", target=camera_handler_intel, args=(camera_q, path, depth_img_q, thread_stop))
     camera_capture_process.daemon = True
+
+    camera_handler_zed = get_camera_handler(camera_type_2)
+    camera_capture_process_zed = Process(name="Depth Camera Zed Capture", target=camera_handler_zed, args=(camera_q, path, zed_img_q, thread_stop))
+    camera_capture_process_zed.daemon = True
     
     trakstar_process = Process(name="TrakStar Capture", target=get_trakstar_data, args=(trackstar_q, path, thread_stop))
     trakstar_process.daemon = True
@@ -252,11 +257,11 @@ def startProcesses(path, rate, task):
     # audio_recorder_process.daemon = True
 
     #Has to be thread since shares memory with GUI, has to be on same process
-    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q,audio_q, thread_stop))
+    updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q,zed_img_q, thread_stop))
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
-    processes = [video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
+    processes = [camera_capture_process,camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
     threads = [updateIndicator_process]
 
     for process in processes:

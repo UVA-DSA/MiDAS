@@ -3,14 +3,14 @@ import cv2
 import time
 
 # define a video capture object 0
-vid = cv2.VideoCapture(3, apiPreference=cv2.CAP_ANY, params=[
+vid = cv2.VideoCapture(5, apiPreference=cv2.CAP_ANY, params=[
     cv2.CAP_PROP_FRAME_WIDTH, 3840,
     cv2.CAP_PROP_FRAME_HEIGHT, 1080]) 
 num = 0
 
 while(True): 
 	
-	# Capture the video frame 
+	# Capture the video frame 	
 	# by frame 
 	ret, frame = vid.read() 
 

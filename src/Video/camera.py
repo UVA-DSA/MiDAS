@@ -99,7 +99,7 @@ def _get_filters() -> List:
 
     return _filters
 
-def intel_camera_handler(q: Queue, path: str, img_q: Queue):
+def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
     
     csv_writer, csv_file, files_path = _init_filesystem(path, "Intel")
 
@@ -138,7 +138,7 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue):
         # indexing the captured frames
         frame_num = -1
 
-        while True:
+        while not thread_stop.is_set():
 
             # Wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
@@ -224,7 +224,7 @@ class ZedCamera:
     COMPRESSION = sl.SVO_COMPRESSION_MODE.H265
     
 
-def zed_camera_handler(q: Queue, path: str, img_q: Queue):
+def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
     
     csv_writer, csv_file, files_path = _init_filesystem(path, "Zed")
 
@@ -259,7 +259,7 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue):
 
         frame_num = -1
 
-        while True:
+        while not thread_stop.is_set():
             image = sl.Mat()
             depth_map = sl.Mat()
 

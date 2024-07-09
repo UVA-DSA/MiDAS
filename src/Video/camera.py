@@ -1,7 +1,7 @@
 import os
 from typing import Tuple, List
 
-from multiprocessing import Queue
+from multiprocessing import Queue, Event
 from time import time_ns
 import csv
 
@@ -15,7 +15,7 @@ from PIL import ImageTk,Image
 
 
 
-def _add_record(csv_writer: csv.writer, cam_type: str, timestamp, id):
+def _add_record(csv_writer: csv.writer, timestamp, id):
     csv_writer.writerow([timestamp, id])
 
 def _init_filesystem(path, cam_type: str):
@@ -138,7 +138,14 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
         # indexing the captured frames
         frame_num = -1
 
-        while not thread_stop.is_set():
+        while True:
+
+            if thread_stop.is_set():
+                pipeline.stop()
+                csv_file.close()
+                q.close()
+                img_q.close()
+                break
 
             # Wait for a coherent pair of frames: depth and color
             frames = pipeline.wait_for_frames()
@@ -181,22 +188,22 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
                 images = np.hstack((color_image, depth_colormap))
 
             # # Show images
-            # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-            # cv2.imshow('RealSense', images)
+            cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow('RealSense', images)
 
-            # key = cv2.waitKey(1)
-            # if key & 0xFF == ord('q') or key == 27:
-            #     cv2.destroyAllWindows()
-            #     break
+            key = cv2.waitKey(1)
+            if key & 0xFF == ord('q') or key == 27:
+                cv2.destroyAllWindows()
+                break
 
             # image compression and conversion to be sent to display
             try:
-                img_q.put(images)
+                img_q.put(images, block=False)
             except:
                 while not img_q.empty():
                     q.get()
 
-            _add_record(csv_writer, "Intel", timestamp, frame_num)
+            _add_record(csv_writer, timestamp, frame_num)
             
             try:
                 q.put([timestamp, frame_num], block=False)
@@ -205,12 +212,15 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
                 while not q.empty():
                     q.get() # clear the queue
 
-
-    finally:
+    except:
 
         # Stop streaming
         pipeline.stop()
         csv_file.close()
+        q.close()
+        img_q.close()
+
+    exit(0)
 
 
 ################################################### ZED ################################################
@@ -256,41 +266,56 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
             exit(-1)
         zed_serial = zed.get_camera_information().serial_number
         err = zed.enable_recording(recordingParameters)
+        if err != sl.ERROR_CODE.SUCCESS:
+            print("no recording initiated")
 
         frame_num = -1
 
-        while not thread_stop.is_set():
+        while True:
+            if thread_stop.is_set():
+                zed.disable_recording()
+                zed.close()
+                csv_file.close()
+                q.close()
+                img_q.close()
+                break
             image = sl.Mat()
             depth_map = sl.Mat()
 
             runtime_parameters = sl.RuntimeParameters()
             if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS :
                 # A new image and depth is available if grab() returns SUCCESS
-                zed.retrieve_image(image, sl.VIEW.LEFT) # Retrieve left image
+                zed.retrieve_image(image, sl.VIEW.SIDE_BY_SIDE) # Retrieve left image
                 zed.retrieve_measure(depth_map, sl.MEASURE.DEPTH) # Retrieve depth
                 timestamp = zed.get_timestamp(sl.TIME_REFERENCE.CURRENT)  # Get the timestamp at the time the image was captured
 
                 try:
-                    img_q.put(image.get_data())
+                    img_q.put(image.get_data(), block=False)
                 except:
                     while not img_q.empty():
                         q.get()
 
                 frame_num += 1
-                _add_record(csv_writer, "Zed", timestamp, frame_num)
+                _add_record(csv_writer, timestamp.get_nanoseconds(), frame_num)
                 
                 try:
-                    q.put([timestamp, frame_num], block=False)
+                    q.put([timestamp.get_nanoseconds(), frame_num], block=False)
                 except:
                     # print("Error when writing to the FIFO: Clearing the queue ")
                     while not q.empty():
                         q.get() # clear the queue
+            if frame_num == 100:
+                thread_stop.set()
 
     except Exception as e:
         print(e)
-    finally:
         zed.disable_recording()
         zed.close()
+        csv_file.close()
+        q.close()
+        img_q.close()
+
+    exit(0)
 
 
 
@@ -304,9 +329,9 @@ def get_camera_handler(cam_type: str = "Intel"):
     
 if __name__ == "__main__":
     cam_type = "Zed"
-    q, iq = Queue(), Queue()
+    q, iq = Queue(1000), Queue(1000)
     path = "./test"
 
-    handler = get_camera_handler("Zed")
-    handler(q, path, iq)
+    handler = get_camera_handler(cam_type)
+    handler(q, path, iq, Event())
     

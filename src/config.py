@@ -2,7 +2,7 @@
 PDS_ON_THRESHOLD = 3000
 
 #Capture port OBS virtual camera is on (Use src\Video\cam_test.py to test)
-OBS_CAPTURE_PORT = 3
+OBS_CAPTURE_PORT = 5
 
 OBS_HOST = 'localhost'
 OBS_PORT = 4455
@@ -18,4 +18,5 @@ smartwatch_2_id = 'left'
 smartwatch_port = 7889
 
 #Camera type
-camera_type = "Intel"
+camera_type_1 = "Intel"
+camera_type_2 = "Zed"

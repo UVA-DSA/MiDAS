@@ -46,6 +46,7 @@ class IntelCamera:
     DEPTH_DIM = (640, 480) # dimension of the depth frames
     DEPTH_FPS = 30 # frame-rate of the depth stream
     ALIGN_FRAMES = True # align the rgb image to the depth image
+    APPLY_FILTERS = False
     USE_DECIMATION_FILTER = False
     USE_SPATIAL_FILTER = True
     USE_TEMPORAL_FILTER = True
@@ -166,7 +167,8 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
                 continue
 
             # apply depth filters
-            depth_frame = _apply_filters(depth_frame, _filters)
+            if IntelCamera.APPLY_FILTERS:
+                depth_frame = _apply_filters(depth_frame, _filters)
             depth_frame = colorizer.process(depth_frame)
 
             # Convert images to numpy arrays
@@ -188,13 +190,13 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
                 images = np.hstack((color_image, depth_colormap))
 
             # # Show images
-            cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('RealSense', images)
+            # cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+            # cv2.imshow('RealSense', images)
 
-            key = cv2.waitKey(1)
-            if key & 0xFF == ord('q') or key == 27:
-                cv2.destroyAllWindows()
-                break
+            # key = cv2.waitKey(1)
+            # if key & 0xFF == ord('q') or key == 27:
+            #     cv2.destroyAllWindows()
+            #     break
 
             # image compression and conversion to be sent to display
             try:
@@ -230,8 +232,9 @@ class ZedCamera:
     EXPOSURE = -1 # % of framerate
     BRIGHTNESS = -1 # 0-8
     CONTRAST = -1 # 0-8
-    DEPTH = sl.DEPTH_MODE.ULTRA # ULTRA, NEURAL
+    DEPTH = sl.DEPTH_MODE.ULTRA # ULTRA, NEURAL,NEURAL_PLUS
     COMPRESSION = sl.SVO_COMPRESSION_MODE.H265
+    FILL = False
     
 
 def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
@@ -245,6 +248,7 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
     init_params.depth_mode = ZedCamera.DEPTH
     init_params.coordinate_units = sl.UNIT.MILLIMETER # Use millimeter units (for depth measurements)
     init_params.depth_minimum_distance = 120.0 # Set the minimum depth perception distance to 12cm
+    
     
     recordingParameters = sl.RecordingParameters()
     recordingParameters.compression_mode = ZedCamera.COMPRESSION
@@ -283,6 +287,9 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
             depth_map = sl.Mat()
 
             runtime_parameters = sl.RuntimeParameters()
+            if ZedCamera.FILL:
+                runtime_parameters.sensing_mode = sl.SENSING_MODE.FILL
+
             if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS :
                 # A new image and depth is available if grab() returns SUCCESS
                 zed.retrieve_image(image, sl.VIEW.SIDE_BY_SIDE) # Retrieve left image

@@ -1,5 +1,7 @@
 import datetime
 import os 
+import subprocess
+from subprocess import CalledProcessError
 import csv
 import newGUI
 import threading
@@ -87,6 +89,7 @@ def sendData(subject, trial, task, rate):
         os.makedirs(path)
 
     print(path)
+
     send_data_process = threading.Thread(target=startProcesses, args=(path, rate, task))
     send_data_process.start()
     return 
@@ -209,6 +212,15 @@ def readData(task, rate, list_of_qs, path, thread_stop):
 
 
 def startProcesses(path, rate, task):
+
+    # run the trakstar process
+    current_file_path = os.path.abspath(__file__)
+    trakstar_exe_path = os.path.join(current_file_path, "Trakstar/main.exe")
+    try:
+        subprocess.check_call(trakstar_exe_path, shell=False)
+    except CalledProcessError:
+        print("trakstar could not be executed correctly")
+        exit(1)
     
     manager = MyManager()
     manager.start()

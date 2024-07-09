@@ -1,7 +1,7 @@
 import time
 import serial
 
-arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
+arduino = serial.Serial("COM4", baudrate=9600, timeout=.1)
 file = open(".\src\PDS\out.txt", "a")
 letters = {'A', 'B', 'C', 'D', 'E', 'F', 'G'}
 

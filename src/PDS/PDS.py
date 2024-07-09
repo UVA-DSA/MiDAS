@@ -3,7 +3,7 @@ from time import time_ns, sleep
 import serial
 import csv
 import queue
-from config import PDS_ON_THRESHOLD
+from config import PDS_ON_THRESHOLD, PDS_PORT
 #Each letter corresopnds to a pedal output. Arduino will output pedal data as single string
 #format if 'A123' meaning the first pedal was pressed at pressure of 123. 'F999 G200' means last two pedals pressed, second to last being pressed harder
 letters = {'A', 'B', 'C', 'D', 'E', 'F', 'G'}
@@ -17,7 +17,7 @@ def serialConnect(thread_stop):
             arduino = None
             return  
         try:
-            arduino = serial.Serial("COM3", baudrate=9600, timeout=.1)
+            arduino = serial.Serial(PDS_PORT, baudrate=9600, timeout=.1)
             return
         except serial.SerialException:
             print("[PDS: Serial Not Found, Retrying in 5 Seconds..]")

@@ -246,6 +246,7 @@ def startProcesses(path, rate, task):
     trakstar_process = Process(name="TrakStar Capture", target=get_trakstar_data, args=(trackstar_q, path, thread_stop))
     trakstar_process.daemon = True
 
+
     trakstar_exec_process = Process(name="TrakStar Execution", target=exec_trakstar, args=(thread_stop,))
     trakstar_exec_process.daemon = True
 
@@ -270,7 +271,7 @@ def startProcesses(path, rate, task):
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
-    processes = [camera_capture_process,camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process, trakstar_exec_process]
+    processes = [camera_capture_process, camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process, trakstar_exec_process]
     threads = [updateIndicator_process]
 
     for process in processes:

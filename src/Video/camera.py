@@ -120,6 +120,10 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
 
     while True:
 
+        if thread_stop.is_set():
+            intel_cleanup(pipeline, csv_file)
+            break
+
         pipeline = rs.pipeline()
         config = rs.config()
         try:
@@ -135,10 +139,6 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
         
         config.enable_stream(rs.stream.depth, *IntelCamera.DEPTH_DIM, rs.format.z16, IntelCamera.DEPTH_FPS)
         config.enable_stream(rs.stream.color, *IntelCamera.RGB_DIM, rs.format.bgr8, IntelCamera.RGB_FPS)
-
-        if thread_stop.is_set():
-            intel_cleanup(pipeline, csv_file)
-            break
 
         csv_writer, csv_file, files_path = _init_filesystem(path, "Intel")
         config.enable_record_to_file(os.path.join(files_path, f'part{part_id}_frames.bag'))
@@ -257,22 +257,22 @@ def zed_cleanup(zed: sl.Camera, csv_file):
     csv_file.close()
 
 def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
-    
-    # configs
-    init_params = sl.InitParameters()
-    init_params.camera_resolution = ZedCamera.RESOLUTION
-    init_params.camera_fps = ZedCamera.FPS
-    init_params.depth_mode = ZedCamera.DEPTH
-    init_params.coordinate_units = sl.UNIT.MILLIMETER # Use millimeter units (for depth measurements)
-    init_params.depth_minimum_distance = 120.0 # Set the minimum depth perception distance to 12cm
-    
-    
-    recordingParameters = sl.RecordingParameters()
-    recordingParameters.compression_mode = ZedCamera.COMPRESSION
 
     part_id = 0
 
     while True:
+
+        # configs
+        init_params = sl.InitParameters()
+        init_params.camera_resolution = ZedCamera.RESOLUTION
+        init_params.camera_fps = ZedCamera.FPS
+        init_params.depth_mode = ZedCamera.DEPTH
+        init_params.coordinate_units = sl.UNIT.MILLIMETER # Use millimeter units (for depth measurements)
+        init_params.depth_minimum_distance = 120.0 # Set the minimum depth perception distance to 12cm
+        
+        
+        recordingParameters = sl.RecordingParameters()
+        recordingParameters.compression_mode = ZedCamera.COMPRESSION
 
         if thread_stop.is_set():
             zed_cleanup(zed, csv_file)

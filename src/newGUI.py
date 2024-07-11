@@ -207,14 +207,12 @@ def updateIndicators(gui_q,cam_q, OBS_q, zed_q, thread_stop):
                         hex_color = "green"
                     elif (temp>-1):
                         #Sets hexcolor to be a hex color from red to green depedning on how much pressure
-                        red = int(255 * (1 - (round(temp) - 1)))
-                        green = int(255 * ((round(temp) - 1)))
                         if(i == 59):
-                            red = int(red / PDS_LONG_THRESHOLD)
-                            green = int(green / PDS_LONG_THRESHOLD)
+                            red = int(255 * (1 - (temp - 1) / PDS_LONG_THRESHOLD))
+                            green = int(255 * ((temp - 1) / PDS_LONG_THRESHOLD))
                         else:
-                            red = int(red / PDS_ON_THRESHOLD)
-                            green = int(green / PDS_ON_THRESHOLD)
+                            red = int(255 * (1 - (temp - 1) / PDS_ON_THRESHOLD))
+                            green = int(255 * ((temp - 1) / PDS_ON_THRESHOLD))
                         hex_color = f'#{red:02x}{green:02x}00'
                     else:
                         #If pedal data was -1 (no pressure) sets it to red

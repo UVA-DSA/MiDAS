@@ -6,6 +6,14 @@ src/Video/camera/
 src/Video/images/
 src/Smartwatch/test
 
+*.whl
+
+src/Video/camera_calibration.py
+src/Video/playground.py
+src/mesh_gen.obj
+src/myRecording.svo2
+
+src/Video/project
 main.exe
 .vscode/
 

@@ -1,13 +1,12 @@
 import datetime
 import os 
 import subprocess
-from subprocess import CalledProcessError
 import csv
 import newGUI
 import threading
 from Video.capture import send_vid_data 
 from Video.camera import get_camera_handler
-from Trakstar.trackstarWriter import get_trakstar_data
+from Trakstar.trackstarWriter import get_trakstar_data, exec_trakstar
 from Smartwatch.tcp_smartwatch_client import receive_smartwatch_data
 from PDS.PDS import get_PDS_data
 from multiprocessing import Process, Queue, Event
@@ -215,15 +214,6 @@ def readData(task, rate, list_of_qs, path, thread_stop):
 
 
 def startProcesses(path, rate, task):
-
-    # run the trakstar process
-    current_file_path = os.path.abspath(__file__)
-    trakstar_exe_path = os.path.join(current_file_path, "Trakstar/main.exe")
-    try:
-        subprocess.check_call(trakstar_exe_path, shell=False)
-    except CalledProcessError:
-        print("trakstar could not be executed correctly")
-        exit(1)
     
     manager = MyManager()
     manager.start()
@@ -255,7 +245,10 @@ def startProcesses(path, rate, task):
     
     trakstar_process = Process(name="TrakStar Capture", target=get_trakstar_data, args=(trackstar_q, path, thread_stop))
     trakstar_process.daemon = True
-    
+
+    trakstar_exec_process = Process(name="TrakStar Execution", target=exec_trakstar, args=(thread_stop,))
+    trakstar_exec_process.daemon = True
+
     smartwatch_1_process = Process(name="Smartwatch Left Capture", target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_1_q,path, smartwatch_1_id, thread_stop))
     smartwatch_1_process.daemon = True
     
@@ -267,6 +260,7 @@ def startProcesses(path, rate, task):
 
     PDS_process = Process(name="PDS Capture", target=get_PDS_data, args = (PDS_q, path, thread_stop))
     PDS_process.daemon = True
+
     
     # audio_recorder_process = Process(name="Audio Capture", target=capture_audio_transmit, args=(audio_q, path, thread_stop))
     # audio_recorder_process.daemon = True
@@ -276,7 +270,7 @@ def startProcesses(path, rate, task):
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
-    processes = [camera_capture_process,camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
+    processes = [camera_capture_process,camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process, trakstar_exec_process]
     threads = [updateIndicator_process]
 
     for process in processes:

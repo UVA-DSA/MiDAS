@@ -6,6 +6,8 @@ from time import time_ns
 import time
 import multiprocessing
 import subprocess
+import psutil
+from subprocess import CalledProcessError
 
 def get_trakstar_data(q, path, thread_stop):
     
@@ -103,6 +105,39 @@ def get_trakstar_data(q, path, thread_stop):
         except KeyboardInterrupt:
             print("[TrakStar: Interrupted by user, exiting..]")
             break
+
+
+def exec_trakstar(thread_stop):
+    time.sleep(1) # wait until the trackstar reading process has already created a server
+    # run the trakstar process
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+    trakstar_exe_path = os.path.join(current_file_path, "main.exe")
+    try:
+        process = subprocess.Popen(trakstar_exe_path)
+    except CalledProcessError:
+        print("Error: trakstar could not be executed correctly")
+        exit(1)
+
+    while not thread_stop.is_set():
+        if process.poll() is not None:
+            # Process has terminated on its own
+            print(f"Process {process.pid} terminated on its own.")
+            return
+
+        time.sleep(1)  # Adjust sleep time as needed
+
+    # Event is set, terminate the process
+    # if process.poll() is None:
+    #     process.terminate()
+    #     print(f"Process {process.pid} terminated due to event.")
+    try:
+        parent = psutil.Process(process.pid)
+        for child in parent.children(recursive=True):
+            child.kill()
+        parent.kill()
+        print(f"Process {process.pid} terminated.")
+    except Exception as e:
+        print(f"Error terminating process {process.pid}: {e}")
 
 # if __name__ == "__main__":
 #      q = Queue()

@@ -3,7 +3,7 @@ from time import time_ns, sleep
 import serial
 import csv
 import queue
-from config import PDS_ON_THRESHOLD, PDS_PORT
+from config import PDS_ON_THRESHOLD, PDS_PORT, PDS_LONG_THRESHOLD
 #Each letter corresopnds to a pedal output. Arduino will output pedal data as single string
 #format if 'A123' meaning the first pedal was pressed at pressure of 123. 'F999 G200' means last two pedals pressed, second to last being pressed harder
 letters = {'A', 'B', 'C', 'D', 'E', 'F', 'G'}
@@ -56,10 +56,16 @@ def get_PDS_data(q,path,thread_stop):
                     else:
                         temp = -1
                     ret[num] = temp
-                    if temp >= PDS_ON_THRESHOLD:
-                        ret[num+7] = 1
+                    if let != 'G':
+                        if temp >= PDS_ON_THRESHOLD:
+                            ret[num+7] = 1
+                        else:
+                            ret[num+7] = 0
                     else:
-                        ret[num+7] = 0
+                        if temp >= PDS_LONG_THRESHOLD:
+                            ret[num+7] = 1
+                        else:
+                            ret[num+7] = 0
                 #inserts the current time at the end of the data
                 ret.insert(14,time_ns())
                 try:

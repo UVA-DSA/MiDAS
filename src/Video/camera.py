@@ -11,9 +11,6 @@ import pyzed.sl as sl
 import numpy as np
 import cv2
 
-import queue
-from PIL import ImageTk,Image
-
 
 class ReconnectException(Exception):
     "This exception is raised when camera is disconnected and a new connection is required"
@@ -110,8 +107,8 @@ def _get_filters() -> List:
 
 def intel_cleanup(pipeline: rs.pipeline, csv_file):
     try:
-        pipeline.stop()
         csv_file.close()
+        pipeline.stop()
     except:
         pass
 
@@ -218,11 +215,17 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
                 #     break
 
                 # image compression and conversion to be sent to display
-                img_q.put(images, block=False)
+                try:
+                    img_q.put(images, block=False)
+                except:
+                    pass
 
                 _add_record(csv_writer, timestamp, frame_num)
                 
-                q.put([timestamp, frame_num], block=False)
+                try:
+                    q.put([timestamp, frame_num], block=False)
+                except:
+                    pass
 
 
         except KeyboardInterrupt:
@@ -231,13 +234,9 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
             break
 
         except:
-            print("HHHHHHHHHHHAAAAAAAAAAAAAAAAAA")
-            # Stop streaming
             intel_cleanup(pipeline, csv_file)
             part_id += 1
 
-    q.close()
-    img_q.close()
     exit(0)
 
 
@@ -321,12 +320,20 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
                     zed.retrieve_measure(depth_map, sl.MEASURE.DEPTH) # Retrieve depth
                     timestamp = zed.get_timestamp(sl.TIME_REFERENCE.CURRENT)  # Get the timestamp at the time the image was captured
 
-                    img_q.put(image.get_data(), block=False)
+                    try:
+                        img_q.put(image.get_data(), block=False)
+                    except:
+                        img_q.get(block=False)
+                        pass
 
                     frame_num += 1
                     _add_record(csv_writer, timestamp.get_nanoseconds(), frame_num)
                     
-                    q.put([timestamp.get_nanoseconds(), frame_num], block=False)
+                    try:
+                        q.put([timestamp.get_nanoseconds(), frame_num], block=False)
+                    except:
+                        q.get(block=False)
+                        pass
 
 
                     # cv2.namedWindow('Zed', cv2.WINDOW_AUTOSIZE)
@@ -352,8 +359,6 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
 
     exit(0)
 
-
-
 def get_camera_handler(cam_type: str = "Intel"):
     if cam_type == "Intel":
         return intel_camera_handler
@@ -364,7 +369,7 @@ def get_camera_handler(cam_type: str = "Intel"):
     
 if __name__ == "__main__":
     cam_type = "Intel"
-    q, iq = Queue(1000), Queue(1000)
+    q, iq = Queue(10), Queue(10)
     e = Event()
     path = "./test"
 

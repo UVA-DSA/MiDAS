@@ -1,11 +1,12 @@
 import datetime
 import os 
+import subprocess
 import csv
 import newGUI
 import threading
 from Video.capture import send_vid_data 
 from Video.camera import get_camera_handler
-from Trakstar.trackstarWriter import get_trakstar_data
+from Trakstar.trackstarWriter import get_trakstar_data, exec_trakstar
 from Smartwatch.tcp_smartwatch_client import receive_smartwatch_data
 from PDS.PDS import get_PDS_data
 from multiprocessing import Process, Queue, Event
@@ -28,11 +29,6 @@ SMARTWATCH_Q_SIZE = 128
 PDS_Q_SIZE = 100
 GUI_Q_SIZE = 100
 
-# global variables
-# capture_q = LifoQueue(CAPTURE_Q_SIZE)
-# trackstar_q = LifoQueue(TRACKSTAR_Q_SIZE)
-# smartwatch_1_q = LifoQueue(SMARTWATCH_Q_SIZE)
-# smartwatch_2_q = LifoQueue(SMARTWATCH_Q_SIZE)
 
 def run(lifo):
     # get next message or wait until one is available
@@ -87,11 +83,11 @@ def sendData(subject, trial, task, rate):
         os.makedirs(path)
 
     print(path)
+
     send_data_process = threading.Thread(target=startProcesses, args=(path, rate, task))
     send_data_process.start()
     return 
 
-# @eel.expose
 def endProgram():
     global thread_stop
     print("Program ended")
@@ -110,7 +106,16 @@ def readData(task, rate, list_of_qs, path, thread_stop):
 
     with open(csv_path, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["server_time",  "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll","trakstar_time", "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll","trakstar_time", "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll","trakstar_time", "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_time", "video_time", "video_id", "3d_camera_time", "3d_camera_frame_id", 'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis', 'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis', 'PDS_time','pedal_1', 'pedal_2', 'pedal_3', 'pedal_4', 'pedal_5', 'pedal_6', 'pedal_7', 'pedal_1_pressed', 'pedal_2_pressed', 'pedal_3_pressed', 'pedal_4_pressed', 'pedal_5_pressed', 'pedal_6_pressed', 'pedal_7_pressed'])
+        csv_writer.writerow(["server_time",
+                            "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll","trakstar_time", 
+                            "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll","trakstar_time",
+                            "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll","trakstar_time",
+                            "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_time",
+                            "video_time", "video_id",
+                            "3d_camera_time", "3d_camera_frame_id",
+                            'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis',
+                            'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis',
+                            'PDS_time','pedal_1', 'pedal_2', 'pedal_3', 'pedal_4', 'pedal_5', 'pedal_6', 'pedal_7', 'pedal_1_pressed', 'pedal_2_pressed', 'pedal_3_pressed', 'pedal_4_pressed', 'pedal_5_pressed', 'pedal_6_pressed', 'pedal_7_pressed'])
     
         while True:
             if thread_stop.is_set():
@@ -240,7 +245,11 @@ def startProcesses(path, rate, task):
     
     trakstar_process = Process(name="TrakStar Capture", target=get_trakstar_data, args=(trackstar_q, path, thread_stop))
     trakstar_process.daemon = True
-    
+
+
+    trakstar_exec_process = Process(name="TrakStar Execution", target=exec_trakstar, args=(thread_stop,))
+    trakstar_exec_process.daemon = True
+
     smartwatch_1_process = Process(name="Smartwatch Left Capture", target=receive_smartwatch_data, args=(smartwatch_1_ip,smartwatch_port,smartwatch_1_q,path, smartwatch_1_id, thread_stop))
     smartwatch_1_process.daemon = True
     
@@ -252,6 +261,7 @@ def startProcesses(path, rate, task):
 
     PDS_process = Process(name="PDS Capture", target=get_PDS_data, args = (PDS_q, path, thread_stop))
     PDS_process.daemon = True
+
     
     # audio_recorder_process = Process(name="Audio Capture", target=capture_audio_transmit, args=(audio_q, path, thread_stop))
     # audio_recorder_process.daemon = True
@@ -261,7 +271,7 @@ def startProcesses(path, rate, task):
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
-    processes = [camera_capture_process,camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
+    processes = [camera_capture_process, camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process, trakstar_exec_process]
     threads = [updateIndicator_process]
 
     for process in processes:

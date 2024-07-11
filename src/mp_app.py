@@ -217,13 +217,14 @@ def readData(task, rate, list_of_qs, path, thread_stop):
 def startProcesses(path, rate, task):
 
     # run the trakstar process
-    current_file_path = os.path.abspath(__file__)
-    trakstar_exe_path = os.path.join(current_file_path, "Trakstar/main.exe")
-    try:
-        subprocess.check_call(trakstar_exe_path, shell=False)
-    except CalledProcessError:
-        print("trakstar could not be executed correctly")
-        exit(1)
+    # current_file_path = os.getcwd()
+    # trakstar_exe_path = os.path.join(current_file_path, "Trakstar", "main.exe")
+    # print(trakstar_exe_path)
+    # try:
+    #     subprocess.check_call(trakstar_exe_path, shell=False)
+    # except CalledProcessError:
+    #     print("trakstar could not be executed correctly")
+    #     exit(1)
     
     manager = MyManager()
     manager.start()
@@ -276,7 +277,7 @@ def startProcesses(path, rate, task):
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
-    processes = [camera_capture_process,camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
+    processes = [camera_capture_process, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process]
     threads = [updateIndicator_process]
 
     for process in processes:

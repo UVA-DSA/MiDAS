@@ -1,6 +1,6 @@
 #Threshold before a pedal is triggered
 PDS_ON_THRESHOLD = 3000
-PDS_PORT = "COM3"
+PDS_PORT = "COM4"
 
 #Capture port OBS virtual camera is on (Use src\Video\cam_test.py to test)
 OBS_CAPTURE_PORT = 5

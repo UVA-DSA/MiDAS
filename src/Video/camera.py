@@ -350,9 +350,6 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
             zed_cleanup(zed, csv_file)
             break
 
-
-    q.close()
-    img_q.close()
     exit(0)
 
 

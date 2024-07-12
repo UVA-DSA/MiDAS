@@ -22,3 +22,7 @@ smartwatch_port = 7889
 #Camera type
 camera_type_1 = "Intel"
 camera_type_2 = "Zed"
+
+
+#general
+enable_display=False

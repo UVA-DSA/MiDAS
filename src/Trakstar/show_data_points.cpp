@@ -240,7 +240,6 @@ int main(int argc, char* argv[])  {
                 cout << "Received acknowledgment: " << acknowledgment_buffer << endl;
 
 
-
                 if (bytes_sent == SOCKET_ERROR) {
                     cerr << "Error sending data: " << WSAGetLastError() << endl;
                     closesocket(client_socket);

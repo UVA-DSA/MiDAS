@@ -23,7 +23,7 @@ stopRecordingButton = None
 def submitData():
     global submitButton, stopRecordingButton
     print(submitButton)
-    sendData(subject_var.get(), trial_var.get(), task_var.get(), rate_var.get())
+    sendData(subject_var.get(), trial_var.get(), task_var.get(), rate_var.get(), watch_toggle.get())
     submitButton["state"] = "disabled"
     stopRecordingButton["state"] = "normal"
     

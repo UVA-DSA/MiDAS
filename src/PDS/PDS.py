@@ -56,7 +56,7 @@ def get_PDS_data(q,path,thread_stop):
                     else:
                         temp = -1
                     ret[num] = temp
-                    if let != 'G':
+                    if ord(let) != ord('G'):
                         if temp >= PDS_ON_THRESHOLD:
                             ret[num+7] = 1
                         else:

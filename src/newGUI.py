@@ -13,6 +13,7 @@ subject_var = tk.StringVar()
 trial_var = tk.StringVar()
 task_var = tk.StringVar()
 rate_var = tk.StringVar()
+watch_toggle = tk.BooleanVar()
 
 submitButton = None
 stopRecordingButton = None
@@ -68,8 +69,12 @@ def startGui():
     
     # Stop Button
     stopRecordingButton = Button(infoFr, text='Stop Recording', command=stopRecording, font=large_font, width=15)
-    stopRecordingButton.grid(column=4, row=1, rowspan=2, pady=10, padx=10)
+    stopRecordingButton.grid(column=4, row=2, rowspan=2, pady=10, padx=10)
     stopRecordingButton["state"] = "disabled"
+
+    #Watch Toggle Box
+    watchToggleBox = ttk.Checkbutton(infoFr, text="Smartwatch Data",variable=watch_toggle)
+    watchToggleBox.grid(column=1, row=3, padx=10,pady=10)
     
     # Pedal Indicators Frame
     #Makes the pedal frame and grids it

@@ -5,11 +5,12 @@ import time
 from datetime import datetime
 from multiprocessing import Queue
 from typing import List
+from threading import Event
 
 def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue, recording_dir: str, smartwatch_id: str, thread_stop) -> None:
     try:
         # Create the necessary directories and CSV file for recording data
-        columns: List[str] = ['sw_epoch_ms', 'wrist_position', 'sensor_type', 'value_X_Axis', 'value_Y_Axis', 'value_Z_Axis', 'server_epoch_ms']
+        columns: List[str] = ['sw_epoch_ms', 'wrist_position', 'sensor_type', 'value_X_Axis', 'value_Y_Axis', 'value_Z_Axis', 'seq_num' 'server_epoch_ms']
         curr_date = datetime.now()
         dt_string = curr_date.strftime("%d-%m-%Y-%H-%M-%S")
         newpath = os.path.join(recording_dir, f"smartwatch_data/sw_{smartwatch_id}/")
@@ -73,6 +74,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             sw_data[3] = float(sw_data[3])
                             sw_data[4] = float(sw_data[4])
                             sw_data[5] = float(sw_data[5])
+                            sw_data[7] = float(sw_data[7])
                             sw_data.append(curr_epoch_time)
                             
                             writer.writerow(sw_data)
@@ -116,11 +118,12 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
 # smartwatch_port = 7889
 # smartwatch_1_id = 'right'
 
-# smartwatch_2_ip = '172.27.176.73'
+# smartwatch_2_ip = '192.168.0.12'
 # smartwatch_2_id = 'left'
 
 # smartwatch_1_q = Queue()
 # smartwatch_2_q = Queue()
 
+# thread_stop = Event()
 # # Call the function to send the message
-# receive_smartwatch_data(smartwatch_2_ip, smartwatch_port, smartwatch_2_q, './test/', smartwatch_2_id)
+# receive_smartwatch_data(smartwatch_2_ip, smartwatch_port, smartwatch_2_q, './test/', smartwatch_2_id, thread_stop)

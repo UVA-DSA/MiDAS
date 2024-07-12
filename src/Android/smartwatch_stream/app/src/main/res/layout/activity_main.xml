@@ -38,7 +38,16 @@
                 android:paddingBottom="10dp"
                 android:text="@string/hello_world" />
 
-<!--            <Button-->
+            <TextView
+                android:id="@+id/sequence"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold"
+                android:textSize="18sp"
+                android:paddingBottom="10dp"
+                android:text="0" />
+
+            <!--            <Button-->
 <!--                android:id="@+id/startBtn"-->
 <!--                android:layout_width="wrap_content"-->
 <!--                android:layout_height="wrap_content"-->

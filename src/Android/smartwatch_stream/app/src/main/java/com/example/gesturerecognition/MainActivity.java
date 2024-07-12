@@ -23,10 +23,11 @@ import com.example.gesturerecognition.databinding.ActivityMainBinding;
 
 import java.io.IOException;
 
-public class MainActivity extends Activity  {
+public class MainActivity extends Activity implements SensorData.SensorDataCallback {
 
     private static TextView mTextView;
     private static TextView mIPTextView;
+    private static TextView mSeqTextView;
     private Button mButton;
     private ActivityMainBinding binding;
     private static final String DEBUG_TAG = "NetworkStatusExample";
@@ -47,7 +48,7 @@ public class MainActivity extends Activity  {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-
+        mSeqTextView = binding.sequence;
         mTextView = binding.text;
         mIPTextView = binding.ip;
         mTextView.setText(welcomeMsg);
@@ -69,7 +70,7 @@ public class MainActivity extends Activity  {
         Log.d(DEBUG_TAG, "Internet connected: " + isOnline());
         if(isOnline()){
             bindNetwork();
-            mSensor = new SensorData(this);
+            mSensor = new SensorData(this, this);
         }
 
         mTextView.setText(message);
@@ -145,5 +146,13 @@ public class MainActivity extends Activity  {
             mButton.setText("Start");
             isStarted = false;
         }
+    }
+
+    @Override
+    public void onSensorDataReceived(String data) {
+        runOnUiThread(() -> {
+            // Update the sequence TextView with the new data
+            mSeqTextView.setText(data);
+        });
     }
 }

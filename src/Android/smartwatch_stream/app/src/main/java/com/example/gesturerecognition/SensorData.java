@@ -44,8 +44,8 @@ public class SensorData  implements SensorEventListener {
     private  boolean isStarted = false;
     public static BlockingQueue<String> queue = new LinkedBlockingQueue<String>();
     public static Long time_elapsed = Long.valueOf(0);
-//    private String watchArm = "left";
-    private String watchArm = "right";
+    private String watchArm = "left";
+//    private String watchArm = "right";
     private Long startTime;
 
     private Long accSeqNum = Long.valueOf(0);

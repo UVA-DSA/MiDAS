@@ -123,6 +123,7 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
     while True:
 
         if thread_stop.is_set():
+            print("[Intel Process: Thread stop set, exiting from main loop...]")
             intel_cleanup(pipeline, csv_file)
             break
 
@@ -163,6 +164,7 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
             while True:
 
                 if thread_stop.is_set():
+                    print("[Intel Process: Thread stop set, exiting from recording loop...]")
                     intel_cleanup(pipeline, csv_file)
                     break
 
@@ -299,6 +301,10 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
             # Open the camera
             err = sl.ERROR_CODE.FAILURE
             while err != sl.ERROR_CODE.SUCCESS:
+                if thread_stop.is_set():
+                    print("[ZED Process: Thread stop set, exiting from connection loop...]")
+                    zed_cleanup(zed, csv_file)
+                    return
                 err = zed.open(init_params)
                 time.sleep(1)
 
@@ -311,8 +317,9 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
 
             while True:
                 if thread_stop.is_set():
+                    print("[ZED Process: Thread stop set, exiting from recording loop...]")
                     zed_cleanup(zed, csv_file)
-                    break
+                    return
 
                 if enable_display:
 

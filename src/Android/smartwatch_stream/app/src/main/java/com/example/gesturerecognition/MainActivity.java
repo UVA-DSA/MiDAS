@@ -36,7 +36,8 @@ public class MainActivity extends Activity implements SensorData.SensorDataCallb
     private boolean isStarted = false;
     private SensorData mSensor;
 //    private String watchArm = "Left Wrist";
-    private String message = "DCS - Right Wrist";
+//private String message = "DCS - Right Wrist";
+    private String message = "DCS - Left Wrist";
 
     private PowerManager.WakeLock wakeLock;
     private static final String TAG = "myapp:GestureRecognition";

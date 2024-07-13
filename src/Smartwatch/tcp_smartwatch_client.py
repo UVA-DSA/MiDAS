@@ -53,6 +53,13 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                         try:
 
                             if thread_stop.is_set():
+
+                                client_socket.close()
+                                client_socket = None
+
+                                file.flush()
+                                file.close()
+                        
                                 print("[Smartwatch: Thread stop set, exiting..]")
                                 break
                 
@@ -77,8 +84,11 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             sw_data[7] = float(sw_data[7])
                             sw_data.append(curr_epoch_time)
                             
+                            start_t = time.time_ns()
                             writer.writerow(sw_data)
+                            end_t = time.time_ns()
                             
+                            print("CSV Write Time: ", (end_t-start_t)/1e9)
                             
                             try:
                                 # Add it to the queue to be processed by the main process
@@ -96,14 +106,14 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
 
                         except KeyboardInterrupt:
                             print("[Smartwatch receival interrupted by user. Exiting...]")
-                            break
+                            return
 
                 except Exception as e:
                     print(f"[Smartwatch: Error: {e}]")
                 
                 except KeyboardInterrupt:
                     print("[Smartwatch: Smartwatch receival interrupted by user. Exiting...]")
-                    break
+                    return
 
                 if client_socket:
                     client_socket.close()

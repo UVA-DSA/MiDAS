@@ -87,9 +87,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             start_t = time.time_ns()
                             writer.writerow(sw_data)
                             end_t = time.time_ns()
-                            
-                            print("CSV Write Time: ", (end_t-start_t)/1e9)
-                            
+                                                        
                             try:
                                 # Add it to the queue to be processed by the main process
                                 fifo_queue.put(sw_data, block=False)

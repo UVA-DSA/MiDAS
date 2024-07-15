@@ -49,7 +49,7 @@ def killAllProcesses():
     
 
 
-def sendData(subject, trial, task, rate):
+def sendData(subject, trial, task, rate, watch_toggle):
     thread_stop.clear()
     
     '''
@@ -84,7 +84,7 @@ def sendData(subject, trial, task, rate):
 
     print(path)
 
-    send_data_process = threading.Thread(target=startProcesses, args=(path, rate, task))
+    send_data_process = threading.Thread(target=startProcesses, args=(path, rate, task, watch_toggle))
     send_data_process.start()
     return 
 
@@ -213,7 +213,7 @@ def readData(task, rate, list_of_qs, path, thread_stop):
 
 
 
-def startProcesses(path, rate, task):
+def startProcesses(path, rate, task, watch_toggle):
     
     manager = MyManager()
     manager.start()
@@ -271,8 +271,14 @@ def startProcesses(path, rate, task):
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
-    processes = [camera_capture_process, camera_capture_process_zed, video_capture_process, trakstar_process, smartwatch_1_process, smartwatch_2_process, read_process, PDS_process, trakstar_exec_process]
+    #  smartwatch_1_process, smartwatch_2_process, 
+    processes = [camera_capture_process, camera_capture_process_zed, video_capture_process, trakstar_process,read_process, PDS_process, trakstar_exec_process]
     threads = [updateIndicator_process]
+
+    if(watch_toggle):
+        processes.append(smartwatch_1_process)
+        processes.append(smartwatch_2_process)
+
 
     for process in processes:
         process.start()

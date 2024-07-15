@@ -14,7 +14,9 @@ OBS_WS_PASSWORD = "zYScVXTTKppdI00d"
 smartwatch_1_ip = '172.27.191.158'
 smartwatch_1_id = 'right'
 
-smartwatch_2_ip = '172.27.176.73'
+# 
+# smartwatch_2_ip = '172.27.176.73'
+smartwatch_2_ip ='192.168.0.12'
 smartwatch_2_id = 'left'
 
 smartwatch_port = 7889
@@ -22,3 +24,7 @@ smartwatch_port = 7889
 #Camera type
 camera_type_1 = "Intel"
 camera_type_2 = "Zed"
+
+
+#general
+enable_display=False

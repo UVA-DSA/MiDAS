@@ -6,6 +6,8 @@ src/Video/camera/
 src/Video/images/
 src/Smartwatch/test
 
+*/trakstar_log.txt
+
 *.whl
 
 src/Video/camera_calibration.py
@@ -16,6 +18,8 @@ src/myRecording.svo2
 src/Video/project
 main.exe
 .vscode/
+
+src/trakstar_log.txt
 
 # Gradle files
 .gradle/

@@ -11,7 +11,7 @@ import pyzed.sl as sl
 import numpy as np
 import cv2
 
-from config import enable_display
+from config import enable_display, intel_exposure_value
 
 
 class ReconnectException(Exception):
@@ -49,9 +49,9 @@ class IntelCamera:
 
     # configs for the intel 3D camera capture
     RGB_DIM = (1280, 720) # dimension of the rgb frames
-    RGB_FPS = 30 # frame-rate of the rgb stream
+    RGB_FPS = 15 # frame-rate of the rgb stream
     DEPTH_DIM = (1280, 720) # dimension of the depth frames
-    DEPTH_FPS = 30 # frame-rate of the depth stream
+    DEPTH_FPS = 15 # frame-rate of the depth stream
     ALIGN_FRAMES = True # align the rgb image to the depth image
     APPLY_FILTERS = False
     USE_DECIMATION_FILTER = False
@@ -148,6 +148,16 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
 
         # Start streaming
         profile = pipeline.start(config)
+
+        # adjust the exposure
+        depth_sensor = pipeline.get_active_profile().get_device().first_depth_sensor()
+        if intel_exposure_value == "auto":
+            print("Intel: auto exposure")
+            depth_sensor.set_option(rs.option.enable_auto_exposure, True)
+        else:
+            print(f"Intel: exposure set to: {intel_exposure_value}")
+            exposureValue = intel_exposure_value
+            depth_sensor.set_option(rs.option.exposure, exposureValue)
 
         colorizer = rs.colorizer()
         try:
@@ -260,9 +270,12 @@ class ZedCamera:
 
 def zed_cleanup(zed: sl.Camera, csv_file):
     print("[ZED Process: Thread stop set, exiting from main loop...]")
-    zed.disable_recording()
-    zed.close()
-    csv_file.close()
+    try:
+        csv_file.close()
+        zed.disable_recording()
+        zed.close()
+    except:
+        pass
 
 def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
 

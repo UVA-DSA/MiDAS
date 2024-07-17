@@ -1,6 +1,7 @@
 #Threshold before a pedal is triggered
 PDS_ON_THRESHOLD = 3000
 PDS_LONG_THRESHOLD = 400
+
 PDS_PORT = "COM4"
 
 #Capture port OBS virtual camera is on (Use src\Video\cam_test.py to test)
@@ -24,6 +25,7 @@ smartwatch_port = 7889
 #Camera type
 camera_type_1 = "Intel"
 camera_type_2 = "Zed"
+intel_exposure_value = 33000
 
 
 #general

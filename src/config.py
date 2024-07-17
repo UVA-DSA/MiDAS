@@ -1,14 +1,14 @@
 #Threshold before a pedal is triggered
 PDS_ON_THRESHOLD = 3000
-PDS_LONG_THRESHOLD = 100
-PDS_PORT = "COM3"
+PDS_LONG_THRESHOLD = 400
+PDS_PORT = "COM4"
 
 #Capture port OBS virtual camera is on (Use src\Video\cam_test.py to test)
 OBS_CAPTURE_PORT = 5
 
 OBS_HOST = 'localhost'
 OBS_PORT = 4455
-OBS_WS_PASSWORD = "UI54p2eyxifmIWEo"
+OBS_WS_PASSWORD = "xZm5u8xiajqI0gLT"
 
 # Replace these values with your smartwatch's IP, port
 smartwatch_1_ip = '192.168.0.104'

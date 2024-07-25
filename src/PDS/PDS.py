@@ -52,7 +52,11 @@ def get_PDS_data(q,path,thread_stop):
                 for let in letters:
                     num = ord(let) - ord('A')
                     if (out.find(let) != -1):
-                        temp = float((out[(1 + out.find(let)):(8 + out.find(let))]).strip())
+                        try:
+                            temp = float((out[(1 + out.find(let)):(8 + out.find(let))]).strip())
+                        except Exception as e:
+                            temp = -1
+                            continue
                     else:
                         temp = -1
                     ret[num] = temp

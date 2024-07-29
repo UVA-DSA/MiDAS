@@ -1,6 +1,6 @@
 
 import pandas as pd
-from trackStarCSVSynthesis import subset_trackstar, combined_file
+from post.synchd.trakStarCSVSynthesis import subset_trackstar, combined_file
 from post.synchd.PDSSync import obs, obs_stamps
 
 

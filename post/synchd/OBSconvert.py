@@ -4,6 +4,7 @@ def OBSConvert(path):
     # Load the CSV file
     file_path = f'{path}\obs\OBStimestamp_PegT_S221_T1_2024-07-19.csv'
     df = pd.read_csv(file_path)
+    df.iloc[0,0] = "OBS Stamps"
 
     # Assuming the column with epoch timestamps is named 'timestamp'
     # Convert timestamps to milliseconds

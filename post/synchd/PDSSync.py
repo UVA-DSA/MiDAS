@@ -1,25 +1,27 @@
 import pandas as pd
 
 def PDSSync(path):
-    pds = pd.read_csv(f'{path}\PDS.csv')
-    obs = pd.read_csv(f"{path}\obs\OBStimestamp_PegT_S221_T1_2024-07-19.csv")
-    new = pd.DataFrame(columns=pds.columns)
+    pdsDF = pd.read_csv(f'{path}\PDS.csv')
+    obsDF = pd.read_csv(f"{path}\obs\OBStimestamp_PegT_S221_T1_2024-07-19.csv")
 
-    pds_stamps = pds['timestamp'].tolist()
-    obs_stamps = obs.iloc[:,0].tolist()
+    pdsStampList = pdsDF['timestamp'].tolist()
+    obsStampList = obsDF.iloc[:,0].tolist()
+    
+    finalDF = obsDF.copy()
+    PDS_cols = pdsDF.columns
+    for col in PDS_cols:
+        finalDF[col] = pd.NA
+
     iterator = 0
-    for i in obs_stamps:
+    for i in obsStampList:
         print(i)
         while True:
             try:
-                if i >= pds_stamps[iterator] and i < pds_stamps[iterator+1]:
-                    new = pd.concat([new, pds.iloc[[iterator]]], ignore_index=True)
+                if i >= pdsStampList[iterator] and i < pdsStampList[iterator+1]:
+                    finalDF = pd.concat([finalDF, pdsDF.iloc[[iterator]]], ignore_index=True)
                     break
             except Exception:
                 break
             iterator+=1
 
-    new['OBS Stamps'] = obs['Epoch']
-
-
-    new.to_csv('post\data\PegT_S221_T1_2024-07-19\\new_synced.csv' , index=False)
+    finalDF.to_csv(f'{path}/Synched Data/new_synced.csv' , index=False)

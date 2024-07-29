@@ -1,6 +1,6 @@
 import pandas as pd
 
-pds = pd.read_csv('post\data\PegT_S221_T1_2024-07-19\modifiedPDS.csv')
+pds = pd.read_csv('post\data\PegT_S221_T1_2024-07-19\PDS.csv')
 obs = pd.read_csv('post\data\PegT_S221_T1_2024-07-19\obs\OBStimestamp_PegT_S221_T1_2024-07-19.csv')
 new = pd.DataFrame(columns=pds.columns)
 

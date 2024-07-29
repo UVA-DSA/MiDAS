@@ -32,7 +32,7 @@ def OBSConvert(path):
                 pass
 
     # Save the modified DataFrame back to a CSV file
-    output_file_path = 'post\data\PegT_S221_T1_2024-07-19\obs\OBStimestamp_PegT_S221_T1_2024-07-19.csv'
-    df.to_csv(output_file_path, index=False)
+    df.to_csv(file_path, index=False)
+    df.to_csv(f"{path}\Synched Data\final_sync.csv")
 
-    print(f"Timestamps have been converted to nano and saved to {output_file_path}")
+    print(f"Timestamps have been converted to nano and saved to {file_path}")

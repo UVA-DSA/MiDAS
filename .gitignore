@@ -19,7 +19,7 @@ src/Video/project
 main.exe
 .vscode/
 
-src/trakstar_log.txt
+src/
 
 # Gradle files
 .gradle/

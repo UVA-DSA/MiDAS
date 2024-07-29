@@ -22,4 +22,4 @@ for i in obs_stamps:
 new['OBS Stamps'] = obs['Epoch']
 
 
-new.to_csv('post\data\PegT_S221_T1_2024-07-19\\newPDSsynced.csv' , index=False)
+new.to_csv('post\data\PegT_S221_T1_2024-07-19\\new_synced.csv' , index=False)

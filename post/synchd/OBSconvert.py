@@ -1,39 +1,39 @@
 import pandas as pd
+import glob
 
 def OBSConvert(path):
     # Load the CSV file
-    file_path = f'{path}\obs\OBStimestamp_PegT_S221_T1_2024-07-19.csv'
-    df = pd.read_csv(file_path)
-    df.iloc[0,0] = "OBS Stamps"
-
-    # Assuming the column with epoch timestamps is named 'timestamp'
+    filePath = f"{path}/obs/*.csv"
+    matchingPath = glob.glob(filePath)
+    df = pd.read_csv(matchingPath[0], header=None, index_col=False)
+    df.columns = ['OBS Stamps']
     # Convert timestamps to milliseconds
-    #df["Epoch"] = df['Epoch'] * 1000000
+    df["OBS Stamps"] = df['OBS Stamps'] * 1000000
 
-    for i in range(0,15871):
-        if(i % 3 == 0):
+    for i in range(1,df.shape[0]):
+        if(i % 3 == 1):
             try:
                 df.iloc[i,0] = df.iloc[i,0] + 333333
             except Exception:
                 print("ouch")
                 pass
-        elif(i%3 == 1):
+        elif(i%3 == 2):
             try:
                 df.iloc[i,0] = df.iloc[i,0] + 666666
             except Exception:
                 print("ouch")
 
                 pass
-        else:
-            try:
-                df.iloc[i,0] = df.iloc[i,0] + 0
-            except Exception:
-                print("ouch")
 
-                pass
 
     # Save the modified DataFrame back to a CSV file
-    df.to_csv(file_path, index=False)
-    df.to_csv(f"{path}\Synched Data\final_sync.csv")
+    df.to_csv(matchingPath[0], index=False)
+    df.to_csv(f"{path}/Synched Data/final_sync.csv", index=False)
+    df.to_csv(f"{path}/Synched Data/PDS_sync.csv", index=False)
+    df.to_csv(f"{path}/Synched Data/trakStar_sync.csv", index=False)
 
-    print(f"Timestamps have been converted to nano and saved to {file_path}")
+    print(f"Timestamps have been converted to nano and saved to {filePath}")
+
+if __name__ == "__main__":
+    path = "./data/INGUINAL_S113_T3_2024-07-18"
+    OBSConvert(path)

@@ -2,7 +2,7 @@ import glob
 import pandas as pd
 from trakStarCSVSynthesis import trakStarCSVSynthesis
 
-def trakStarCSVSync(path):
+def trakStarSync(path):
     trakStarCSVSynthesis(path)
 
     trakDF = pd.read_csv(f"{path}/Trakstar/trakstar_organized.csv")
@@ -30,5 +30,6 @@ def trakStarCSVSync(path):
     finalDF.to_csv(f'{path}/new_trackStar_synced.csv', index =False)
 
 
-
+if __name__ == "__main__":
+    trakStarSync("post/data/")
 

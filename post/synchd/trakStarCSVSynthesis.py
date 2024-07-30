@@ -1,6 +1,7 @@
 import pandas as pd 
 
 def trakStarCSVSynthesis(path):
+    print(path)
     original_file = f'{path}/Trakstar/trakstar.csv'
     original_df = pd.read_csv(original_file, usecols=['SensorID','x','y','z','azimuth','elevation','roll','TrakStar Time'])
 
@@ -8,7 +9,7 @@ def trakStarCSVSynthesis(path):
 
     df = pd.DataFrame(columns=['TrakStar time','SensorID_0','x_0','y_0','z_0','azimuth_0','elevation_0','roll_0','SensorID_1','x_1','y_1','z_1','azimuth_1','elevation_1','roll_1','SensorID_2','x_2','y_2','z_2','azimuth_2','elevation_2','roll_2','SensorID_3','x_3','y_3','z_3','azimuth_3','elevation_3','roll_3'])
 
-subset_trackstar = original_df['TrakStar Time'].iloc[::4].reset_index(drop=True)
+    subset_trackstar = original_df['TrakStar Time'].iloc[::4].reset_index(drop=True) * 1000000000
 
     subset_0 = original_df[['SensorID','x','y','z','azimuth','elevation','roll']].iloc[::4].reset_index(drop=True)
     subset_1 = original_df[['SensorID','x','y','z','azimuth','elevation','roll']].iloc[1::4].reset_index(drop=True)
@@ -23,3 +24,7 @@ subset_trackstar = original_df['TrakStar Time'].iloc[::4].reset_index(drop=True)
     df[['SensorID_3','x_3', 'y_3', 'z_3', 'azimuth_3', 'elevation_3', 'roll_3']] = subset_3
 
     df.to_csv(combined_file, index=False)
+
+if __name__ == "__main__":
+    path = "./data/Inguinal_S113_T3_2024-07-18"
+    trakStarCSVSynthesis(path)

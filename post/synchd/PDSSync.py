@@ -18,33 +18,30 @@ def PDSSync(path):
     obsStampList = obsDF.iloc[:,0].tolist()
     
     finalDF = pd.read_csv(f'{path}/Synched Data/PDS_sync.csv')
-    PDS_cols = pdsDF.columns.tolist()
-    PDS_cols = [PDS_cols[-1]] + PDS_cols[:-1]
-    PDS_cols.remove("Computer Time")
-    PDS_matched = pd.DataFrame(columns=[PDS_cols])
-
+    PDS_matched = pd.DataFrame()
     # print(PDS_cols)
     # for col in PDS_cols:
         # finalDF[col] = pd.NA
 
     iterator = 0
     for i in obsStampList:
-        print(iterator)
-        while True:
+        print(f"PDS: {iterator}")
+        while iterator < len(pdsStampList)-2:
             try:
                 if i >= pdsStampList[iterator] and i < pdsStampList[iterator+1]:
                     PDS_matched = pd.concat([PDS_matched, pdsDF.iloc[[iterator]]], ignore_index=True)
                     break
-            except Exception:
-                print("PDS Sync Error")
+            except Exception as e:
+                print(f"PDS Sync Error: {e}")
                 break
             iterator+=1
 
     finalDF = pd.concat([finalDF, PDS_matched], axis = 1)
+    finalDF = finalDF.drop(columns=['Computer Time'])
     finalDF.to_csv(f'{path}/Synched Data/PDS_sync.csv' , index=False)
 
 
 if __name__ == "__main__":
-    path = "./data/PegT_S221_T1_2024-07-19"
+    path = "./data/Inguinal_S113_T3_2024-07-18"
     PDSSync(path)
 

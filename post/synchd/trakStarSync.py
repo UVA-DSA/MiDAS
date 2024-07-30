@@ -3,7 +3,7 @@ import pandas as pd
 from trakStarCSVSynthesis import trakStarCSVSynthesis
 
 def trakStarSync(path):
-    #trakStarCSVSynthesis(path)
+    trakStarCSVSynthesis(path)
 
     trakDF = pd.read_csv(f"{path}/Trakstar/trakstar_organized.csv")
     trakDecimalList = trakDF.iloc[:,0].tolist()
@@ -27,14 +27,13 @@ def trakStarSync(path):
 
     iterator = 0
     for i in obsStampList:
-        #print(f"trak: {iterator}")
+        print(f"trak: {iterator}")
         while iterator < len(trakStampList) - 1:
             try:
                 if i >= trakStampList[iterator] and i < trakStampList[iterator+1]:
                     trakMatched = pd.concat([trakMatched, trakDF.iloc[[iterator]]], ignore_index=True)
                     break
                 if i < trakStampList[iterator]:
-                    print("empty")
                     trakMatched = pd.concat([trakMatched, zero_row])
                     break
             except Exception as e:

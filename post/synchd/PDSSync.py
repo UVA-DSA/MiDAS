@@ -3,7 +3,7 @@ import glob
 
 def PDSSync(path):
     pdsDF = pd.read_csv(f'{path}/PDS.csv')
-    pdsDF.drop(index=pdsDF.index[0])
+    pdsDF.columns = ["Pedal 1 Pressure","Pedal 2 Pressure","Pedal 3 Pressure","Pedal 4 Pressure","Pedal 5 Pressure","Pedal 6 Pressure","Pedal 7 Pressure","Pedal 1 Pressed","Pedal 2 Pressed","Pedal 3 Pressed","Pedal 4 Pressed","Pedal 5 Pressesd","Pedal 6 Pressed","Pedal 7 Pressed","PDS Time"]
     obsPath = f"{path}/obs/*.csv"
     matchingPath = glob.glob(obsPath)
     obsDF = pd.read_csv(matchingPath[0], index_col=False)
@@ -19,9 +19,6 @@ def PDSSync(path):
     
     finalDF = pd.read_csv(f'{path}/Synched Data/PDS_sync.csv')
     PDS_matched = pd.DataFrame()
-    # print(PDS_cols)
-    # for col in PDS_cols:
-        # finalDF[col] = pd.NA
 
     iterator = 0
     for i in obsStampList:
@@ -37,7 +34,9 @@ def PDSSync(path):
             iterator+=1
 
     finalDF = pd.concat([finalDF, PDS_matched], axis = 1)
-    finalDF = finalDF.drop(columns=['Computer Time'])
+    cols = finalDF.columns.tolist()
+    cols = [cols[-1]] + cols[:-1]
+    finalDF = finalDF[cols]
     finalDF.to_csv(f'{path}/Synched Data/PDS_sync.csv' , index=False)
 
 

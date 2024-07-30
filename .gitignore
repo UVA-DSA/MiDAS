@@ -19,7 +19,7 @@ src/Video/project
 main.exe
 .vscode/
 
-src/trakstar_log.txt
+src/
 
 # Gradle files
 .gradle/
@@ -59,3 +59,5 @@ google-services.json
 
 post/Data/PegT_S221_T1_2024-07-19/obs
 post/Data/PegT_S221_T1_2024-07-19/camera
+
+post/data/INGUINAL_S113_T3_2024-07-18

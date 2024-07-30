@@ -3,8 +3,6 @@ import csv
 from datetime import datetime
 import time
 
-
-
 date_str = '2024-07-16 14:39:37'  # 'YYYY-MM-DD HH:MM:SS'
 
 # Create a datetime object

@@ -18,8 +18,6 @@ def trakStarSync(path):
     matchingPath = glob.glob(obsPath)
     obsDF = pd.read_csv(matchingPath[0], index_col=False)
     obsStampList = obsDF.iloc[:,0].tolist()
-    print(trakStampList[1], "  ", obsStampList[1])
-    print(trakStampList[1] - obsStampList[1])
     finalDF = pd.read_csv(f'{path}/Synched Data/trakstar_sync.csv')
     trakMatched = pd.DataFrame(columns=trakDF.columns)
     zero_row = pd.DataFrame([[0]*29], columns=trakDF.columns)

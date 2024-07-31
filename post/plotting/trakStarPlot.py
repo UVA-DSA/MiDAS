@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 
-original_data = pd.read_csv('data/PegT_S221_T1_2024-07-19/Trakstar/trakstar_organized.csv')
-synced_data = pd.read_csv('data/PegT_S221_T1_2024-07-19/Trakstar/trakstar_synched.csv')
+syncData = pd.read_csv('./data/Bowel_S216_T1_2024-07-18/Synched Data/trakStar_sync.csv')
+originalData = pd.read_csv('./data/Bowel_S216_T1_2024-07-18/Trakstar/trakstar_organized.csv')
 
 
 #need to switch this to sever time instead of file length
@@ -12,12 +12,16 @@ synced_data = pd.read_csv('data/PegT_S221_T1_2024-07-19/Trakstar/trakstar_synche
 
 # print(x_original, x_synced)
 
-figure, axis = plt.subplots(2, 2, figsize=(15, 15))
+figure, axis = plt.subplots(1, 2, figsize=(15, 30))
+axis[1].scatter(syncData.index, syncData['x_0'], color = "blue", s=5)
+axis[1].set_title('Synced x_0 Data vs Frame')
+axis[1].set_ylim(400,900)
+axis[1].set_xlabel("Frame #")
+axis[0].scatter(originalData.index, originalData['x_0'], s=5,color = "red")
+axis[0].set_title('Original x_0 Data vs Frame')
+axis[0].set_ylim(400,900)
+axis[0].set_xlabel("trakStar Data Index")
 
-axis[0, 0].scatter(synced_data.index, synced_data['x_0'], color = "blue")
-axis[0, 0].set_title('synced x_0 data vs frame')
-axis[0, 1].scatter(original_data.index, original_data['x_0'])
-axis[0,1].set_title('original x_0 data vs frame')
 
 # axis[1,0].scatter(synced_data['server_time'], synced_data['smartwatch_1_value_Y_Axis'], color = 'red')
 # axis[1,0].set_title('synced y-axis')

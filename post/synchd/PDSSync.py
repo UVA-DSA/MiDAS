@@ -1,9 +1,23 @@
 import pandas as pd
 import glob
+import csv
 
 def PDSSync(path):
+    cols = ["Pedal 1 Pressure","Pedal 2 Pressure","Pedal 3 Pressure","Pedal 4 Pressure","Pedal 5 Pressure","Pedal 6 Pressure","Pedal 7 Pressure","Pedal 1 Pressed","Pedal 2 Pressed","Pedal 3 Pressed","Pedal 4 Pressed","Pedal 5 Pressesd","Pedal 6 Pressed","Pedal 7 Pressed","PDS Time"]
+    with open(f'{path}/PDS.csv', mode='r', newline='', errors='ignore') as infile:
+        reader = csv.reader((line.replace('\0', '') for line in infile))
+        original = list(reader)
+
+    with open(f'{path}/PDS.csv', mode='w', newline='') as outfile:
+        writer = csv.writer(outfile)
+        writer.writerow(cols)
+        for row in original[1:]:
+            writer.writerow(row)
+
+    
+    
     pdsDF = pd.read_csv(f'{path}/PDS.csv')
-    pdsDF.columns = ["Pedal 1 Pressure","Pedal 2 Pressure","Pedal 3 Pressure","Pedal 4 Pressure","Pedal 5 Pressure","Pedal 6 Pressure","Pedal 7 Pressure","Pedal 1 Pressed","Pedal 2 Pressed","Pedal 3 Pressed","Pedal 4 Pressed","Pedal 5 Pressesd","Pedal 6 Pressed","Pedal 7 Pressed","PDS Time"]
+    # pdsDF.columns = ["Pedal 1 Pressure","Pedal 2 Pressure","Pedal 3 Pressure","Pedal 4 Pressure","Pedal 5 Pressure","Pedal 6 Pressure","Pedal 7 Pressure","Pedal 1 Pressed","Pedal 2 Pressed","Pedal 3 Pressed","Pedal 4 Pressed","Pedal 5 Pressesd","Pedal 6 Pressed","Pedal 7 Pressed","PDS Time"]
     obsPath = f"{path}/obs/*.csv"
     matchingPath = glob.glob(obsPath)
     obsDF = pd.read_csv(matchingPath[0], index_col=False)
@@ -22,7 +36,8 @@ def PDSSync(path):
 
     iterator = 0
     for i in obsStampList:
-        print(f"PDS: {iterator}")
+        if iterator % 1000 < 10:
+            print(f"PDS: {iterator}")
         while iterator < len(pdsStampList)-2:
             try:
                 if i >= pdsStampList[iterator] and i < pdsStampList[iterator+1]:
@@ -35,7 +50,7 @@ def PDSSync(path):
 
     finalDF = pd.concat([finalDF, PDS_matched], axis = 1)
     cols = finalDF.columns.tolist()
-    cols = [cols[-1]] + cols[:-1]
+    cols = [cols[0], cols[-1]] + cols[1:-1]
     finalDF = finalDF[cols]
     finalDF.to_csv(f'{path}/Synched Data/PDS_sync.csv' , index=False)
 

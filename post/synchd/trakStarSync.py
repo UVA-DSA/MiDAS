@@ -27,7 +27,8 @@ def trakStarSync(path):
 
     iterator = 0
     for i in obsStampList:
-        print(f"trak: {iterator}")
+        if iterator % 1000 < 10:
+            print(f"trak: {iterator}")
         while iterator < len(trakStampList) - 1:
             try:
                 if i >= trakStampList[iterator] and i < trakStampList[iterator+1]:

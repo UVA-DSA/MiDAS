@@ -28,10 +28,9 @@ def OBSConvert(path):
 
     # Save the modified DataFrame back to a CSV file
     df.to_csv(matchingPath[0], index=False)
-    df.to_csv(f"{path}/Synched Data/final_sync.csv", index=False)
-    df.to_csv(f"{path}/Synched Data/PDS_sync.csv", index=False)
-    df.to_csv(f"{path}/Synched Data/trakStar_sync.csv", index=False)
-
+    dataLists = ["final_sync", "PDS_sync", "trakStar_sync", "sw_L_acc", "sw_L_gyro", "sw_R_acc", "sw_R_gyro"]
+    for name in dataLists:
+        df.to_csv(f"{path}/Synched Data/{name}.csv", index=False)
     print(f"Timestamps have been converted to nano and saved to {filePath}")
 
 if __name__ == "__main__":

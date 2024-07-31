@@ -1,20 +1,20 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 
-PDSSync = pd.read_csv('./data/Bowel_S216_T1_2024-07-18/Synched Data/PDS_sync.csv')
+PDSSync = pd.read_csv('./plotting/PDS_sync.csv')
 trakSync = pd.read_csv('./data/Bowel_S216_T1_2024-07-18/Synched Data/trakStar_sync.csv')
 
 figure, axis = plt.subplots(2, 1, figsize=(15, 20))
 
-axis[1].scatter(PDSSync.index, PDSSync['Pedal 1 Pressure'], color = "red", label = "Upper Left Pedal",s=10)
-axis[1].scatter(PDSSync.index, PDSSync['Pedal 2 Pressure'], color = "orange", label = "Upper Right Pedal",s=10)
-axis[1].scatter(PDSSync.index, PDSSync['Pedal 3 Pressure'], color = "yellow", label = "Lower Left Pedal",s=10)
-axis[1].scatter(PDSSync.index, PDSSync['Pedal 4 Pressure'], color = "green", label = "Lower Right Pedal",s=10)
-axis[1].scatter(PDSSync.index, PDSSync['Pedal 5 Pressure'], color = "blue", label = "Clutch",s=10)
-axis[1].scatter(PDSSync.index, PDSSync['Pedal 6 Pressure'], color = "purple", label = "Camera",s=10)
-axis[1].scatter(PDSSync.index, PDSSync['Pedal 7 Pressure'], color = "pink", label = "Long",s=10)
+axis[1].plot(PDSSync.index, PDSSync['Pedal 1 Pressed'], color = "red", label = "Upper Left Pedal")
+axis[1].plot(PDSSync.index, PDSSync['Pedal 2 Pressed'], color = "orange", label = "Upper Right Pedal")
+axis[1].plot(PDSSync.index, PDSSync['Pedal 3 Pressed'], color = "yellow", label = "Lower Left Pedal")
+axis[1].plot(PDSSync.index, PDSSync['Pedal 4 Pressed'], color = "green", label = "Lower Right Pedal")
+axis[1].plot(PDSSync.index, PDSSync['Pedal 5 Pressed'], color = "blue", label = "Clutch")
+axis[1].plot(PDSSync.index, PDSSync['Pedal 6 Pressed'], color = "purple", label = "Camera")
+axis[1].plot(PDSSync.index, PDSSync['Pedal 7 Pressed'], color = "pink", label = "Long")
 axis[1].set_title('Synced Pedal Data vs Frame')
-axis[1].set_ylim(-50,14000)
+axis[1].set_ylim(-0.5,1.5)
 axis[1].set_xlabel("Frame #")
 axis[1].legend()
 

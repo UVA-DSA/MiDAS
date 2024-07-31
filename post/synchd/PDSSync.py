@@ -3,7 +3,7 @@ import glob
 import csv
 
 def PDSSync(path):
-    cols = ["Pedal 1 Pressure","Pedal 2 Pressure","Pedal 3 Pressure","Pedal 4 Pressure","Pedal 5 Pressure","Pedal 6 Pressure","Pedal 7 Pressure","Pedal 1 Pressed","Pedal 2 Pressed","Pedal 3 Pressed","Pedal 4 Pressed","Pedal 5 Pressesd","Pedal 6 Pressed","Pedal 7 Pressed","PDS Time"]
+    cols = ["Pedal 1 Pressure","Pedal 2 Pressure","Pedal 3 Pressure","Pedal 4 Pressure","Pedal 5 Pressure","Pedal 6 Pressure","Pedal 7 Pressure","Pedal 1 Pressed","Pedal 2 Pressed","Pedal 3 Pressed","Pedal 4 Pressed","Pedal 5 Pressed","Pedal 6 Pressed","Pedal 7 Pressed","PDS Time"]
     with open(f'{path}/PDS.csv', mode='r', newline='', errors='ignore') as infile:
         reader = csv.reader((line.replace('\0', '') for line in infile))
         original = list(reader)
@@ -17,7 +17,6 @@ def PDSSync(path):
     
     
     pdsDF = pd.read_csv(f'{path}/PDS.csv')
-    # pdsDF.columns = ["Pedal 1 Pressure","Pedal 2 Pressure","Pedal 3 Pressure","Pedal 4 Pressure","Pedal 5 Pressure","Pedal 6 Pressure","Pedal 7 Pressure","Pedal 1 Pressed","Pedal 2 Pressed","Pedal 3 Pressed","Pedal 4 Pressed","Pedal 5 Pressesd","Pedal 6 Pressed","Pedal 7 Pressed","PDS Time"]
     obsPath = f"{path}/obs/*.csv"
     matchingPath = glob.glob(obsPath)
     obsDF = pd.read_csv(matchingPath[0], index_col=False)

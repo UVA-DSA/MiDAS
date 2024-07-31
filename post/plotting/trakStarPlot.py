@@ -13,12 +13,12 @@ originalData = pd.read_csv('./data/Bowel_S216_T1_2024-07-18/Trakstar/trakstar_or
 # print(x_original, x_synced)
 
 figure, axis = plt.subplots(1, 2, figsize=(15, 30))
-axis[1].scatter(syncData.index, syncData['x_0'], color = "blue", s=5)
-axis[1].set_title('Synced x_0 Data vs Frame')
+axis[1].scatter(syncData.index, syncData['roll'], color = "blue", s=5)
+axis[1].set_title('Synced roll_0 Data vs Frame')
 axis[1].set_ylim(400,900)
 axis[1].set_xlabel("Frame #")
-axis[0].scatter(originalData.index, originalData['x_0'], s=5,color = "red")
-axis[0].set_title('Original x_0 Data vs Frame')
+axis[0].scatter(originalData.index, originalData['roll'], s=5,color = "red")
+axis[0].set_title('Original roll_0 Data vs Frame')
 axis[0].set_ylim(400,900)
 axis[0].set_xlabel("trakStar Data Index")
 

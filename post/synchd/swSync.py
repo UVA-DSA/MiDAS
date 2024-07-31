@@ -1,6 +1,6 @@
 import pandas as pd
 import glob
-
+from swCSVSynthesis import swCSVSynth
 
 obs_path = 'data/PegT_S221_T1_2024-07-19/Synched Data/sw_L_acc.csv'
 
@@ -9,7 +9,7 @@ obs_path = 'data/PegT_S221_T1_2024-07-19/Synched Data/sw_L_acc.csv'
 
 def swSync(path):
 
-
+    swCSVSynth(path)
     obsPath = f"{path}/obs/*.csv"
     matchingPath = glob.glob(obsPath)
     obsDF = pd.read_csv(matchingPath[0], index_col=False)

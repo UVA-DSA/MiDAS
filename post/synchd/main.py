@@ -1,31 +1,30 @@
 import pandas as pd
 import glob
-import os
 from OBSconvert import OBSConvert
 from PDSSync import PDSSync
-from trakStarSync import trakStarSync
+from trakStarSync import trakstarSync
+from swSync import swSync
+
+mainPath = 'post/data/*'
+finalPath = f"{mainPath}/Synched Data/final_sync.csv"
+sw_included = False #TOGGLE FOR PEG TRANSFER DATA, IF NOT PEG TRANSFER, SHOULD BE FALSE
 
 if __name__ == "__main__":
-    mainPathCheck = './data/*'
-    mainPath = glob.glob(mainPathCheck)[0]
-
-    os.makedirs(f"{mainPath}/Synched Data/")
-    finalPath = f"{mainPath}/Synched Data/final_sync.csv"
 
     OBSConvert(mainPath)
     PDSSync(mainPath)
-    trakStarSync(mainPath)
+    #trakstarSync(mainPath)
+    if sw_included:
+        swSync(mainPath)
 
-    final_df = pd.read_csv(f"{mainPath}/Synched Data/final_sync.csv")
+
     pds_df = pd.read_csv(f"{mainPath}/Synched Data/PDS_sync.csv")
-    #sw_df = pd.read_csv(f"{mainPath}/Synched Data/SW_sync.csv")
+    sw_df = pd.read_csv(f"{mainPath}/Synched Data/SW_sync.csv")
     trakstar_df = pd.read_csv(f"{mainPath}/Synched Data/trakstar_sync.csv")
-    frames = [pds_df,trakstar_df]
-    for fr in frames:
-        fr = fr.drop('OBS Stamps', axis = 1)
-        final_df = pd.concat([final_df, fr], axis = 1)
-    final_df.to_csv(f'{mainPath}/Synched Data/final_sync.csv', index =False)
 
+    df = pd.DataFrame(columns=['OBS time', 'pds time'])#add the rest of the column names here
+
+    
 
 
 

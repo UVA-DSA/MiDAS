@@ -2,11 +2,6 @@ import pandas as pd
 import glob
 from swCSVSynthesis import swCSVSynth
 
-obs_path = 'data/PegT_S221_T1_2024-07-19/Synched Data/sw_L_acc.csv'
-
-
-
-
 def swSync(path):
 
     swCSVSynth(path)
@@ -33,27 +28,24 @@ def swSync(path):
 
 
     for file in files:
+        swStampList = file[0].iloc[:,0].tolist()
         iterator = 0
         matched = pd.DataFrame()
-        print(file[0])
-        print(len(file[0]))
         for i in obsStampList:
-            # if iterator % 1000 < 10:
-                # print(f"sw: {iterator}")
+            if iterator % 1000 < 5:
+                print(f"sw:{iterator}")
             while iterator < len(file[0]) - 1:
                 try:
-                    if i >= file[0].iloc[:,6][iterator] and i < file[0].iloc[:,6][iterator+1]:
+                    if i >= swStampList[iterator] and i < swStampList[iterator+1]:
                         matched = pd.concat([matched, file[0].iloc[[iterator]]], ignore_index=True)
-                        print("matching")
                         break
-                    if i < file[0].iloc[:,6][iterator]:
+                    if i < swStampList[iterator]:
                         matched = pd.concat([matched, zero_row])
                         break
                 except Exception as e:
-                    # print(f"swSync Error: {e}")
+                    print(f"swSync Error: {e}")
                     break
                 iterator+=1
-
         file[1] = pd.concat([file[1], matched], axis = 1)
         
     files[0][1].to_csv(f'{path}/Synched Data/sw_L_acc.csv', index =False)

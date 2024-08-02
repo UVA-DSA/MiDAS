@@ -14,7 +14,7 @@ def trakStarSync(path):
         except Exception:
             pass
     
-    obsPath = f"{path}/obs/*.csv"
+    obsPath = f"{path}/OBS*.csv"
     matchingPath = glob.glob(obsPath)
     obsDF = pd.read_csv(matchingPath[0], index_col=False)
     obsStampList = obsDF.iloc[:,0].tolist()

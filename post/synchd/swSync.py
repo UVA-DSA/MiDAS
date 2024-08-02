@@ -5,7 +5,7 @@ from swCSVSynthesis import swCSVSynth
 def swSync(path):
 
     swCSVSynth(path)
-    obsPath = f"{path}/obs/*.csv"
+    obsPath = f"{path}/OBS*.csv"
     matchingPath = glob.glob(obsPath)
     obsDF = pd.read_csv(matchingPath[0], index_col=False)
     obsStampList = obsDF.iloc[:,0].tolist()

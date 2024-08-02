@@ -17,7 +17,7 @@ def PDSSync(path):
     
     
     pdsDF = pd.read_csv(f'{path}/PDS.csv')
-    obsPath = f"{path}/obs/*.csv"
+    obsPath = f"{path}/OBS*.csv"
     matchingPath = glob.glob(obsPath)
     obsDF = pd.read_csv(matchingPath[0], index_col=False)
 

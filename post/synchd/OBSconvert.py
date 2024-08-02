@@ -3,7 +3,7 @@ import glob
 
 def OBSConvert(path):
     # Load the CSV file
-    filePath = f"{path}/obs/*.csv"
+    filePath = f"{path}/OBS*.csv"
     matchingPath = glob.glob(filePath)
     df = pd.read_csv(matchingPath[0], header=None, index_col=False)
     df.columns = ['OBS Stamps']

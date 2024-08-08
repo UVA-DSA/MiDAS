@@ -5,6 +5,7 @@ src/Data/
 src/Video/camera/
 src/Video/images/
 src/Smartwatch/test
+post/data
 
 */trakstar_log.txt
 
@@ -56,4 +57,3 @@ google-services.json
 *.hprof
 
 /.conda
-post/data

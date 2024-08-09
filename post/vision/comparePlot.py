@@ -22,13 +22,13 @@ def plot(path):
     axis[0].set_xlabel("Frame #")
     axis[0].legend()
 
-    axis[1].scatter(PDSSync.index, PDSSync['Pedal 1 Pressure'], color = "red", label = "Upper Left Pedal",s=3)
-    axis[1].scatter(PDSSync.index, PDSSync['Pedal 2 Pressure'], color = "yellow", label = "Upper Right Pedal",s=3)
-    axis[1].scatter(PDSSync.index, PDSSync['Pedal 3 Pressure'], color = "green", label = "Lower Left Pedal",s=3)
-    axis[1].scatter(PDSSync.index, PDSSync['Pedal 4 Pressure'], color = "blue", label = "Lower Right Pedal",s=3)
+    axis[1].plot(PDSSync.index, PDSSync['Pedal 1 Pressed'], color = "red", label = "Upper Left Pedal")
+    axis[1].plot(PDSSync.index, PDSSync['Pedal 2 Pressed'], color = "yellow", label = "Upper Right Pedal")
+    axis[1].plot(PDSSync.index, PDSSync['Pedal 3 Pressed'], color = "green", label = "Lower Left Pedal")
+    axis[1].plot(PDSSync.index, PDSSync['Pedal 4 Pressed'], color = "blue", label = "Lower Right Pedal")
 
     axis[1].set_title('Synced Pedal Data vs Frame')
-    axis[1].set_ylim(0,10000)
+    axis[1].set_ylim(0,1.5)
     axis[1].set_xlabel("Frame #")
     axis[1].legend()
 
@@ -37,11 +37,11 @@ def plot(path):
 
 
 if __name__ == '__main__':
-    matchingPath = glob.glob("./post/data/B*")
+    matchingPath = glob.glob("D:/Data MIDAS/B*")
     for path in matchingPath:
         print(path)
         PDSSync = pd.read_csv(f"{path}/Synched Data/PDS_sync.csv")
-        detectionPath = glob.glob(f"{path}/obs/2024*.csv")
+        detectionPath = glob.glob(f"{path}/obs/pedal_detection.csv")
         pedalDetection = pd.read_csv(detectionPath[0])
         try:
             os.mkdir(f"{path}/plots/")

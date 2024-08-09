@@ -1,7 +1,7 @@
 import pandas as pd
 
 if __name__ == "__main__":
-    path = "./plotting/PDS_sync.csv"
+    path = "D:\Data MIDAS\Bowel_S216_T1_2024-07-18\Synched Data\PDS_sync.csv"
     pdsDF = pd.read_csv(path)
     cols = pdsDF.columns.tolist()
     for j in range(1,8):

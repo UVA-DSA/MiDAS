@@ -90,13 +90,20 @@ def extract_text_from_video_to_csv(video_path, regions, output_csv="output.csv")
         # Release the video capture object
         cap.release()
 
-# Example usage:
-video_path = '2024-07-18 16-36-07.mkv'
-regions = [
-    (380, 998, 180, 1042-998),  # (x, y, width, height)
-    (1016, 998, 180, 45),
-    (1332, 998, 180, 45),
-    # Add more regions as needed
-]
+if __name__ == "__main__":
+    # Example usage:
+    video_path = '2024-07-18 16-36-07.mkv'
+    regions = [
+        (380, 998, 180, 1042-998),  # (x, y, width, height)
+        (1016, 998, 180, 45),
+        (1332, 998, 180, 45),
+        # Add more regions as needed
+    ]
+    extract_text_from_video_to_csv(video_path, regions)
 
-extract_text_from_video_to_csv(video_path, regions)
+    # Region Test
+    cap = cv2.VideoCapture(video_path)
+    for i in range(300):
+        cap.get()
+    frame = cap.get()
+    visualize_regions_on_frame(frame, regions=regions)

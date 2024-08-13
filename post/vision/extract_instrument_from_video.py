@@ -92,18 +92,18 @@ def extract_text_from_video_to_csv(video_path, regions, output_csv="output.csv")
 
 if __name__ == "__main__":
     # Example usage:
-    video_path = '2024-07-18 16-36-07.mkv'
+    video_path = "D:/Data MIDAS/Bowel_S216_T1_2024-07-18/obs/2024-07-18 15-48-29.mkv"
     regions = [
         (380, 998, 180, 1042-998),  # (x, y, width, height)
         (1016, 998, 180, 45),
         (1332, 998, 180, 45),
         # Add more regions as needed
     ]
-    extract_text_from_video_to_csv(video_path, regions)
+    # extract_text_from_video_to_csv(video_path, regions)
 
     # Region Test
     cap = cv2.VideoCapture(video_path)
     for i in range(300):
-        cap.get()
-    frame = cap.get()
+        cap.read()
+    ret, frame = cap.read()
     visualize_regions_on_frame(frame, regions=regions)

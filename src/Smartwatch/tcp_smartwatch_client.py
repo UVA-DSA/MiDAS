@@ -10,7 +10,7 @@ from threading import Event
 def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue, recording_dir: str, smartwatch_id: str, thread_stop) -> None:
     try:
         # Create the necessary directories and CSV file for recording data
-        columns: List[str] = ['sw_epoch_ms', 'wrist_position', 'sensor_type', 'value_X_Axis', 'value_Y_Axis', 'value_Z_Axis', 'seq_num' 'server_epoch_ms']
+        columns: List[str] = ['sw_epoch_ms', 'wrist_position', 'sensor_type', 'value_X_Axis', 'value_Y_Axis', 'value_Z_Axis', 'seq_num', 'server_epoch_ms']
         curr_date = datetime.now()
         dt_string = curr_date.strftime("%d-%m-%Y-%H-%M-%S")
         newpath = os.path.join(recording_dir, f"smartwatch_data/sw_{smartwatch_id}/")
@@ -29,7 +29,6 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
  
                 while not connected:
                     if thread_stop.is_set():
-                        # print("[Smartwatch: Thread stop set, exiting..]")
                         break
                     try:
                         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -37,7 +36,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                         print(f"[Smartwatch: Attempting to connect to server {server_ip}:{server_port}]")
                         client_socket.connect((server_ip, server_port))
                         connected = True
-                        print(f"[Smartwatch: Successfully connected to server {server_ip}:{server_port}")
+                        print(f"[Smartwatch: Successfully connected to server {server_ip}:{server_port}]")
                     except Exception as e:
                         print(f"[Smartwatch: Connection failed: {e}. Retrying in 5 seconds...]")
                         time.sleep(5)
@@ -51,9 +50,7 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                 try:
                     while True:
                         try:
-
                             if thread_stop.is_set():
-
                                 client_socket.close()
                                 client_socket = None
 
@@ -67,38 +64,41 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                             client_socket.sendall(message.encode('utf-8'))
 
                             # Receive response from the server
-                            # print("I am here")
-                            response = client_socket.recv(1024)
+                            response = client_socket.recv(8096)
                             if not response:
                                 raise ConnectionError("[Smartwatch: Server closed the connection.]")
                             
-                            sw_data = response.decode('utf-8').split(',')
+                            # The received data is accumulated and separated by semicolons
+                            received_message = response.decode('utf-8')
+                            print(f"[Smartwatch: Received raw data: {received_message}]")
+
+                            # Split the received message by semicolons to get individual data points
+                            data_points = received_message.split(';')
 
                             curr_epoch_time = int(time.time_ns())
 
-                            # Convert to proper types
-                            sw_data[0] = int(sw_data[0])
-                            sw_data[3] = float(sw_data[3])
-                            sw_data[4] = float(sw_data[4])
-                            sw_data[5] = float(sw_data[5])
-                            sw_data[7] = float(sw_data[7])
-                            sw_data.append(curr_epoch_time)
-                            
-                            start_t = time.time_ns()
-                            writer.writerow(sw_data)
-                            end_t = time.time_ns()
-                            
-                            print("CSV Write Time: ", (end_t-start_t)/1e9)
-                            
-                            try:
-                                # Add it to the queue to be processed by the main process
-                                fifo_queue.put(sw_data, block=False)
-                            except Exception as e:
-                                # print("Error when writing to the FIFO: Clearing the queue ",e)
-                                
-                                while not fifo_queue.empty():
-                                    # print("Queue size: ", fifo_queue.qsize())
-                                    fifo_queue.get()
+                            for data_point in data_points:
+                                if data_point.strip():  # Check if the data_point is not empty
+                                    sw_data = data_point.split(',')
+                                    
+                                    # Convert to proper types and append the server timestamp
+                                    sw_data[0] = int(sw_data[0])  # sw_epoch_ms
+                                    sw_data[3] = float(sw_data[3])  # value_X_Axis
+                                    sw_data[4] = float(sw_data[4])  # value_Y_Axis
+                                    sw_data[5] = float(sw_data[5])  # value_Z_Axis
+                                    sw_data[7] = int(sw_data[7])  # seq_num
+                                    sw_data.append(curr_epoch_time)
+
+                                    # Write the data point to the CSV
+                                    writer.writerow(sw_data)
+
+                                    try:
+                                        # Add it to the queue to be processed by the main process
+                                        fifo_queue.put(sw_data, block=False)
+                                    except Exception as e:
+                                        print(f"Error when writing to the FIFO queue: {e}")
+                                        while not fifo_queue.empty():
+                                            fifo_queue.get()
                         
                         except Exception as e:
                             print(f"[Error occurred while communicating with server: {e}]")
@@ -118,22 +118,17 @@ def receive_smartwatch_data(server_ip: str, server_port: int, fifo_queue: Queue,
                 if client_socket:
                     client_socket.close()
                     print("[Smartwatch: Smartwatch connection closed!]")
+                    time.sleep(5)
 
     except KeyboardInterrupt:
         print("[Smartwatch: Smartwatch receival interrupted by user. Exiting...]")
         return
 
+# Example usage:
+smartwatch_1_ip = '127.0.0.1'
+smartwatch_port = 7889
+smartwatch_1_id = 'right'
+smartwatch_1_q = Queue()
+thread_stop = Event()
 
-# smartwatch_1_ip = '172.27.191.158'
-# smartwatch_port = 7889
-# smartwatch_1_id = 'right'
-
-# smartwatch_2_ip = '192.168.0.12'
-# smartwatch_2_id = 'left'
-
-# smartwatch_1_q = Queue()
-# smartwatch_2_q = Queue()
-
-# thread_stop = Event()
-# # Call the function to send the message
-# receive_smartwatch_data(smartwatch_2_ip, smartwatch_port, smartwatch_2_q, './test/', smartwatch_2_id, thread_stop)
+receive_smartwatch_data(smartwatch_1_ip, smartwatch_port, smartwatch_1_q, './test/', smartwatch_1_id, thread_stop)

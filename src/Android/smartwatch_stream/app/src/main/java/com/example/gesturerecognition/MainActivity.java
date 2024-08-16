@@ -35,9 +35,9 @@ public class MainActivity extends Activity implements SensorData.SensorDataCallb
     private String welcomeMsg = "NIST - Cognitive EMS";
     private boolean isStarted = false;
     private SensorData mSensor;
-//    private String watchArm = "Left Wrist";
-//private String message = "DCS - Right Wrist";
-    private String message = "DCS - Left Wrist";
+    //    private String watchArm = "Left Wrist";
+    private String message = "DCS - Right Wrist";
+//    private String message = "DCS - Left Wrlist";
 
     private PowerManager.WakeLock wakeLock;
     private static final String TAG = "myapp:GestureRecognition";
@@ -130,7 +130,7 @@ public class MainActivity extends Activity implements SensorData.SensorDataCallb
         );
     }
 
-//    On click
+    //    On click
     public void start_stopUDPClient(View view){
 
         if(!isStarted) {

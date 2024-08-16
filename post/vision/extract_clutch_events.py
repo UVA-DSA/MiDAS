@@ -53,7 +53,7 @@ def detect_pattern_in_video(video_path, pattern_path, regions, output_csv):
     # Write results to CSV
     with open(output_csv, 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
-        header = ['Frame_ID', 'Instrument_1', 'Instrument_2', 'Instrument_3']
+        header = ['Frame_ID', "Instrument_1", "Instrument_3", "Instrument_4"]
         csvwriter.writerow(header)
         csvwriter.writerows(results)
 

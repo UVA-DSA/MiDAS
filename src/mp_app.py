@@ -112,10 +112,11 @@ def readData(task, rate, list_of_qs, path, thread_stop):
                             "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll","trakstar_time",
                             "trakstar_SensorID", "trakstar_Status","trakstar_x", "trakstar_y", "trakstar_z", "trakstar_azimuth", "trakstar_elevation", "trakstar_roll", "trakstar_time",
                             "video_time", "video_id",
-                            "3d_camera_time", "3d_camera_frame_id",
+                            "intel_time", "intel_frame",
                             'smartwatch_1_time','smartwatch_1_wrist_position','smartwatch_1_sensor_type','smartwatch_1_value_X_Axis','smartwatch_1_value_Y_Axis','smartwatch_1_value_Z_Axis',
                             'smartwatch_2_time','smartwatch_2_wrist_position','smartwatch_2_sensor_type','smartwatch_2_value_X_Axis','smartwatch_2_value_Y_Axis','smartwatch_2_value_Z_Axis',
-                            'PDS_time','pedal_1', 'pedal_2', 'pedal_3', 'pedal_4', 'pedal_5', 'pedal_6', 'pedal_7', 'pedal_1_pressed', 'pedal_2_pressed', 'pedal_3_pressed', 'pedal_4_pressed', 'pedal_5_pressed', 'pedal_6_pressed', 'pedal_7_pressed'])
+                            'PDS_time','pedal_1', 'pedal_2', 'pedal_3', 'pedal_4', 'pedal_5', 'pedal_6', 'pedal_7', 'pedal_1_pressed', 'pedal_2_pressed', 'pedal_3_pressed', 'pedal_4_pressed', 'pedal_5_pressed', 'pedal_6_pressed', 'pedal_7_pressed',
+                            'zed_time', 'zed_frame'])
     
         while True:
             if thread_stop.is_set():
@@ -129,7 +130,8 @@ def readData(task, rate, list_of_qs, path, thread_stop):
                 local_time = int(time.time_ns())
                 
                 trackstar_data = None
-                camera_data = None
+                camera_data_intel = None
+                camera_data_zed = None
                 smartwatch_1_data = None
                 smartwatch_2_data = None
                 video_data = None
@@ -141,7 +143,12 @@ def readData(task, rate, list_of_qs, path, thread_stop):
                     pass
 
                 try:
-                    camera_data = list_of_qs[1].get(block=False)
+                    camera_data_intel = list_of_qs[1].get(block=False)
+                except:
+                    pass
+
+                try:
+                    camera_data_zed = list_of_qs[-1].get(block=False)
                 except:
                     pass
                     
@@ -174,8 +181,11 @@ def readData(task, rate, list_of_qs, path, thread_stop):
                 if video_data is None:
                     video_data = [0, 0, 0]
 
-                if camera_data is None:
-                    camera_data = [0, 0]
+                if camera_data_intel is None:
+                    camera_data_intel = [-1, -1]
+
+                if camera_data_zed is None:
+                    camera_data_zed = [-1, -1]
                     
                 if smartwatch_1_data is None:
                     smartwatch_1_data = [0,0,0,0,0,0]
@@ -190,7 +200,7 @@ def readData(task, rate, list_of_qs, path, thread_stop):
                     PDS_data = [-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2]
                 
                 # print("Writing to csv file ..")
-                collectedData = [local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], trackstar_data[9], trackstar_data[10], trackstar_data[11], trackstar_data[12], trackstar_data[13], trackstar_data[14], trackstar_data[15], trackstar_data[16], trackstar_data[17], trackstar_data[18], trackstar_data[19], trackstar_data[20], trackstar_data[21], trackstar_data[22], trackstar_data[23], trackstar_data[24], trackstar_data[25], trackstar_data[26], trackstar_data[27], trackstar_data[28], trackstar_data[29], trackstar_data[30], trackstar_data[31], trackstar_data[32], trackstar_data[33], trackstar_data[34], trackstar_data[35],video_data[0], video_data[1], camera_data[0], camera_data[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5],PDS_data[0],PDS_data[1],PDS_data[2],PDS_data[3],PDS_data[4],PDS_data[5],PDS_data[6],PDS_data[7],PDS_data[8],PDS_data[9],PDS_data[10],PDS_data[11],PDS_data[12],PDS_data[13],PDS_data[14]]
+                collectedData = [local_time, trackstar_data[0], trackstar_data[1], trackstar_data[2], trackstar_data[3], trackstar_data[4], trackstar_data[5], trackstar_data[6], trackstar_data[7], trackstar_data[8], trackstar_data[9], trackstar_data[10], trackstar_data[11], trackstar_data[12], trackstar_data[13], trackstar_data[14], trackstar_data[15], trackstar_data[16], trackstar_data[17], trackstar_data[18], trackstar_data[19], trackstar_data[20], trackstar_data[21], trackstar_data[22], trackstar_data[23], trackstar_data[24], trackstar_data[25], trackstar_data[26], trackstar_data[27], trackstar_data[28], trackstar_data[29], trackstar_data[30], trackstar_data[31], trackstar_data[32], trackstar_data[33], trackstar_data[34], trackstar_data[35],video_data[0], video_data[1], camera_data_intel[0], camera_data_intel[1], smartwatch_1_data[0],smartwatch_1_data[1],smartwatch_1_data[2],smartwatch_1_data[3],smartwatch_1_data[4],smartwatch_1_data[5] , smartwatch_2_data[0],smartwatch_2_data[1],smartwatch_2_data[2],smartwatch_2_data[3],smartwatch_2_data[4],smartwatch_2_data[5],PDS_data[0],PDS_data[1],PDS_data[2],PDS_data[3],PDS_data[4],PDS_data[5],PDS_data[6],PDS_data[7],PDS_data[8],PDS_data[9],PDS_data[10],PDS_data[11],PDS_data[12],PDS_data[13],PDS_data[14], camera_data_zed[0], camera_data_zed[1]]
                 csv_writer.writerow(collectedData)
                 csv_file.flush()
                 
@@ -218,7 +228,8 @@ def startProcesses(path, rate, task, watch_toggle):
     manager = MyManager()
     manager.start()
     
-    camera_q = manager.LifoQueue(CAPTURE_Q_SIZE)
+    camera_q_intel = manager.LifoQueue(CAPTURE_Q_SIZE)
+    camera_q_zed = manager.LifoQueue(CAPTURE_Q_SIZE)
     capture_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     depth_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
     zed_img_q = manager.LifoQueue(CAPTURE_Q_SIZE)
@@ -230,17 +241,17 @@ def startProcesses(path, rate, task, watch_toggle):
     gui_q = manager.LifoQueue(GUI_Q_SIZE)
     audio_q = manager.LifoQueue(AUDIO_Q_SIZE)
 
-    list_of_qs = [capture_q, camera_q, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q, audio_q, zed_img_q]
+    list_of_qs = [capture_q, camera_q_intel, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q, audio_q, zed_img_q, camera_q_zed]
 
     video_capture_process = Process(name="OBS Virtual Camera Capture", target=send_vid_data, args=(capture_q, path, OBS_img_q, thread_stop))
     video_capture_process.daemon = True
 
     camera_handler_intel = get_camera_handler(camera_type_1)
-    camera_capture_process = Process(name="Depth Camera Intel Capture", target=camera_handler_intel, args=(camera_q, path, depth_img_q, thread_stop))
+    camera_capture_process = Process(name="Depth Camera Intel Capture", target=camera_handler_intel, args=(camera_q_intel, path, depth_img_q, thread_stop))
     camera_capture_process.daemon = True
 
     camera_handler_zed = get_camera_handler(camera_type_2)
-    camera_capture_process_zed = Process(name="Depth Camera Zed Capture", target=camera_handler_zed, args=(camera_q, path, zed_img_q, thread_stop))
+    camera_capture_process_zed = Process(name="Depth Camera Zed Capture", target=camera_handler_zed, args=(camera_q_zed, path, zed_img_q, thread_stop))
     camera_capture_process_zed.daemon = True
     
     trakstar_process = Process(name="TrakStar Capture", target=get_trakstar_data, args=(trackstar_q, path, thread_stop))

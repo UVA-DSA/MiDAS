@@ -266,6 +266,15 @@ def updateIndicators(gui_q,cam_q, OBS_q, zed_q, thread_stop):
                     watchRGyr.config(text=data)
          
 
+            if(out[40] == -1):
+                camOneInd.config(bg="red",text="Error")
+            else:
+                camOneInd.config(bg="green", text="Good")
+            if(out[69] == -1):
+                camTwoInd.config(bg="red",text="Error")
+            else:
+                camTwoInd.config(bg="green", text="Good")
+
         #Sets indicators if queue has no data
         except queue.Empty:
             ardInd.config(bg="red", text="Error")
@@ -288,8 +297,9 @@ def updateIndicators(gui_q,cam_q, OBS_q, zed_q, thread_stop):
         colorBars_combined.paste(colorBars, (0, 0))
         colorBars_combined.paste(colorBars, (320, 0))
         colorBarCombinedstk = ImageTk.PhotoImage(colorBars_combined)
-        ### Camera 1 Display Updator ###
 
+
+        ### Camera 1 Display Updator ###
         try:
             #Gets image and converts it from cv2 to pillow formats
             image = cam_q.get(False)
@@ -298,13 +308,10 @@ def updateIndicators(gui_q,cam_q, OBS_q, zed_q, thread_stop):
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
-            camOneInd.config(bg="green", text="Good")
             camOne.configure(image=image,width=320,height=240)
             camOne.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
-            camOneInd.config(bg="red",text="Error")
-
             camOne.configure(image = colorBarstk,width=320,height=240)
             camOne.image=colorBarstk
 
@@ -319,12 +326,10 @@ def updateIndicators(gui_q,cam_q, OBS_q, zed_q, thread_stop):
             image = Image.fromarray(image)
             image = ImageTk.PhotoImage(image)
             #Displays image and sets indicator as good
-            camTwoInd.config(bg="green", text="Good")
             camTwo.configure(image=image,width=320,height=240)
             camTwo.image = image
         #Sets indicator is queue has no data
         except queue.Empty:
-            camTwoInd.config(bg="red",text="Error")
             camTwo.configure(image = colorBarstk,width=320,height=240)
             camTwo.image=colorBarstk
 

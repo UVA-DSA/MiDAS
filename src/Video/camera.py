@@ -11,7 +11,7 @@ import pyzed.sl as sl
 import numpy as np
 import cv2
 
-from config import enable_display
+from config import enable_display, intel_exposure_value
 
 
 class ReconnectException(Exception):
@@ -48,10 +48,10 @@ def _init_filesystem(path, cam_type: str):
 class IntelCamera:
 
     # configs for the intel 3D camera capture
-    RGB_DIM = (640, 480) # dimension of the rgb frames
-    RGB_FPS = 30 # frame-rate of the rgb stream
-    DEPTH_DIM = (640, 480) # dimension of the depth frames
-    DEPTH_FPS = 30 # frame-rate of the depth stream
+    RGB_DIM = (1280, 720) # dimension of the rgb frames
+    RGB_FPS = 15 # frame-rate of the rgb stream
+    DEPTH_DIM = (1280, 720) # dimension of the depth frames
+    DEPTH_FPS = 15 # frame-rate of the depth stream
     ALIGN_FRAMES = True # align the rgb image to the depth image
     APPLY_FILTERS = False
     USE_DECIMATION_FILTER = False
@@ -138,7 +138,7 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
             print(f"Camera device: {device_product_line} is connected")
         except:
             print("Intel Camera Not Found")
-            return
+            continue
         
         config.enable_stream(rs.stream.depth, *IntelCamera.DEPTH_DIM, rs.format.z16, IntelCamera.DEPTH_FPS)
         config.enable_stream(rs.stream.color, *IntelCamera.RGB_DIM, rs.format.bgr8, IntelCamera.RGB_FPS)
@@ -148,6 +148,16 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
 
         # Start streaming
         profile = pipeline.start(config)
+
+        # adjust the exposure
+        depth_sensor = pipeline.get_active_profile().get_device().first_depth_sensor()
+        if intel_exposure_value == "auto":
+            print("Intel: auto exposure")
+            depth_sensor.set_option(rs.option.enable_auto_exposure, True)
+        else:
+            print(f"Intel: exposure set to: {intel_exposure_value}")
+            exposureValue = intel_exposure_value
+            depth_sensor.set_option(rs.option.exposure, exposureValue)
 
         colorizer = rs.colorizer()
         try:
@@ -177,6 +187,11 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
                     align_to = rs.stream.color
                     align = rs.align(align_to)
                     frames = align.process(frames)
+
+                try:
+                    q.put([timestamp, frame_num], block=False)
+                except:
+                    pass
 
 
                 if enable_display:
@@ -229,12 +244,6 @@ def intel_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop):
                     except:
                         pass
 
-                    
-                    try:
-                        q.put([timestamp, frame_num], block=False)
-                    except:
-                        pass
-
 
         except KeyboardInterrupt:
             # Stop streaming
@@ -260,13 +269,19 @@ class ZedCamera:
     FILL = False
 
 def zed_cleanup(zed: sl.Camera, csv_file):
-    zed.disable_recording()
-    zed.close()
-    csv_file.close()
+    print("[ZED Process: Thread stop set, exiting from main loop...]")
+    try:
+        csv_file.close()
+        zed.disable_recording()
+        zed.close()
+    except:
+        pass
 
 def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
 
     part_id = 0
+
+    init_time = time.time()
 
     while True:
 
@@ -278,9 +293,8 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
         init_params.coordinate_units = sl.UNIT.MILLIMETER # Use millimeter units (for depth measurements)
         init_params.depth_minimum_distance = 120.0 # Set the minimum depth perception distance to 12cm
         
-        
         recordingParameters = sl.RecordingParameters()
-        recordingParameters.compression_mode = ZedCamera.COMPRESSION
+        # recordingParameters.compression_mode = ZedCamera.COMPRESSION
 
         if thread_stop.is_set():
             zed_cleanup(zed, csv_file)
@@ -304,7 +318,7 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
                 if thread_stop.is_set():
                     print("[ZED Process: Thread stop set, exiting from connection loop...]")
                     zed_cleanup(zed, csv_file)
-                    return
+                    break
                 err = zed.open(init_params)
                 time.sleep(1)
 
@@ -319,46 +333,53 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
                 if thread_stop.is_set():
                     print("[ZED Process: Thread stop set, exiting from recording loop...]")
                     zed_cleanup(zed, csv_file)
-                    return
+                    break
 
-                if enable_display:
+                image = sl.Mat()
+                depth_map = sl.Mat()
 
-                    image = sl.Mat()
-                    depth_map = sl.Mat()
+                runtime_parameters = sl.RuntimeParameters()
+                if ZedCamera.FILL:
+                    runtime_parameters.sensing_mode = sl.SENSING_MODE.FILL
 
-                    runtime_parameters = sl.RuntimeParameters()
-                    if ZedCamera.FILL:
-                        runtime_parameters.sensing_mode = sl.SENSING_MODE.FILL
+                if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS :
+                    # A new image and depth is available if grab() returns SUCCESS
+                    timestamp = zed.get_timestamp(sl.TIME_REFERENCE.CURRENT)  # Get the timestamp at the time the image was captured
+                    frame_num += 1
+                    _add_record(csv_writer, timestamp.get_nanoseconds(), frame_num)
+                    try:
+                        q.put([timestamp.get_nanoseconds(), frame_num], block=False)
+                    except:
+                        q.get(block=False)
+                        pass
 
-                    if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS :
-                        # A new image and depth is available if grab() returns SUCCESS
+                    if time.time() - init_time > 60*8:
+                        init_time = time.time()
+                        raise ReconnectException()
+                  
+                    if enable_display:
                         zed.retrieve_image(image, sl.VIEW.SIDE_BY_SIDE) # Retrieve left image
                         zed.retrieve_measure(depth_map, sl.MEASURE.DEPTH) # Retrieve depth
-                        timestamp = zed.get_timestamp(sl.TIME_REFERENCE.CURRENT)  # Get the timestamp at the time the image was captured
+
 
                         try:
                             img_q.put(image.get_data(), block=False)
                         except:
                             img_q.get(block=False)
                             pass
-
-                        frame_num += 1
-                        _add_record(csv_writer, timestamp.get_nanoseconds(), frame_num)
                         
-                        try:
-                            q.put([timestamp.get_nanoseconds(), frame_num], block=False)
-                        except:
-                            q.get(block=False)
-                            pass
+                        
 
 
-                        # cv2.namedWindow('Zed', cv2.WINDOW_AUTOSIZE)
-                        # cv2.imshow('Zed', image.get_data())
+                            # cv2.namedWindow('Zed', cv2.WINDOW_AUTOSIZE)
+                            # cv2.imshow('Zed', image.get_data())
 
-                        # key = cv2.waitKey(1)
-                        # if key & 0xFF == ord('q') or key == 27:
-                        #     cv2.destroyAllWindows()
-                        #     raise Exception()
+                            # key = cv2.waitKey(1)
+                            # if key & 0xFF == ord('q') or key == 27:
+                            #     cv2.destroyAllWindows()
+                            #     raise Exception()
+                    else:
+                        pass
                 else:
                     raise ReconnectException() # to trigger the exception handling and trying to reconnect
 

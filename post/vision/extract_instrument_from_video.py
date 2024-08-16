@@ -49,7 +49,7 @@ def extract_text_from_video_to_csv(video_path, regions, output_csv="output.csv")
         csv_writer = csv.writer(csv_file)
         
         # Write the header row
-        headers = ["Frame ID"] + [f"Instrument {i+1}" for i in range(len(regions))]
+        headers = ["Frame ID"] + ["Instrument_1", "Instrument_3", "Instrument_4"]
         csv_writer.writerow(headers)
 
         # Capture the video using OpenCV

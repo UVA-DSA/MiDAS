@@ -1,5 +1,3 @@
-
-
 import cv2
 import pytesseract
 from PIL import Image
@@ -35,7 +33,7 @@ def visualize_regions_on_frame(frame, regions):
 
 
 
-def extract_text_from_video_to_csv(video_path, regions, output_csv="output.csv"):
+def extract_text_from_video_to_csv(video_path, regions, output_csv="./post/vision/output.csv"):
     """
     Extracts text from specific regions of each frame in a video and saves the results in a CSV file.
 
@@ -56,7 +54,7 @@ def extract_text_from_video_to_csv(video_path, regions, output_csv="output.csv")
         cap = cv2.VideoCapture(video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        every_x_seconds = 10
+        every_x_seconds = 1
 
 
         frame_number = 0
@@ -99,11 +97,11 @@ if __name__ == "__main__":
         (1332, 998, 180, 45),
         # Add more regions as needed
     ]
-    # extract_text_from_video_to_csv(video_path, regions)
+    extract_text_from_video_to_csv(video_path, regions)
 
-    # Region Test
-    cap = cv2.VideoCapture(video_path)
-    for i in range(300):
-        cap.read()
-    ret, frame = cap.read()
-    visualize_regions_on_frame(frame, regions=regions)
+    # # Region Test
+    # cap = cv2.VideoCapture(video_path)
+    # for i in range(300):
+    #     cap.read()
+    # ret, frame = cap.read()
+    # visualize_regions_on_frame(frame, regions=regions)

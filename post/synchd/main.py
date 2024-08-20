@@ -11,7 +11,12 @@ sw_included = False #TOGGLE FOR PEG TRANSFER DATA, IF NOT PEG TRANSFER, SHOULD B
 
 if __name__ == "__main__":
     matchingPath = glob.glob("D:/Data MIDAS/*")
+    file = open("log.txt", "a")
     for mainPath in matchingPath:
+        if mainPath[0] == "P":
+            sw_included = True
+        else:
+            sw_included = False         
         finalPath = f"{mainPath}/Synched Data/final_sync.csv"
         print(mainPath)
         try:
@@ -22,13 +27,21 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"An error occurred: {e}")
 
-        OBSConvert(mainPath)
-        PDSSync(mainPath)
-        trakStarSync(mainPath)
-        if sw_included:
-            swSync(mainPath)
-        ZedSync(mainPath)
-
+        try:
+            OBSConvert(mainPath)
+        except Exception as e:
+            file.write(f"{mainPath}, {e}")
+            continue
+        
+        try:
+            PDSSync(mainPath)
+            trakStarSync(mainPath)
+            if sw_included:
+                swSync(mainPath)
+            ZedSync(mainPath)
+        except Exception as e:
+            file.write(f"{mainPath}, {e}")
+            continue
         finalDF = pd.read_csv(finalPath)
         pdsDF = pd.read_csv(f"{mainPath}/Synched Data/PDS_sync.csv")
         swLADF = pd.read_csv(f"{mainPath}/Synched Data/sw_L_acc.csv")

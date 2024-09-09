@@ -8,9 +8,10 @@ from swSync import swSync
 from zeddSync import ZedSync
 
 sw_included = False #TOGGLE FOR PEG TRANSFER DATA, IF NOT PEG TRANSFER, SHOULD BE FALSE
+root_dir = '/standard/UVA-DSA/Robotic_Surgery_Bootcamp_2024/Data MIDAS/*'
 
 if __name__ == "__main__":
-    matchingPath = glob.glob("D:/Data MIDAS/*")
+    matchingPath = sorted(glob.glob(root_dir))
     file = open("log.txt", "a")
     for mainPath in matchingPath:
         if mainPath[0] == "P":
@@ -18,7 +19,6 @@ if __name__ == "__main__":
         else:
             sw_included = False         
         finalPath = f"{mainPath}/Synched Data/final_sync.csv"
-        print(mainPath)
         try:
             os.mkdir(f"{mainPath}/Synched Data/")
             print(f"Directory created successfully.")
@@ -26,30 +26,39 @@ if __name__ == "__main__":
             print(f"Directory already exists.")
         except Exception as e:
             print(f"An error occurred: {e}")
-
+        print("Path", mainPath)
         try:
             OBSConvert(mainPath)
         except Exception as e:
-            file.write(f"{mainPath}, {e}")
+            file.write(f"{mainPath}, {e}\n")
             continue
         
         try:
             PDSSync(mainPath)
-            trakStarSync(mainPath)
-            if sw_included:
-                swSync(mainPath)
-            ZedSync(mainPath)
         except Exception as e:
             file.write(f"{mainPath}, {e}")
-            continue
+        try:
+            trakStarSync(mainPath)
+        except Exception as e:
+            file.write(f"{mainPath}, {e}")
+        try:
+            if sw_included:
+                swSync(mainPath)
+        except Exception as e:
+            file.write(f"{mainPath}, {e}")
+        try:
+            ZedSync(mainPath)
+        except Exception as e: 
+            file.write(f"{mainPath}, {e}")
+        
         finalDF = pd.read_csv(finalPath)
         pdsDF = pd.read_csv(f"{mainPath}/Synched Data/PDS_sync.csv")
         swLADF = pd.read_csv(f"{mainPath}/Synched Data/sw_L_acc.csv")
         swLGDF = pd.read_csv(f"{mainPath}/Synched Data/sw_L_gyro.csv")
         swRADF = pd.read_csv(f"{mainPath}/Synched Data/sw_R_acc.csv")
         swRGDF = pd.read_csv(f"{mainPath}/Synched Data/sw_R_gyro.csv")
-        trakstarDF = pd.read_csv(f"{mainPath}/Synched Data/trakStar_sync.csv")
-        zeddDF = pd.read_csv(f"{mainPath}/Synched Data/zedd_sync.csv")
+        trakstarDF = pd.read_csv(f"{mainPath}/Synched Data/trakstar_sync.csv")
+        zeddDF = pd.read_csv(f"{mainPath}/Synched Data/zed_sync.csv")
         data = [zeddDF,pdsDF,trakstarDF]
         if sw_included:
             sw = [swLADF,swLGDF,swRADF,swRGDF]

@@ -90,7 +90,7 @@ if __name__ == '__main__':
     matchingPath = glob.glob("D:/Data MIDAS/*")
     for path in matchingPath:
         print(path)
-        trakSync = pd.read_csv(f"{path}/Synched Data/trakStar_sync.csv")
+        trakSync = pd.read_csv(f"{path}/Synched Data/trakstar_sync.csv")
         PDSSync = pd.read_csv(f"{path}/Synched Data/PDS_sync.csv")
         trakOr = pd.read_csv(f"{path}/Trakstar/trakstar_organized.csv")
         PDSOr = pd.read_csv(f"{path}/PDS.csv")

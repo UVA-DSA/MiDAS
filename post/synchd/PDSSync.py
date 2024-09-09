@@ -35,7 +35,7 @@ def PDSSync(path):
 
     iterator = 0
     for i in obsStampList:
-        if iterator % 1000 < 5:
+        if iterator % 10000 < 3:
             print(f"PDS: {iterator}")
         while iterator < len(pdsStampList)-2:
             try:

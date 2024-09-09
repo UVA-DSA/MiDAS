@@ -25,7 +25,7 @@ def trakStarSync(path):
 
     iterator = 0
     for i in obsStampList:
-        if iterator % 10000 < 10:
+        if iterator % 15000 < 5:
             print(f"trak: {iterator}")
         while iterator < len(trakStampList) - 1:
             try:
@@ -40,7 +40,7 @@ def trakStarSync(path):
                 break
             iterator+=1
     finalDF = pd.concat([finalDF, trakMatched], axis = 1)
-    finalDF.to_csv(f'{path}/Synched Data/trakStar_sync.csv', index =False)
+    finalDF.to_csv(f'{path}/Synched Data/trakstar_sync.csv', index =False)
 
 
 if __name__ == "__main__":

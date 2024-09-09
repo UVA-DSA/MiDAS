@@ -43,11 +43,12 @@ def extractZed(path):
                     break
 
 if __name__ == "__main__":
-    paths = glob.glob("D:/Data MIDAS/*")
+    paths = glob.glob("/standard/UVA-DSA/Robotic_Surgery_Bootcamp_2024/Data MIDAS/")
     Err = []
     for path in paths:
         try:
-            extractZed(path)
+            print("Processing ", path)
+            # extractZed(path)
         except Exception as e:
             Err.append([path, e])
     print(Err)

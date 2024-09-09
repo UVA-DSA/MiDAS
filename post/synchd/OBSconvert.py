@@ -1,5 +1,4 @@
 import pandas as pd
-import dask as dd
 import glob
 
 chunkList = []
@@ -17,14 +16,14 @@ def OBSConvert(path):
             if(i % 3 == 1):
                 try:
                     df.iloc[i,0] = df.iloc[i,0] + 333333
-                except Exception:
-                    print("ouch")
+                except Exception as e:
+                    print(e)
                     pass
             elif(i%3 == 2):
                 try:
                     df.iloc[i,0] = df.iloc[i,0] + 666666
-                except Exception:
-                    print("ouch")
+                except Exception as e:
+                    print(e)
 
                     pass
         chunkList.append(df)
@@ -33,7 +32,7 @@ def OBSConvert(path):
 
     # Save the modified DataFrame back to a CSV file
     df.to_csv(matchingPath[0], index=False)
-    dataLists = ["final_sync", "PDS_sync", "trakStar_sync", "sw_L_acc", "sw_L_gyro", "sw_R_acc", "sw_R_gyro", "zed_sync"]
+    dataLists = ["final_sync", "PDS_sync", "trakstar_sync", "sw_L_acc", "sw_L_gyro", "sw_R_acc", "sw_R_gyro", "zed_sync"]
     for name in dataLists:
         df.to_csv(f"{path}/Synched Data/{name}.csv", index=False)
     print(f"Timestamps have been converted to nano and saved to {filePath}")

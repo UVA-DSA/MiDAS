@@ -1,0 +1,2 @@
+/standard/UVA-DSA/Robotic_Surgery_Bootcamp_2024/Data MIDAS/BOWL_ANAS_S109_T1_2024-07-17, [Errno 2] No such file or directory: '/standard/UVA-DSA/Robotic_Surgery_Bootcamp_2024/Data MIDAS/BOWL_ANAS_S109_T1_2024-07-17/camera/zed/timestamps.csv'/standard/UVA-DSA/Robotic_Surgery_Bootcamp_2024/Data MIDAS/BOWL_ANAS_S109_T1_2024-07-17, 
+/standard/UVA-DSA/Robotic_Surgery_Bootcamp_2024/Data MIDAS/BOWL_ANAS_S109_T1_2024-07-17, 

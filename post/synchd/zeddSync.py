@@ -4,7 +4,7 @@ import glob
 import csv
 
 def ZedSync(path):
-    zeddDF = pd.read_csv(f'{path}/camera/zed/timestamps.csv')
+    zeddDF = pd.read_csv(f'{path}/camera/Zed/timestamps.csv')
     zeddDF['File Number'] = np.NAN
     zeddDF.columns = ["Zed Stamps", "ID", "File Number"]
     obsPath = f"{path}/OBS*.csv"
@@ -21,7 +21,7 @@ def ZedSync(path):
     fileNum = 0
     iterator = 0
     for i in obsStampList:
-        if iterator % 1000 < 5:
+        if iterator % 10000 < 3:
             print(f"Zedd: {iterator}")
         while iterator < len(zeddStampList)-2:
             try:

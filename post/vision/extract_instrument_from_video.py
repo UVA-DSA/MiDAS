@@ -47,7 +47,7 @@ def extract_text_from_video_to_csv(video_path, regions, output_csv="./post/visio
         csv_writer = csv.writer(csv_file)
         
         # Write the header row
-        headers = ["Frame ID"] + ["Instrument_1", "Instrument_3", "Instrument_4"]
+        headers = ["Frame ID"] + ["Instrument_1", "Instrument_2", "Instrument_3", "Instrument_4"]
         csv_writer.writerow(headers)
 
         # Capture the video using OpenCV
@@ -55,6 +55,7 @@ def extract_text_from_video_to_csv(video_path, regions, output_csv="./post/visio
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         every_x_seconds = 1
+        print(fps)
 
 
         frame_number = 0
@@ -65,7 +66,7 @@ def extract_text_from_video_to_csv(video_path, regions, output_csv="./post/visio
                 break  # End of video
 
             row = [frame_number]
-            if frame_number % (fps * every_x_seconds) == 0:
+            if frame_number % int(fps * every_x_seconds) == 0:
                 print(frame_number, " of ", total_frames, " is being processed")
                 for i, region in enumerate(regions):
                     x, y, w, h = region
@@ -90,9 +91,10 @@ def extract_text_from_video_to_csv(video_path, regions, output_csv="./post/visio
 
 if __name__ == "__main__":
     # Example usage:
-    video_path = "D:/Data MIDAS/Bowel_S216_T1_2024-07-18/obs/2024-07-18 15-48-29.mkv"
+    video_path = "./2024-07-18 16-36-07.mkv"
     regions = [
-        (380, 998, 180, 1042-998),  # (x, y, width, height)
+        (380, 998, 180, 45),  # (x, y, width, height)
+        (700, 998, 180, 45),
         (1016, 998, 180, 45),
         (1332, 998, 180, 45),
         # Add more regions as needed

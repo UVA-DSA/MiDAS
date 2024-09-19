@@ -1,3 +1,4 @@
+
 import cv2
 import numpy as np
 import csv
@@ -53,7 +54,7 @@ def detect_pattern_in_video(video_path, pattern_path, regions, output_csv):
     # Write results to CSV
     with open(output_csv, 'w', newline='') as csvfile:
         csvwriter = csv.writer(csvfile)
-        header = ['Frame_ID', "Instrument_1", "Instrument_3", "Instrument_4"]
+        header = ['Frame_ID', "Instrument_1", "Instrument_2" "Instrument_3", "Instrument_4"]
         csvwriter.writerow(header)
         csvwriter.writerows(results)
 
@@ -63,8 +64,9 @@ pattern_path = 'pattern.png'
 h = w = 11
 regions = [
     (365, 999, w, h),   # Instrument 1
-    (999, 999, w, h),   # Instrument 2
-    (1316, 999, w, h)   # Instrument 3
+    (682, 999, w, h),    # Instrument 2
+    (999, 999, w, h),   # Instrument 3
+    (1316, 999, w, h)   # Instrument 4
 ]
 output_csv = 'clutch_events.csv'
 

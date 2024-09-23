@@ -29,6 +29,38 @@ class ColoredSlider(QSlider):
         self.annotations = annotations
         self.update()
 
+from PyQt5.QtWidgets import QToolTip
+from PyQt5.QtCore import QEvent
+
+from PyQt5.QtWidgets import QToolTip
+from PyQt5.QtCore import QEvent
+
+class ColoredSlider(QSlider):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.annotations = []
+        self.setMouseTracking(True)
+        self.installEventFilter(self)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        for annotation in self.annotations:
+            painter.fillRect(annotation['rect'], annotation['color'])
+
+    def update_annotations(self, annotations):
+        self.annotations = annotations
+        self.update()
+
+    def eventFilter(self, source, event):
+        if event.type() == QEvent.MouseMove:
+            for annotation in self.annotations:
+                if annotation['rect'].contains(event.pos()):
+                    QToolTip.showText(self.mapToGlobal(event.pos()), annotation['tooltip'])
+                    return True
+            QToolTip.hideText()
+        return super().eventFilter(source, event)
+
 class VideoAnnotationApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -537,7 +569,18 @@ class VideoAnnotationApp(QWidget):
                 y_pos = track * height  # Position each track's annotations vertically
 
                 rect = QRect(start_pos, y_pos, end_pos - start_pos, height)
-                annotations.append({'rect': rect, 'color': self.track_colors[track]})
+                
+                # Create tooltip content based on track number
+                if track < 3:  # Tracks 1, 2, 3
+                    tooltip = f"Verb: {annotation['verb']}\nInstrument: {annotation['instrument']}\nTarget: {annotation['target']}"
+                else:  # Track 4
+                    tooltip = f"Gesture: {annotation['gesture']}\nPhase: {annotation['phase']}"
+
+                annotations.append({
+                    'rect': rect, 
+                    'color': self.track_colors[track],
+                    'tooltip': tooltip
+                })
 
         self.positionSlider.update_annotations(annotations)
 

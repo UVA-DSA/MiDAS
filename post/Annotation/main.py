@@ -11,11 +11,37 @@ from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtCore import Qt, QUrl
 
+from PyQt5.QtGui import QColor, QPainter
+from PyQt5.QtCore import QRect
+
+class ColoredSlider(QSlider):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.annotations = []
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        for annotation in self.annotations:
+            painter.fillRect(annotation['rect'], annotation['color'])
+
+    def update_annotations(self, annotations):
+        self.annotations = annotations
+        self.update()
+
 class VideoAnnotationApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Video Annotation Tool")
         self.resize(800, 600)
+
+        # Define colors for each track
+        self.track_colors = [
+            QColor(255, 0, 0, 128),  # Red for Track 1
+            QColor(0, 255, 0, 128),  # Green for Track 2
+            QColor(0, 0, 255, 128),  # Blue for Track 3
+            QColor(255, 255, 0, 128)  # Yellow for Track 4
+        ]
 
         # Initialize media player and video widget
         self.mediaPlayer = QMediaPlayer(None, QMediaPlayer.VideoSurface)
@@ -105,11 +131,12 @@ class VideoAnnotationApp(QWidget):
         self.stepForwardButton.setEnabled(False)
         self.stepForwardButton.clicked.connect(self.step_forward)
 
-        # Create seeker bar
-        self.positionSlider = QSlider(Qt.Horizontal)
+        # Replace the existing QSlider with our custom ColoredSlider
+        self.positionSlider = ColoredSlider(Qt.Horizontal)
         self.positionSlider.setRange(0, 0)
         self.positionSlider.sliderMoved.connect(self.set_position)
         self.positionSlider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.positionSlider.setFixedHeight(30)  # Increase height to accommodate multiple tracks
 
         # Create drop-down menus and buttons for labels for Track 1
         self.verbComboBox1 = QComboBox()
@@ -344,6 +371,7 @@ class VideoAnnotationApp(QWidget):
     def duration_changed(self, duration):
         # Set the seeker bar range
         self.positionSlider.setRange(0, duration)
+        self.update_slider_annotations()
 
     def set_position(self, position):
         # Set the media player's position
@@ -370,6 +398,7 @@ class VideoAnnotationApp(QWidget):
         # Mark the start of a segment for Track 1
         self.current_segment1['start'] = self.mediaPlayer.position()
         self.update_recording_indicator(1, recording=True)
+        self.update_slider_annotations()
 
     def end_segment1(self):
         # Mark the end of a segment for Track 1 and save the annotation
@@ -387,6 +416,7 @@ class VideoAnnotationApp(QWidget):
                     'verb': None, 'instrument': None, 'target': None
                 }
                 self.update_recording_indicator(1, recording=False)
+                self.update_slider_annotations()
             else:
                 QMessageBox.warning(self, 'Warning', 'Track 1: End position must be after start position.')
         else:
@@ -396,6 +426,7 @@ class VideoAnnotationApp(QWidget):
         # Mark the start of a segment for Track 2
         self.current_segment2['start'] = self.mediaPlayer.position()
         self.update_recording_indicator(2, recording=True)
+        self.update_slider_annotations()
 
     def end_segment2(self):
         # Mark the end of a segment for Track 2 and save the annotation
@@ -413,6 +444,7 @@ class VideoAnnotationApp(QWidget):
                     'verb': None, 'instrument': None, 'target': None
                 }
                 self.update_recording_indicator(2, recording=False)
+                self.update_slider_annotations()
             else:
                 QMessageBox.warning(self, 'Warning', 'Track 2: End position must be after start position.')
         else:
@@ -422,6 +454,7 @@ class VideoAnnotationApp(QWidget):
         # Mark the start of a segment for Track 3
         self.current_segment3['start'] = self.mediaPlayer.position()
         self.update_recording_indicator(3, recording=True)
+        self.update_slider_annotations()
 
     def end_segment3(self):
         # Mark the end of a segment for Track 3 and save the annotation
@@ -439,6 +472,7 @@ class VideoAnnotationApp(QWidget):
                     'verb': None, 'instrument': None, 'target': None
                 }
                 self.update_recording_indicator(3, recording=False)
+                self.update_slider_annotations()
             else:
                 QMessageBox.warning(self, 'Warning', 'Track 3: End position must be after start position.')
         else:
@@ -448,6 +482,7 @@ class VideoAnnotationApp(QWidget):
         # Mark the start of a segment for Track 4
         self.current_segment4['start'] = self.mediaPlayer.position()
         self.update_recording_indicator(4, recording=True)
+        self.update_slider_annotations()
 
     def end_segment4(self):
         # Mark the end of a segment for Track 4 and save the annotation
@@ -464,47 +499,51 @@ class VideoAnnotationApp(QWidget):
                     'gesture': None, 'phase': None
                 }
                 self.update_recording_indicator(4, recording=False)
+                self.update_slider_annotations()
             else:
                 QMessageBox.warning(self, 'Warning', 'Track 4: End position must be after start position.')
         else:
             QMessageBox.warning(self, 'Warning', 'Track 4: Start and end positions must be set.')
 
     def save_annotations(self):
-        # Save annotations for Track 1
-        fileName1, _ = QFileDialog.getSaveFileName(
-            self, "Save Annotations for Track 1", "",
-            "JSON Files (*.json)"
-        )
-        if fileName1 != '':
-            with open(fileName1, 'w') as f:
-                json.dump(self.annotations1, f, indent=4)
+        # Default file names for each track
+        default_file_names = [
+            "annotations_track1.json",
+            "annotations_track2.json",
+            "annotations_track3.json",
+            "annotations_track4.json"
+        ]
 
-        # Save annotations for Track 2
-        fileName2, _ = QFileDialog.getSaveFileName(
-            self, "Save Annotations for Track 2", "",
-            "JSON Files (*.json)"
-        )
-        if fileName2 != '':
-            with open(fileName2, 'w') as f:
-                json.dump(self.annotations2, f, indent=4)
+        # Save annotations for all tracks
+        for i, annotations in enumerate([self.annotations1, self.annotations2, self.annotations3, self.annotations4], 1):
+            fileName = default_file_names[i-1]
+            with open(fileName, 'w') as f:
+                json.dump(annotations, f, indent=4)
+            print(f"Annotations for Track {i} saved to {fileName}")
 
-        # Save annotations for Track 3
-        fileName3, _ = QFileDialog.getSaveFileName(
-            self, "Save Annotations for Track 3", "",
-            "JSON Files (*.json)"
-        )
-        if fileName3 != '':
-            with open(fileName3, 'w') as f:
-                json.dump(self.annotations3, f, indent=4)
+    def update_slider_annotations(self):
+        slider_width = self.positionSlider.width()
+        slider_duration = self.mediaPlayer.duration()
+        
+        if slider_duration == 0:
+            return
 
-        # Save annotations for Track 4
-        fileName4, _ = QFileDialog.getSaveFileName(
-            self, "Save Annotations for Track 4", "",
-            "JSON Files (*.json)"
-        )
-        if fileName4 != '':
-            with open(fileName4, 'w') as f:
-                json.dump(self.annotations4, f, indent=4)
+        annotations = []
+        for track, track_annotations in enumerate([self.annotations1, self.annotations2, self.annotations3, self.annotations4]):
+            for annotation in track_annotations:
+                start_pos = int((annotation['start'] / slider_duration) * slider_width)
+                end_pos = int((annotation['end'] / slider_duration) * slider_width)
+                height = 5  # Height of each annotation bar
+                y_pos = track * height  # Position each track's annotations vertically
+
+                rect = QRect(start_pos, y_pos, end_pos - start_pos, height)
+                annotations.append({'rect': rect, 'color': self.track_colors[track]})
+
+        self.positionSlider.update_annotations(annotations)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_slider_annotations()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

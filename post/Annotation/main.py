@@ -14,28 +14,15 @@ from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QColor, QPainter
 from PyQt5.QtCore import QRect
 
-class ColoredSlider(QSlider):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.annotations = []
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        for annotation in self.annotations:
-            painter.fillRect(annotation['rect'], annotation['color'])
-
-    def update_annotations(self, annotations):
-        self.annotations = annotations
-        self.update()
-
 from PyQt5.QtWidgets import QToolTip
 from PyQt5.QtCore import QEvent
 
-from PyQt5.QtWidgets import QToolTip
-from PyQt5.QtCore import QEvent
+from PyQt5.QtWidgets import QToolTip, QMessageBox
+from PyQt5.QtCore import QEvent, pyqtSignal
 
 class ColoredSlider(QSlider):
+    annotationDoubleClicked = pyqtSignal(int, int)  # Signal for double-click (track, index)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.annotations = []
@@ -59,6 +46,12 @@ class ColoredSlider(QSlider):
                     QToolTip.showText(self.mapToGlobal(event.pos()), annotation['tooltip'])
                     return True
             QToolTip.hideText()
+        elif event.type() == QEvent.MouseButtonDblClick:
+            for track, annotation in enumerate(self.annotations):
+                if annotation['rect'].contains(event.pos()):
+                    index = annotation['index']
+                    self.annotationDoubleClicked.emit(track, index)
+                    return True
         return super().eventFilter(source, event)
 
 class VideoAnnotationApp(QWidget):
@@ -112,6 +105,9 @@ class VideoAnnotationApp(QWidget):
 
         # Set up the user interface
         self.init_ui()
+
+        # Connect the new signal
+        self.positionSlider.annotationDoubleClicked.connect(self.remove_annotation)
 
     def load_labels(self):
         # Load labels from JSON config files
@@ -562,7 +558,7 @@ class VideoAnnotationApp(QWidget):
 
         annotations = []
         for track, track_annotations in enumerate([self.annotations1, self.annotations2, self.annotations3, self.annotations4]):
-            for annotation in track_annotations:
+            for index, annotation in enumerate(track_annotations):
                 start_pos = int((annotation['start'] / slider_duration) * slider_width)
                 end_pos = int((annotation['end'] / slider_duration) * slider_width)
                 height = 5  # Height of each annotation bar
@@ -579,10 +575,27 @@ class VideoAnnotationApp(QWidget):
                 annotations.append({
                     'rect': rect, 
                     'color': self.track_colors[track],
-                    'tooltip': tooltip
+                    'tooltip': tooltip,
+                    'index': index,  # Add index for identification
                 })
 
         self.positionSlider.update_annotations(annotations)
+
+    def remove_annotation(self, track, index):
+        track_annotations = [self.annotations1, self.annotations2, self.annotations3, self.annotations4][track]
+        
+        if 0 <= index < len(track_annotations):
+            reply = QMessageBox.question(self, 'Remove Annotation', 
+                                         f"Are you sure you want to remove this annotation from Track {track + 1}?",
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            
+            if reply == QMessageBox.Yes:
+                del track_annotations[index]
+                self.update_slider_annotations()
+                QMessageBox.information(self, 'Annotation Removed', 
+                                        f"Annotation removed from Track {track + 1}")
+        else:
+            QMessageBox.warning(self, 'Error', 'Invalid annotation index')
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

@@ -1,6 +1,7 @@
 import sys
 import json
 import os
+import cv2
 os.environ["QT_MULTIMEDIA_PREFERRED_PLUGINS"] = "ffmpeg"
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -12,7 +13,7 @@ from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtCore import Qt, QUrl
 
 from PyQt5.QtGui import QColor, QPainter
-from PyQt5.QtCore import QRect
+from PyQt5.QtCore import QRect, QPoint
 
 from PyQt5.QtWidgets import QToolTip
 from PyQt5.QtCore import QEvent
@@ -115,6 +116,9 @@ class VideoAnnotationApp(QWidget):
 
         # Connect the new signal
         self.positionSlider.annotationDoubleClicked.connect(self.remove_annotation)
+
+        self.frame_rate = None
+        self.total_frames = None
 
     def load_labels(self):
         # Load labels from JSON config files
@@ -397,7 +401,6 @@ class VideoAnnotationApp(QWidget):
             indicator.setStyleSheet('color: red;')
 
     def open_file(self):
-        # Open a file dialog to select a video file
         fileName, _ = QFileDialog.getOpenFileName(
             self, "Open Video File", "",
             "Video Files (*.mp4 *.avi *.mov *.mkv)"
@@ -418,6 +421,18 @@ class VideoAnnotationApp(QWidget):
             self.startButton5.setEnabled(True)
             self.endButton5.setEnabled(True)
 
+            # Get video information using OpenCV
+            video = cv2.VideoCapture(fileName)
+            self.frame_rate = video.get(cv2.CAP_PROP_FPS)
+            self.total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+            video.release()
+
+            if self.frame_rate is None or self.frame_rate == 0:
+                QMessageBox.warning(self, 'Warning', 'Could not determine video frame rate. Using default of 30 fps.')
+                self.frame_rate = 30.0
+
+            print(f"Loaded video with frame rate: {self.frame_rate} fps and {self.total_frames} total frames")
+
     def play_video(self):
         # Play or pause the video
         if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
@@ -430,6 +445,7 @@ class VideoAnnotationApp(QWidget):
     def position_changed(self, position):
         # Update the seeker bar position
         self.positionSlider.setValue(position)
+        current_frame = self.position_to_frame(position)
 
     def duration_changed(self, duration):
         # Set the seeker bar range
@@ -439,33 +455,38 @@ class VideoAnnotationApp(QWidget):
     def set_position(self, position):
         # Set the media player's position
         self.mediaPlayer.setPosition(position)
+        # current_frame = self.position_to_frame(position)
+        # QToolTip.showText(self.positionSlider.mapToGlobal(QPoint(0, 0)), f"Frame: {current_frame}")
 
-    def get_frame_duration(self):
-        # Approximate frame duration (assuming 30 fps)
-        fps = 30
-        return int(1000 / fps)  # Duration in milliseconds
+    def position_to_frame(self, position):
+        if self.frame_rate is None or self.frame_rate == 0:
+            return 0
+        return int((position / 1000) * self.frame_rate)
+
+    def frame_to_position(self, frame):
+        if self.frame_rate is None or self.frame_rate == 0:
+            return 0
+        return int((frame / self.frame_rate) * 1000)
 
     def step_backward(self):
-        # Step backward by 5 frames
-        frame_duration = self.get_frame_duration()
-        new_position = self.mediaPlayer.position() - frame_duration * 5
-        self.mediaPlayer.setPosition(max(0, int(new_position)))
+        current_frame = self.position_to_frame(self.mediaPlayer.position())
+        new_frame = max(0, current_frame - 5)
+        self.mediaPlayer.setPosition(self.frame_to_position(new_frame))
 
     def step_forward(self):
-        # Step forward by 5 frames
-        frame_duration = self.get_frame_duration()
-        new_position = self.mediaPlayer.position() + frame_duration * 5
-        self.mediaPlayer.setPosition(min(self.mediaPlayer.duration(), int(new_position)))
+        current_frame = self.position_to_frame(self.mediaPlayer.position())
+        new_frame = min(self.total_frames - 1, current_frame + 5)
+        self.mediaPlayer.setPosition(self.frame_to_position(new_frame))
 
     def start_segment1(self):
         # Mark the start of a segment for Track 1
-        self.current_segment1['start'] = self.mediaPlayer.position()
+        self.current_segment1['start'] = self.position_to_frame(self.mediaPlayer.position())
         self.update_recording_indicator(1, recording=True)
         self.update_slider_annotations()
 
     def end_segment1(self):
         # Mark the end of a segment for Track 1 and save the annotation
-        self.current_segment1['end'] = self.mediaPlayer.position()
+        self.current_segment1['end'] = self.position_to_frame(self.mediaPlayer.position())
         self.current_segment1['verb'] = self.verbComboBox1.currentText()
         self.current_segment1['instrument'] = self.instrumentComboBox1.currentText()
         self.current_segment1['target'] = self.targetComboBox1.currentText()
@@ -481,19 +502,19 @@ class VideoAnnotationApp(QWidget):
                 self.update_recording_indicator(1, recording=False)
                 self.update_slider_annotations()
             else:
-                QMessageBox.warning(self, 'Warning', 'Track 1: End position must be after start position.')
+                QMessageBox.warning(self, 'Warning', 'Track 1: End frame must be after start frame.')
         else:
-            QMessageBox.warning(self, 'Warning', 'Track 1: Start and end positions must be set.')
+            QMessageBox.warning(self, 'Warning', 'Track 1: Start and end frames must be set.')
 
     def start_segment2(self):
         # Mark the start of a segment for Track 2
-        self.current_segment2['start'] = self.mediaPlayer.position()
+        self.current_segment2['start'] = self.position_to_frame(self.mediaPlayer.position())
         self.update_recording_indicator(2, recording=True)
         self.update_slider_annotations()
 
     def end_segment2(self):
         # Mark the end of a segment for Track 2 and save the annotation
-        self.current_segment2['end'] = self.mediaPlayer.position()
+        self.current_segment2['end'] = self.position_to_frame(self.mediaPlayer.position())
         self.current_segment2['verb'] = self.verbComboBox2.currentText()
         self.current_segment2['instrument'] = self.instrumentComboBox2.currentText()
         self.current_segment2['target'] = self.targetComboBox2.currentText()
@@ -509,19 +530,19 @@ class VideoAnnotationApp(QWidget):
                 self.update_recording_indicator(2, recording=False)
                 self.update_slider_annotations()
             else:
-                QMessageBox.warning(self, 'Warning', 'Track 2: End position must be after start position.')
+                QMessageBox.warning(self, 'Warning', 'Track 2: End frame must be after start frame.')
         else:
-            QMessageBox.warning(self, 'Warning', 'Track 2: Start and end positions must be set.')
+            QMessageBox.warning(self, 'Warning', 'Track 2: Start and end frames must be set.')
 
     def start_segment3(self):
         # Mark the start of a segment for Track 3
-        self.current_segment3['start'] = self.mediaPlayer.position()
+        self.current_segment3['start'] = self.position_to_frame(self.mediaPlayer.position())
         self.update_recording_indicator(3, recording=True)
         self.update_slider_annotations()
 
     def end_segment3(self):
         # Mark the end of a segment for Track 3 and save the annotation
-        self.current_segment3['end'] = self.mediaPlayer.position()
+        self.current_segment3['end'] = self.position_to_frame(self.mediaPlayer.position())
         self.current_segment3['verb'] = self.verbComboBox3.currentText()
         self.current_segment3['instrument'] = self.instrumentComboBox3.currentText()
         self.current_segment3['target'] = self.targetComboBox3.currentText()
@@ -537,19 +558,19 @@ class VideoAnnotationApp(QWidget):
                 self.update_recording_indicator(3, recording=False)
                 self.update_slider_annotations()
             else:
-                QMessageBox.warning(self, 'Warning', 'Track 3: End position must be after start position.')
+                QMessageBox.warning(self, 'Warning', 'Track 3: End frame must be after start frame.')
         else:
-            QMessageBox.warning(self, 'Warning', 'Track 3: Start and end positions must be set.')
+            QMessageBox.warning(self, 'Warning', 'Track 3: Start and end frames must be set.')
 
     def start_segment4(self):
         # Mark the start of a segment for Track 4 (Gestures)
-        self.current_segment4['start'] = self.mediaPlayer.position()
+        self.current_segment4['start'] = self.position_to_frame(self.mediaPlayer.position())
         self.update_recording_indicator(4, recording=True)
         self.update_slider_annotations()
 
     def end_segment4(self):
         # Mark the end of a segment for Track 4 (Gestures) and save the annotation
-        self.current_segment4['end'] = self.mediaPlayer.position()
+        self.current_segment4['end'] = self.position_to_frame(self.mediaPlayer.position())
         self.current_segment4['gesture'] = self.gestureComboBox4.currentText()
 
         if self.current_segment4['start'] is not None and self.current_segment4['end'] is not None:
@@ -563,19 +584,19 @@ class VideoAnnotationApp(QWidget):
                 self.update_recording_indicator(4, recording=False)
                 self.update_slider_annotations()
             else:
-                QMessageBox.warning(self, 'Warning', 'Track 4: End position must be after start position.')
+                QMessageBox.warning(self, 'Warning', 'Track 4: End frame must be after start frame.')
         else:
-            QMessageBox.warning(self, 'Warning', 'Track 4: Start and end positions must be set.')
+            QMessageBox.warning(self, 'Warning', 'Track 4: Start and end frames must be set.')
 
     def start_segment5(self):
         # Mark the start of a segment for Track 5 (Phases)
-        self.current_segment5['start'] = self.mediaPlayer.position()
+        self.current_segment5['start'] = self.position_to_frame(self.mediaPlayer.position())
         self.update_recording_indicator(5, recording=True)
         self.update_slider_annotations()
 
     def end_segment5(self):
         # Mark the end of a segment for Track 5 (Phases) and save the annotation
-        self.current_segment5['end'] = self.mediaPlayer.position()
+        self.current_segment5['end'] = self.position_to_frame(self.mediaPlayer.position())
         self.current_segment5['phase'] = self.phaseComboBox5.currentText()
 
         if self.current_segment5['start'] is not None and self.current_segment5['end'] is not None:
@@ -589,9 +610,9 @@ class VideoAnnotationApp(QWidget):
                 self.update_recording_indicator(5, recording=False)
                 self.update_slider_annotations()
             else:
-                QMessageBox.warning(self, 'Warning', 'Track 5: End position must be after start position.')
+                QMessageBox.warning(self, 'Warning', 'Track 5: End frame must be after start frame.')
         else:
-            QMessageBox.warning(self, 'Warning', 'Track 5: Start and end positions must be set.')
+            QMessageBox.warning(self, 'Warning', 'Track 5: Start and end frames must be set.')
 
     def save_annotations(self):
         # Default file names for each track
@@ -634,34 +655,32 @@ class VideoAnnotationApp(QWidget):
 
     def update_slider_annotations(self):
         slider_width = self.positionSlider.width()
-        slider_duration = self.mediaPlayer.duration()
         
-        if slider_duration == 0:
+        if self.total_frames == 0:
             return
 
         annotations = []
         for track, track_annotations in enumerate([self.annotations1, self.annotations2, self.annotations3, self.annotations4, self.annotations5]):
             for index, annotation in enumerate(track_annotations):
-                start_pos = int((annotation['start'] / slider_duration) * slider_width)
-                end_pos = int((annotation['end'] / slider_duration) * slider_width)
-                height = 5  # Height of each annotation bar
-                y_pos = track * height  # Position each track's annotations vertically
+                start_pos = int((annotation['start'] / self.total_frames) * slider_width)
+                end_pos = int((annotation['end'] / self.total_frames) * slider_width)
+                height = 5
+                y_pos = track * height
 
                 rect = QRect(start_pos, y_pos, end_pos - start_pos, height)
                 
-                # Create tooltip content based on track number
                 if track < 3:  # Tracks 1, 2, 3
-                    tooltip = f"Verb: {annotation['verb']}\nInstrument: {annotation['instrument']}\nTarget: {annotation['target']}"
+                    tooltip = f"Start Frame: {annotation['start']}\nEnd Frame: {annotation['end']}\nVerb: {annotation['verb']}\nInstrument: {annotation['instrument']}\nTarget: {annotation['target']}"
                 elif track == 3:  # Track 4 (Gestures)
-                    tooltip = f"Gesture: {annotation['gesture']}"
+                    tooltip = f"Start Frame: {annotation['start']}\nEnd Frame: {annotation['end']}\nGesture: {annotation['gesture']}"
                 else:  # Track 5 (Phases)
-                    tooltip = f"Phase: {annotation['phase']}"
+                    tooltip = f"Start Frame: {annotation['start']}\nEnd Frame: {annotation['end']}\nPhase: {annotation['phase']}"
 
                 annotations.append({
-                    'rect': rect, 
+                    'rect': rect,
                     'color': self.track_colors[track],
                     'tooltip': tooltip,
-                    'index': index,  # Add index for identification
+                    'index': index,
                 })
 
         self.positionSlider.update_annotations(annotations)
@@ -671,13 +690,13 @@ class VideoAnnotationApp(QWidget):
         
         if 0 <= index < len(track_annotations):
             reply = QMessageBox.question(self, 'Remove Annotation', 
-                                         f"Are you sure you want to remove this annotation from Track {track + 1}?",
+                                                         f"Are you sure you want to remove this annotation from Track {track + 1}?",
                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             
             if reply == QMessageBox.Yes:
                 del track_annotations[index]
                 self.update_slider_annotations()
-                QMessageBox.information(self, 'Annotation Removed', 
+                QMessageBox.information(self, 'Annotation Removed',
                                         f"Annotation removed from Track {track + 1}")
         else:
             QMessageBox.warning(self, 'Error', 'Invalid annotation index')

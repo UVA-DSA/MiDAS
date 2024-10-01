@@ -65,7 +65,8 @@ class VideoAnnotationApp(QWidget):
             QColor(255, 0, 0, 128),  # Red for Track 1
             QColor(0, 255, 0, 128),  # Green for Track 2
             QColor(0, 0, 255, 128),  # Blue for Track 3
-            QColor(255, 255, 0, 128)  # Yellow for Track 4
+            QColor(255, 255, 0, 128),  # Yellow for Track 4 (Gestures)
+            QColor(255, 0, 255, 128)  # Magenta for Track 5 (Phases)
         ]
 
         # Initialize media player and video widget
@@ -97,7 +98,13 @@ class VideoAnnotationApp(QWidget):
         self.annotations4 = []
         self.current_segment4 = {
             'start': None, 'end': None,
-            'gesture': None, 'phase': None
+            'gesture': None
+        }
+
+        self.annotations5 = []
+        self.current_segment5 = {
+            'start': None, 'end': None,
+            'phase': None
         }
 
         # Load labels from config files
@@ -238,13 +245,10 @@ class VideoAnnotationApp(QWidget):
         self.recordingIndicator3 = QLabel()
         self.update_recording_indicator(3, recording=False)
 
-        # Create drop-down menus and buttons for labels for Track 4
+        # Create drop-down menus and buttons for labels for Track 4 (Gestures)
         self.gestureComboBox4 = QComboBox()
         self.gestureComboBox4.addItems(self.gestures)
         self.gestureComboBox4.setFixedWidth(80)
-        self.phaseComboBox4 = QComboBox()
-        self.phaseComboBox4.addItems(self.phases)
-        self.phaseComboBox4.setFixedWidth(80)
 
         self.startButton4 = QPushButton('<')
         self.startButton4.setFixedWidth(30)
@@ -258,6 +262,24 @@ class VideoAnnotationApp(QWidget):
 
         self.recordingIndicator4 = QLabel()
         self.update_recording_indicator(4, recording=False)
+
+        # Create drop-down menus and buttons for labels for Track 5 (Phases)
+        self.phaseComboBox5 = QComboBox()
+        self.phaseComboBox5.addItems(self.phases)
+        self.phaseComboBox5.setFixedWidth(80)
+
+        self.startButton5 = QPushButton('<')
+        self.startButton5.setFixedWidth(30)
+        self.startButton5.setEnabled(False)
+        self.startButton5.clicked.connect(self.start_segment5)
+
+        self.endButton5 = QPushButton('>')
+        self.endButton5.setFixedWidth(30)
+        self.endButton5.setEnabled(False)
+        self.endButton5.clicked.connect(self.end_segment5)
+
+        self.recordingIndicator5 = QLabel()
+        self.update_recording_indicator(5, recording=False)
 
         self.saveAnnotationsButton = QPushButton('Save')
         self.saveAnnotationsButton.setFixedWidth(60)
@@ -318,14 +340,23 @@ class VideoAnnotationApp(QWidget):
         labelGrid.addWidget(self.endButton3, 3, 5)
         labelGrid.addWidget(self.recordingIndicator3, 3, 6)
 
-        # Row 4 - Track 4
+        # Row 4 - Track 4 (Gestures)
         labelGrid.addWidget(QLabel('4'), 4, 0)
         labelGrid.addWidget(self.gestureComboBox4, 4, 1)
-        labelGrid.addWidget(self.phaseComboBox4, 4, 2)
+        labelGrid.addWidget(QLabel(''), 4, 2)  # Empty cell for 'Instrument'
         labelGrid.addWidget(QLabel(''), 4, 3)  # Empty cell for 'Target'
         labelGrid.addWidget(self.startButton4, 4, 4)
         labelGrid.addWidget(self.endButton4, 4, 5)
         labelGrid.addWidget(self.recordingIndicator4, 4, 6)
+
+        # Row 5 - Track 5 (Phases)
+        labelGrid.addWidget(QLabel('5'), 5, 0)
+        labelGrid.addWidget(self.phaseComboBox5, 5, 1)
+        labelGrid.addWidget(QLabel(''), 5, 2)  # Empty cell for 'Instrument'
+        labelGrid.addWidget(QLabel(''), 5, 3)  # Empty cell for 'Target'
+        labelGrid.addWidget(self.startButton5, 5, 4)
+        labelGrid.addWidget(self.endButton5, 5, 5)
+        labelGrid.addWidget(self.recordingIndicator5, 5, 6)
 
         # Main layout
         mainLayout = QVBoxLayout()
@@ -353,6 +384,8 @@ class VideoAnnotationApp(QWidget):
             indicator = self.recordingIndicator3
         elif track_number == 4:
             indicator = self.recordingIndicator4
+        elif track_number == 5:
+            indicator = self.recordingIndicator5
         else:
             return  # Invalid track number
 
@@ -382,6 +415,8 @@ class VideoAnnotationApp(QWidget):
             self.endButton3.setEnabled(True)
             self.startButton4.setEnabled(True)
             self.endButton4.setEnabled(True)
+            self.startButton5.setEnabled(True)
+            self.endButton5.setEnabled(True)
 
     def play_video(self):
         # Play or pause the video
@@ -507,16 +542,15 @@ class VideoAnnotationApp(QWidget):
             QMessageBox.warning(self, 'Warning', 'Track 3: Start and end positions must be set.')
 
     def start_segment4(self):
-        # Mark the start of a segment for Track 4
+        # Mark the start of a segment for Track 4 (Gestures)
         self.current_segment4['start'] = self.mediaPlayer.position()
         self.update_recording_indicator(4, recording=True)
         self.update_slider_annotations()
 
     def end_segment4(self):
-        # Mark the end of a segment for Track 4 and save the annotation
+        # Mark the end of a segment for Track 4 (Gestures) and save the annotation
         self.current_segment4['end'] = self.mediaPlayer.position()
         self.current_segment4['gesture'] = self.gestureComboBox4.currentText()
-        self.current_segment4['phase'] = self.phaseComboBox4.currentText()
 
         if self.current_segment4['start'] is not None and self.current_segment4['end'] is not None:
             if self.current_segment4['end'] > self.current_segment4['start']:
@@ -524,7 +558,7 @@ class VideoAnnotationApp(QWidget):
                 # Reset current segment
                 self.current_segment4 = {
                     'start': None, 'end': None,
-                    'gesture': None, 'phase': None
+                    'gesture': None
                 }
                 self.update_recording_indicator(4, recording=False)
                 self.update_slider_annotations()
@@ -533,21 +567,70 @@ class VideoAnnotationApp(QWidget):
         else:
             QMessageBox.warning(self, 'Warning', 'Track 4: Start and end positions must be set.')
 
+    def start_segment5(self):
+        # Mark the start of a segment for Track 5 (Phases)
+        self.current_segment5['start'] = self.mediaPlayer.position()
+        self.update_recording_indicator(5, recording=True)
+        self.update_slider_annotations()
+
+    def end_segment5(self):
+        # Mark the end of a segment for Track 5 (Phases) and save the annotation
+        self.current_segment5['end'] = self.mediaPlayer.position()
+        self.current_segment5['phase'] = self.phaseComboBox5.currentText()
+
+        if self.current_segment5['start'] is not None and self.current_segment5['end'] is not None:
+            if self.current_segment5['end'] > self.current_segment5['start']:
+                self.annotations5.append(self.current_segment5.copy())
+                # Reset current segment
+                self.current_segment5 = {
+                    'start': None, 'end': None,
+                    'phase': None
+                }
+                self.update_recording_indicator(5, recording=False)
+                self.update_slider_annotations()
+            else:
+                QMessageBox.warning(self, 'Warning', 'Track 5: End position must be after start position.')
+        else:
+            QMessageBox.warning(self, 'Warning', 'Track 5: Start and end positions must be set.')
+
     def save_annotations(self):
         # Default file names for each track
         default_file_names = [
             "annotations_track1.json",
             "annotations_track2.json",
             "annotations_track3.json",
-            "annotations_track4.json"
+            "annotations_track4_gestures.json",
+            "annotations_track5_phases.json"
         ]
 
+        saved_files = []
+
         # Save annotations for all tracks
-        for i, annotations in enumerate([self.annotations1, self.annotations2, self.annotations3, self.annotations4], 1):
+        for i, annotations in enumerate([self.annotations1, self.annotations2, self.annotations3, self.annotations4, self.annotations5], 1):
             fileName = default_file_names[i-1]
+            
+            # Check if file already exists
+            if os.path.exists(fileName):
+                reply = QMessageBox.question(self, 'Overwrite File',
+                                             f"The file {fileName} already exists. Do you want to overwrite it?",
+                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                
+                if reply == QMessageBox.No:
+                    print(f"Skipping Track {i} annotations as per user request.")
+                    continue
+
+            # Save the file
             with open(fileName, 'w') as f:
                 json.dump(annotations, f, indent=4)
             print(f"Annotations for Track {i} saved to {fileName}")
+            saved_files.append(fileName)
+
+        # Show completion dialog
+        if saved_files:
+            message = "Annotations saved to:\n" + "\n".join(saved_files)
+            QMessageBox.information(self, 'Annotations Saved', message)
+        else:
+            QMessageBox.information(self, 'No Annotations Saved', "No annotation files were saved.")
 
     def update_slider_annotations(self):
         slider_width = self.positionSlider.width()
@@ -557,7 +640,7 @@ class VideoAnnotationApp(QWidget):
             return
 
         annotations = []
-        for track, track_annotations in enumerate([self.annotations1, self.annotations2, self.annotations3, self.annotations4]):
+        for track, track_annotations in enumerate([self.annotations1, self.annotations2, self.annotations3, self.annotations4, self.annotations5]):
             for index, annotation in enumerate(track_annotations):
                 start_pos = int((annotation['start'] / slider_duration) * slider_width)
                 end_pos = int((annotation['end'] / slider_duration) * slider_width)
@@ -569,8 +652,10 @@ class VideoAnnotationApp(QWidget):
                 # Create tooltip content based on track number
                 if track < 3:  # Tracks 1, 2, 3
                     tooltip = f"Verb: {annotation['verb']}\nInstrument: {annotation['instrument']}\nTarget: {annotation['target']}"
-                else:  # Track 4
-                    tooltip = f"Gesture: {annotation['gesture']}\nPhase: {annotation['phase']}"
+                elif track == 3:  # Track 4 (Gestures)
+                    tooltip = f"Gesture: {annotation['gesture']}"
+                else:  # Track 5 (Phases)
+                    tooltip = f"Phase: {annotation['phase']}"
 
                 annotations.append({
                     'rect': rect, 
@@ -582,7 +667,7 @@ class VideoAnnotationApp(QWidget):
         self.positionSlider.update_annotations(annotations)
 
     def remove_annotation(self, track, index):
-        track_annotations = [self.annotations1, self.annotations2, self.annotations3, self.annotations4][track]
+        track_annotations = [self.annotations1, self.annotations2, self.annotations3, self.annotations4, self.annotations5][track]
         
         if 0 <= index < len(track_annotations):
             reply = QMessageBox.question(self, 'Remove Annotation', 

@@ -55,6 +55,16 @@ class ColoredSlider(QSlider):
                     return True
         return super().eventFilter(source, event)
 
+class ColorBar(QFrame):
+    def __init__(self, color, parent=None):
+        super().__init__(parent)
+        self.color = color
+        self.setFixedSize(20, 20)  # Set the size of the color bar
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), self.color)
+
 class VideoAnnotationApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -180,13 +190,13 @@ class VideoAnnotationApp(QWidget):
         # Create drop-down menus and buttons for labels for Track 1
         self.verbComboBox1 = QComboBox()
         self.verbComboBox1.addItems(self.verbs)
-        self.verbComboBox1.setFixedWidth(80)
+        self.verbComboBox1.setFixedWidth(150)
         self.instrumentComboBox1 = QComboBox()
         self.instrumentComboBox1.addItems(self.instruments)
-        self.instrumentComboBox1.setFixedWidth(80)
+        self.instrumentComboBox1.setFixedWidth(350)
         self.targetComboBox1 = QComboBox()
         self.targetComboBox1.addItems(self.targets)
-        self.targetComboBox1.setFixedWidth(80)
+        self.targetComboBox1.setFixedWidth(150)
 
         self.startButton1 = QPushButton('<')
         self.startButton1.setFixedWidth(30)
@@ -204,13 +214,13 @@ class VideoAnnotationApp(QWidget):
         # Create drop-down menus and buttons for labels for Track 2
         self.verbComboBox2 = QComboBox()
         self.verbComboBox2.addItems(self.verbs)
-        self.verbComboBox2.setFixedWidth(80)
+        self.verbComboBox2.setFixedWidth(150)
         self.instrumentComboBox2 = QComboBox()
         self.instrumentComboBox2.addItems(self.instruments)
-        self.instrumentComboBox2.setFixedWidth(80)
+        self.instrumentComboBox2.setFixedWidth(350)
         self.targetComboBox2 = QComboBox()
         self.targetComboBox2.addItems(self.targets)
-        self.targetComboBox2.setFixedWidth(80)
+        self.targetComboBox2.setFixedWidth(150)
 
         self.startButton2 = QPushButton('<')
         self.startButton2.setFixedWidth(30)
@@ -228,13 +238,13 @@ class VideoAnnotationApp(QWidget):
         # Create drop-down menus and buttons for labels for Track 3
         self.verbComboBox3 = QComboBox()
         self.verbComboBox3.addItems(self.verbs)
-        self.verbComboBox3.setFixedWidth(80)
+        self.verbComboBox3.setFixedWidth(150)
         self.instrumentComboBox3 = QComboBox()
         self.instrumentComboBox3.addItems(self.instruments)
-        self.instrumentComboBox3.setFixedWidth(80)
+        self.instrumentComboBox3.setFixedWidth(350)
         self.targetComboBox3 = QComboBox()
         self.targetComboBox3.addItems(self.targets)
-        self.targetComboBox3.setFixedWidth(80)
+        self.targetComboBox3.setFixedWidth(150)
 
         self.startButton3 = QPushButton('<')
         self.startButton3.setFixedWidth(30)
@@ -252,7 +262,7 @@ class VideoAnnotationApp(QWidget):
         # Create drop-down menus and buttons for labels for Track 4 (Gestures)
         self.gestureComboBox4 = QComboBox()
         self.gestureComboBox4.addItems(self.gestures)
-        self.gestureComboBox4.setFixedWidth(80)
+        self.gestureComboBox4.setFixedWidth(150)
 
         self.startButton4 = QPushButton('<')
         self.startButton4.setFixedWidth(30)
@@ -270,7 +280,7 @@ class VideoAnnotationApp(QWidget):
         # Create drop-down menus and buttons for labels for Track 5 (Phases)
         self.phaseComboBox5 = QComboBox()
         self.phaseComboBox5.addItems(self.phases)
-        self.phaseComboBox5.setFixedWidth(80)
+        self.phaseComboBox5.setFixedWidth(150)
 
         self.startButton5 = QPushButton('<')
         self.startButton5.setFixedWidth(30)
@@ -318,7 +328,10 @@ class VideoAnnotationApp(QWidget):
         labelGrid.addWidget(QLabel('Status'), 0, 6)
 
         # Row 1 - Track 1
-        labelGrid.addWidget(QLabel('1'), 1, 0)
+        track1Layout = QHBoxLayout()
+        track1Layout.addWidget(ColorBar(self.track_colors[0]))
+        track1Layout.addWidget(QLabel('1'))
+        labelGrid.addLayout(track1Layout, 1, 0)
         labelGrid.addWidget(self.verbComboBox1, 1, 1)
         labelGrid.addWidget(self.instrumentComboBox1, 1, 2)
         labelGrid.addWidget(self.targetComboBox1, 1, 3)
@@ -327,7 +340,10 @@ class VideoAnnotationApp(QWidget):
         labelGrid.addWidget(self.recordingIndicator1, 1, 6)
 
         # Row 2 - Track 2
-        labelGrid.addWidget(QLabel('2'), 2, 0)
+        track2Layout = QHBoxLayout()
+        track2Layout.addWidget(ColorBar(self.track_colors[1]))
+        track2Layout.addWidget(QLabel('2'))
+        labelGrid.addLayout(track2Layout, 2, 0)
         labelGrid.addWidget(self.verbComboBox2, 2, 1)
         labelGrid.addWidget(self.instrumentComboBox2, 2, 2)
         labelGrid.addWidget(self.targetComboBox2, 2, 3)
@@ -336,7 +352,10 @@ class VideoAnnotationApp(QWidget):
         labelGrid.addWidget(self.recordingIndicator2, 2, 6)
 
         # Row 3 - Track 3
-        labelGrid.addWidget(QLabel('3'), 3, 0)
+        track3Layout = QHBoxLayout()
+        track3Layout.addWidget(ColorBar(self.track_colors[2]))
+        track3Layout.addWidget(QLabel('3'))
+        labelGrid.addLayout(track3Layout, 3, 0)
         labelGrid.addWidget(self.verbComboBox3, 3, 1)
         labelGrid.addWidget(self.instrumentComboBox3, 3, 2)
         labelGrid.addWidget(self.targetComboBox3, 3, 3)
@@ -345,7 +364,10 @@ class VideoAnnotationApp(QWidget):
         labelGrid.addWidget(self.recordingIndicator3, 3, 6)
 
         # Row 4 - Track 4 (Gestures)
-        labelGrid.addWidget(QLabel('4'), 4, 0)
+        track4Layout = QHBoxLayout()
+        track4Layout.addWidget(ColorBar(self.track_colors[3]))
+        track4Layout.addWidget(QLabel('4'))
+        labelGrid.addLayout(track4Layout, 4, 0)
         labelGrid.addWidget(self.gestureComboBox4, 4, 1)
         labelGrid.addWidget(QLabel(''), 4, 2)  # Empty cell for 'Instrument'
         labelGrid.addWidget(QLabel(''), 4, 3)  # Empty cell for 'Target'
@@ -354,7 +376,10 @@ class VideoAnnotationApp(QWidget):
         labelGrid.addWidget(self.recordingIndicator4, 4, 6)
 
         # Row 5 - Track 5 (Phases)
-        labelGrid.addWidget(QLabel('5'), 5, 0)
+        track5Layout = QHBoxLayout()
+        track5Layout.addWidget(ColorBar(self.track_colors[4]))
+        track5Layout.addWidget(QLabel('5'))
+        labelGrid.addLayout(track5Layout, 5, 0)
         labelGrid.addWidget(self.phaseComboBox5, 5, 1)
         labelGrid.addWidget(QLabel(''), 5, 2)  # Empty cell for 'Instrument'
         labelGrid.addWidget(QLabel(''), 5, 3)  # Empty cell for 'Target'

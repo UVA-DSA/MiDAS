@@ -1,1 +1,32 @@
-["Gesture 1", "Gesture 2", "Gesture 3"]
+[
+    "Cold Cut ",
+    "Hot Cut",
+    "Two-hand Spread",
+    "One-hand Spread",
+    "Peel",
+    "Cold Hook",
+    "Hot Hook",
+    "Burn Dissect",
+    "Pedicalize",
+    "Coagulate and Cut",
+    "Orient Stapler",
+    "Clamp/Close Stapler",
+    "Fire Stapler",
+    "Remove Stapler",
+    "Orient Clip Over Tissue",
+    "Close Clip",
+    "Orient Needle",
+    "Target Needle",
+    "Push Needle",
+    "Pull Needle",
+    "Pull Suture-OneHand",
+    "Pull Suture-BothHands",
+    "Pull Suture-Fulcrum",
+    "Grasp Long End of Suture",
+    "Loop around Free Arm-SingleLoop",
+    "Loop around Free Arm-DoubleLoop",
+    "Square Knot-1: Grasp and Pull Short End Through Loop",
+    "Square Knot-2",
+    "Pull Suture into Slip Knot and Cinch"
+
+]

@@ -1,1 +1,12 @@
-["Aspire", "Clip", "Goagulate", "Cut", "Dissect", "Grasp", "Irrigate", "null-verb", "Pack", "Retract"]
+[
+    "Grasp",
+    "Ungrasp ",
+    "Cut",
+    "Push",
+    "Pull",
+    "Retract",
+    "Stabilize",
+    "Hook/Scoop",
+    "Expand",
+    "Wrap"
+]

@@ -1,6 +1,7 @@
 __pycache__
 
 # Data Files
+/data
 src/Data/
 src/Video/camera/
 src/Video/images/

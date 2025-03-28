@@ -11,9 +11,10 @@ fourPixel = (1580,1020)
 threshold = 150
 
 if __name__ == "__main__":
-    matchingPath = glob.glob("D:/Data MIDAS/*")
-    matchingPath.pop(0)
+    matchingPath = glob.glob("./data/*")
+    # matchingPath.pop(0)
     for path in matchingPath:
+        print(path)
         frameNum = 0
         vidpath = glob.glob(f"{path}/obs/*.mkv")
         cap = cv.VideoCapture(vidpath[0])

@@ -8,10 +8,11 @@ from swSync import swSync
 from zeddSync import ZedSync
 
 sw_included = False #TOGGLE FOR PEG TRANSFER DATA, IF NOT PEG TRANSFER, SHOULD BE FALSE
-root_dir = '/standard/UVA-DSA/Robotic_Surgery_Bootcamp_2024/Data MIDAS/*'
+root_dir = './data/*'
 
 if __name__ == "__main__":
     matchingPath = sorted(glob.glob(root_dir))
+    print(matchingPath)
     file = open("log.txt", "a")
     for mainPath in matchingPath:
         if mainPath[0] == "P":
@@ -30,12 +31,14 @@ if __name__ == "__main__":
         try:
             OBSConvert(mainPath)
         except Exception as e:
+            print("OBS Error", e)
             file.write(f"{mainPath}, {e}\n")
             continue
         
         try:
             PDSSync(mainPath)
         except Exception as e:
+            print("PDS Error", e)
             file.write(f"{mainPath}, {e}")
         try:
             trakStarSync(mainPath)

@@ -32,14 +32,25 @@ def PDSSync(path):
     
     finalDF = pd.read_csv(f'{path}/Synched Data/PDS_sync.csv')
     PDS_matched = pd.DataFrame()
-
+    print(len(pdsStampList))
     iterator = 0
-    for i in obsStampList:
+    zero_row = pd.DataFrame([[0] * len(pdsDF.columns)], columns=pdsDF.columns)
+
+    for i in range(len(obsStampList)):
+        obsStamp = obsStampList[i]
+
+
+        if obsStamp < pdsStampList[0]:
+            if obsStamp % 100000000000 < 3:
+                print(f"PDS: {iterator},    {obsStamp},      {pdsStampList[iterator]}")
+            PDS_matched = pd.concat([PDS_matched, zero_row.iloc[[0]]], ignore_index=True)
+            continue
+
         if iterator % 10000 < 3:
             print(f"PDS: {iterator}")
         while iterator < len(pdsStampList)-2:
             try:
-                if i >= pdsStampList[iterator] and i < pdsStampList[iterator+1]:
+                if obsStamp >= pdsStampList[iterator] and obsStamp < pdsStampList[iterator+1]:
                     PDS_matched = pd.concat([PDS_matched, pdsDF.iloc[[iterator]]], ignore_index=True)
                     break
             except Exception as e:
@@ -49,12 +60,12 @@ def PDSSync(path):
 
     finalDF = pd.concat([finalDF, PDS_matched], axis = 1)
     cols = finalDF.columns.tolist()
-    cols = [cols[0], cols[-1]] + cols[1:-1]
+    # cols = [cols[0], cols[-1]] + cols[1:-1]
     finalDF = finalDF[cols]
     finalDF.to_csv(f'{path}/Synched Data/PDS_sync.csv' , index=False)
 
 
 if __name__ == "__main__":
-    path = "./data/Inguinal_S113_T3_2024-07-18"
+    path = "./data\Bowel_S207_T2_2024-07-18"
     PDSSync(path)
 

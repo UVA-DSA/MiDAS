@@ -2,39 +2,44 @@ import csv
 import cv2
 from datetime import datetime
 import time
+import os
+import glob
 
-date_str = '2024-07-16 14:39:37'  # 'YYYY-MM-DD HH:MM:SS'
+def createOBSStamps(mainPath):
+    filePath = f"{mainPath}/obs/*.mkv"
+    video_path = glob.glob(filePath)[0]
+    # video_path = "C:/Users/Zachary/Documents/Git Repos/DataCollectionSystem/data/Bowel_S216_T1_2024-07-18/obs/2024-07-18 15-48-29.mkv"
+    # Extract filename
+    filename = os.path.basename(video_path)
 
-# Create a datetime object
-dt = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+    # Remove extension
+    timestamp_str = os.path.splitext(filename)[0]  # "2024-07-18 15-48-29"
 
-epoch_time = int(time.mktime(dt.timetuple()))*1000 +  500
-epoch_time = 1721334965000000000
-file_name = "OBStimestamp_Bowel_S207_T2_2024-07-18"
+    # Convert to datetime object
+    dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H-%M-%S")
 
-video_path = "C:/Users/Zachary/Documents/Git Repos/DataCollectionSystem/data/Bowel_S207_T2_2024-07-18/obs/2024-07-18 16-36-07.mkv"
-cap = cv2.VideoCapture(video_path)
+    epoch_time = int(time.mktime(dt.timetuple()))*1000000000
+    file_name = f"{mainPath}/OBStimestamp_{os.path.basename(mainPath)}.csv"
+    # file_name = "C:/Users/Zachary/Documents/Git Repos/DataCollectionSystem/data/Bowel_S216_T1_2024-07-18/OBStimestamp_Bowel_S216_T1_2024-07-18.csv"
 
-# Get total frame count
-expected_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap = cv2.VideoCapture(video_path)
+    # Get total frame count
+    expected_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_rate = cap.get(cv2.CAP_PROP_FPS)
+    cap.release()
 
-cap.release()
+    frame_duration_ns = int((1 / frame_rate) * 1_000_000_000)
 
+    with open(file_name, 'w', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile)
+        current_time = epoch_time
+        for i in range(expected_frames):
+            csvwriter.writerow([current_time])
+            current_time += frame_duration_ns
 
+    csvfile.close()
 
-with open(file_name, 'w', newline='') as csvfile:
-    csvwriter = csv.writer(csvfile) 
-    j = 0
-    for i in range (1, expected_frames + 1):
-        csvwriter.writerow([epoch_time + j])
-        epoch_time += j
-        j = 33333333
-        if (i % 3 == 0):
-            j = 33333334
-
-csvfile.close()
-
- 
+    
 
 
 

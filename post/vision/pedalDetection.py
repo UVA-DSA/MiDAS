@@ -2,6 +2,7 @@ import numpy as np
 import cv2 as cv
 import csv
 import glob
+import os
 # import comparePlot
 
 onePixel = (600,1020)
@@ -16,6 +17,9 @@ def guiPedalExtraction(path):
     cap = cv.VideoCapture(vidpath[0])
     print(vidpath[0])
     cap.set(cv.CAP_PROP_POS_FRAMES, frameNum)
+    if os.path.exists(f"{path}/obs/pedal_detection.csv"):
+        print(f"{path}/obs/pedal_detection.csv exists already!")
+        return        
     csvFile = open(f"{path}/obs/pedal_detection.csv", 'w', newline='')
     out = csv.writer(csvFile)
     out.writerow(["Frame Num","Upper Left", "Lower Left", "Upper Right", "Lower Right"])
@@ -61,7 +65,7 @@ def guiPedalExtraction(path):
 
 
 if __name__ == "__main__":
-    matchingPath = glob.glob("./data/Bowel_S216*")
+    matchingPath = glob.glob("./data/*")
     # matchingPath.pop(0)
     for path in matchingPath:
         print(path)

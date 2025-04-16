@@ -4,6 +4,7 @@ import glob
 import os
 import sys
 from PDSThreshholdFix import thresholdValueChange
+from PDS_error_detection import comparePDSExpectedExperimental
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from vision.pedalDetection import guiPedalExtraction
 
@@ -22,6 +23,7 @@ def PDSvsVid(path):
         print(f"An error occurred: {e}")
     for threshold in Threshold_Values_Test:
         thresholdValueChange(f"{path}/Synched Data/PDS_sync.csv", threshold)
+        comparePDSExpectedExperimental(path, threshold)
         PDSSync = pd.read_csv(f"{path}/Synched Data/PDS_sync.csv")
         PDSVideo = pd.read_csv(f"{path}/obs/pedal_detection.csv")
             
@@ -56,9 +58,9 @@ def PDSvsVid(path):
         plt.close()
     print("Plots Created")
 
-
+#RUN FOR GUI EXTRACTION, PLOTS, AND CSVs
 if __name__ == '__main__':
-    matchingPath = glob.glob("data/G*")
+    matchingPath = glob.glob("./data/*")
     for path in matchingPath:
         print(path)
         PDSvsVid(path)

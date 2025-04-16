@@ -30,6 +30,7 @@ def OBSConvert(path):
         df.to_csv("timestamps_with_header.csv", index=False)
         print("Header added.")
     else:
+        df = pd.read_csv(matchingPath[0])
         print("File already has a header.")
 
     # Save the modified DataFrame back to a CSV file

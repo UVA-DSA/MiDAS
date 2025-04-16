@@ -25,6 +25,7 @@ if __name__ == "__main__":
             print(f"Directory created successfully.")
         except FileExistsError:
             print(f"Directory already exists.")
+            continue
         except Exception as e:
             print(f"An error occurred: {e}")
         print("Path", mainPath)

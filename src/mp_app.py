@@ -15,6 +15,7 @@ from time import sleep
 from queue import LifoQueue
 from config import smartwatch_1_id, smartwatch_1_ip,smartwatch_2_id,smartwatch_2_ip,smartwatch_port,camera_type_1, camera_type_2
 from Audio.audio_capture import capture_audio_transmit
+from RAVENPackets.get_RAVEN_packets import start_logger
 
 import time
 import sys
@@ -28,7 +29,7 @@ TRACKSTAR_Q_SIZE = 128
 SMARTWATCH_Q_SIZE = 2048
 PDS_Q_SIZE = 100
 GUI_Q_SIZE = 100
-
+RAVEN_Q_SIZE = 100
 
 def run(lifo):
     # get next message or wait until one is available
@@ -240,6 +241,7 @@ def startProcesses(path, rate, task, watch_toggle):
     PDS_q = manager.LifoQueue(PDS_Q_SIZE)
     gui_q = manager.LifoQueue(GUI_Q_SIZE)
     audio_q = manager.LifoQueue(AUDIO_Q_SIZE)
+    RAVEN_q = manager.LifoQueue(RAVEN_Q_SIZE)
 
     list_of_qs = [capture_q, camera_q_intel, trackstar_q, smartwatch_1_q, smartwatch_2_q, PDS_q, gui_q, depth_img_q, OBS_img_q, audio_q, zed_img_q, camera_q_zed]
 
@@ -277,13 +279,16 @@ def startProcesses(path, rate, task, watch_toggle):
     # audio_recorder_process = Process(name="Audio Capture", target=capture_audio_transmit, args=(audio_q, path, thread_stop))
     # audio_recorder_process.daemon = True
 
+    RAVEN_process = Process(name="RAVEN Capture", target=start_logger, args = (RAVEN_q, path, thread_stop))
+    RAVEN_process.daemon = True
+
     #Has to be thread since shares memory with GUI, has to be on same process
     updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q,zed_img_q, thread_stop))
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
     #  smartwatch_1_process, smartwatch_2_process, 
-    processes = [camera_capture_process, camera_capture_process_zed, video_capture_process, trakstar_process,read_process, PDS_process, trakstar_exec_process]
+    processes = [camera_capture_process, camera_capture_process_zed, video_capture_process, trakstar_process,read_process, PDS_process, trakstar_exec_process, RAVEN_process]
     threads = [updateIndicator_process]
 
     if(watch_toggle):

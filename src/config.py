@@ -2,7 +2,7 @@
 PDS_ON_THRESHOLD = 3000
 PDS_LONG_THRESHOLD = 400
 
-PDS_PORT = "COM4"
+PDS_PORT = "COM3"
 
 #Capture port OBS virtual camera is on (Use src\Video\cam_test.py to test)
 OBS_CAPTURE_PORT = 5
@@ -29,4 +29,9 @@ intel_exposure_value = 33000
 
 
 #general
-enable_display=False
+enable_display=True
+
+
+#RAVEN
+LOGGER_PORT = 36000
+RECEIVER_PORT = 5000

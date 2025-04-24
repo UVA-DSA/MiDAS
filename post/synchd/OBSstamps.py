@@ -8,7 +8,6 @@ import glob
 def createOBSStamps(mainPath):
     filePath = f"{mainPath}/obs/*.mkv"
     video_path = glob.glob(filePath)[0]
-    # video_path = "C:/Users/Zachary/Documents/Git Repos/DataCollectionSystem/data/Bowel_S216_T1_2024-07-18/obs/2024-07-18 15-48-29.mkv"
     # Extract filename
     filename = os.path.basename(video_path)
 
@@ -20,7 +19,6 @@ def createOBSStamps(mainPath):
 
     epoch_time = int(time.mktime(dt.timetuple()))*1000000000
     file_name = f"{mainPath}/OBStimestamp_{os.path.basename(mainPath)}.csv"
-    # file_name = "C:/Users/Zachary/Documents/Git Repos/DataCollectionSystem/data/Bowel_S216_T1_2024-07-18/OBStimestamp_Bowel_S216_T1_2024-07-18.csv"
 
     cap = cv2.VideoCapture(video_path)
     # Get total frame count

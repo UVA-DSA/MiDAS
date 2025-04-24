@@ -67,11 +67,14 @@ def comparePDSExpectedExperimental(path, threshold = ""):
     # Save to CSV
     results_df.to_csv(f"{path}/PDSError/PDS_error{threshold}.csv", index=False)
 
-    print(f"Comparison complete. Results with total saved to 'false_positives_negatives{threshold}.csv'.")
+    print(f"Comparison complete. Results with total saved to '{path}/PDSError/PDS_error{threshold}'.csv")
 
 #RUN FOR CSVs
 if __name__ == '__main__':
     matchingPath = glob.glob("./data/*")
     for path in matchingPath:
         print(path)
-        comparePDSExpectedExperimental(path)
+        try:
+            comparePDSExpectedExperimental(path)
+        except:
+            print(path)

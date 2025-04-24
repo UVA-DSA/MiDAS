@@ -62,6 +62,9 @@ def PDSvsVid(path):
 if __name__ == '__main__':
     matchingPath = glob.glob("./data/*")
     for path in matchingPath:
-        print(path)
-        PDSvsVid(path)
+        try:
+            print(path)
+            PDSvsVid(path)
+        except:
+            print(path)
         

@@ -69,7 +69,7 @@ def comparePDSExpectedExperimental(path, threshold = ""):
 
     print(f"Comparison complete. Results with total saved to '{path}/PDSError/PDS_error{threshold}'.csv")
 
-#RUN FOR CSVs
+#RUN FOR CSVs of PDS error for different thresholds
 if __name__ == '__main__':
     matchingPath = glob.glob("./data/*")
     for path in matchingPath:

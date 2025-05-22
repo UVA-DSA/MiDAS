@@ -58,7 +58,7 @@ def PDSvsVid(path):
         plt.close()
     print("Plots Created")
 
-#RUN FOR GUI EXTRACTION, PLOTS, AND CSVs
+#RUN FOR GUI EXTRACTION, PLOTS, AND CSVs COMPARING DIFFERENT THRESHOLDS
 if __name__ == '__main__':
     matchingPath = glob.glob("./data/*")
     for path in matchingPath:

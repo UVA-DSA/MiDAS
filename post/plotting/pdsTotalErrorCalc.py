@@ -153,7 +153,7 @@ def countErrorsByPedal(path, t):
         })
 
     global_results_df = pd.DataFrame(combined_results)
-    global_csv_path = './data/Stats on PDS Error.csv'
+    global_csv_path = f'{path}/Stats on PDS Error.csv'
     if os.path.exists(global_csv_path):
         global_results_df.to_csv(global_csv_path, mode='a', header=False, index=False)
     else:
@@ -193,7 +193,7 @@ def extract_best_thresholds_by_trial(path, output_csv):
     else:
         print("\nNo data found to generate best threshold summary.")
 
-
+#RUN FOR PEDAL DATA ON ALL TRIALS IN 'path' TO FIND BEST THRESHOLDS
 if __name__ == "__main__":
     path = "./data/"
     thresholds = [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000, 5000, 10000, 15000, 20000, 25000, 30000]

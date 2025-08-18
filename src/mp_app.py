@@ -7,7 +7,8 @@ import threading
 from Video.capture import send_vid_data 
 from Video.camera import get_camera_handler
 from Trakstar.trackstarWriter import get_trakstar_data, exec_trakstar
-from Smartwatch.tcp_smartwatch_client import receive_smartwatch_data
+# from Smartwatch.tcp_smartwatch_client import receive_smartwatch_data
+from Smartwatch.bluetooth_smartwatch_receiver import receive_smartwatch_data
 from PDS.PDS import get_PDS_data
 from multiprocessing import Process, Queue, Event
 from multiprocessing.managers import BaseManager
@@ -161,13 +162,14 @@ def readData(task, rate, list_of_qs, path, thread_stop):
                 
                 
                 try:
-                    smartwatch_1_data = list_of_qs[4].get(block=False)
+                    smartwatch_1_data = list_of_qs[3].get(block=False)
+                    # print("[Read Process: Smartwatch 1 Data: ]",smartwatch_1_data)
                 except:
                     pass
                 
                 
                 try:
-                    smartwatch_2_data = list_of_qs[3].get(block=False)
+                    smartwatch_2_data = list_of_qs[4].get(block=False)
                 except:
                     pass
 
@@ -294,8 +296,9 @@ def startProcesses(path, rate, task, watch_toggle):
     threads = [updateIndicator_process]
 
     if(watch_toggle):
+        print("[Main Program] Enabling smartwatch processes")
         processes.append(smartwatch_1_process)
-        processes.append(smartwatch_2_process)
+        # processes.append(smartwatch_2_process)
 
 
     for process in processes:

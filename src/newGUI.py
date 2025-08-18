@@ -13,6 +13,7 @@ subject_var = tk.StringVar()
 trial_var = tk.StringVar()
 task_var = tk.StringVar()
 rate_var = tk.StringVar()
+rate_var.set(30) #default value
 watch_toggle = tk.BooleanVar()
 
 submitButton = None
@@ -195,6 +196,7 @@ def updateIndicators(gui_q,cam_q, OBS_q, zed_q, thread_stop):
             break
         try:
             out = gui_q.get(True, 0.05)
+            # print("[GUI Update Thread: ]")
             # print(out)
             
             # out = [sw_epoch_ms, wrist_position, sensor_type, value_X_Axis, value_Y_Axis, value_Z_Axis, server_epoch_ms, sw_id]

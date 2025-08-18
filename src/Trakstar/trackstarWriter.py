@@ -56,6 +56,7 @@ def get_trakstar_data(q, path, thread_stop):
                     # Receive the data and split by commas
                     data = connection.recv(128).decode()
                     values = data.split(',')
+                    # print("TrakStar Values: ",values)
                     #Convert data
                     if values[1]:
                         values[1] = int(float(values[1]))
@@ -69,20 +70,27 @@ def get_trakstar_data(q, path, thread_stop):
                     if(connect > 0):
                         out = out + values
                         connect = connect - 1
+
+                    # print("[TrakStar Read Process: Connect value ]",connect)
             
                     # Add in alienware time
                     # values.append(time_ns())  # TODO: replace with the actual trakstar time
-                    start_time = time.time()
-                    local_time = time.ctime(start_time)
+                    # start_time = time.time()
+                    start_time = time.time_ns()
+                    # local_time = time.ctime(start_time)
+                    local_time = start_time
                     values.append(local_time)
                     csv_writer.writerow(values)
                     csv_file.flush()
                     if(connect == 0):   
                         # out.append(time_ns())  # TODO: replace with the actual computer time
-                        start_time = time.time()
-                        local_time = time.ctime(start_time)
+                        # start_time = time.time()
+                        # local_time = time.ctime(start_time)
+                        start_time = time.time_ns()
+                        local_time = start_time
                         out.append(local_time)
                         q.put(out)
+                        # print("[TrakStar Read Process: Added data to Queue!]")
                     if q.full():
                         _ = q.get()  # Removes last object from q to keep only a certain amount
                     acknowledgment_message = "ACK"

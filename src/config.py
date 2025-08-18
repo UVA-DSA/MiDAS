@@ -9,7 +9,7 @@ OBS_CAPTURE_PORT = 5
 
 OBS_HOST = 'localhost'
 OBS_PORT = 4455
-OBS_WS_PASSWORD = "xZm5u8xiajqI0gLT"
+OBS_WS_PASSWORD = "zYScVXTTKppdI00d"
 
 # Replace these values with your smartwatch's IP, port
 smartwatch_1_ip = '192.168.0.104'
@@ -29,7 +29,7 @@ intel_exposure_value = 33000
 
 
 #general
-enable_display=True
+enable_display=False
 
 
 #RAVEN

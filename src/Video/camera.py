@@ -14,6 +14,8 @@ import cv2
 from config import enable_display, intel_exposure_value
 
 
+SERIAL_NUMBER = 15277832
+
 class ReconnectException(Exception):
     "This exception is raised when camera is disconnected and a new connection is required"
 
@@ -292,6 +294,7 @@ def zed_camera_handler(q: Queue, path: str, img_q: Queue, thread_stop: Event):
         init_params.depth_mode = ZedCamera.DEPTH
         init_params.coordinate_units = sl.UNIT.MILLIMETER # Use millimeter units (for depth measurements)
         init_params.depth_minimum_distance = 120.0 # Set the minimum depth perception distance to 12cm
+        init_params.set_from_serial_number(SERIAL_NUMBER)
         
         recordingParameters = sl.RecordingParameters()
         # recordingParameters.compression_mode = ZedCamera.COMPRESSION

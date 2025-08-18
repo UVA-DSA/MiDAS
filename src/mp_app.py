@@ -155,6 +155,7 @@ def readData(task, rate, list_of_qs, path, thread_stop):
                     
                 try:
                     trackstar_data = list_of_qs[2].get(block=False)
+                    # print("[Read Process: TrakStar Data: ]",trackstar_data)
                 except:
                     pass
                 
@@ -287,8 +288,8 @@ def startProcesses(path, rate, task, watch_toggle):
     updateIndicator_process.daemon = True
 
     # camera_capture_process - add this to enable depth cam
-    #  smartwatch_1_process, smartwatch_2_process, 
-    processes = [camera_capture_process, camera_capture_process_zed, video_capture_process, trakstar_process,read_process, PDS_process, trakstar_exec_process, RAVEN_process]
+    #  smartwatch_1_process, smartwatch_2_process, camera_capture_process
+    processes = [camera_capture_process_zed, video_capture_process, trakstar_process,read_process, PDS_process, trakstar_exec_process]
     threads = [updateIndicator_process]
 
     if(watch_toggle):

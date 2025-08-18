@@ -59,10 +59,14 @@ def analyze_log(log_file: str) -> dict:
 
 def start_logger(q, path, thread_stop):
     # Start Packet Logger
+    DCS_PORT = 36000
+    RAVEN_PORT = DCS_PORT
+    RAVEN_IP = "172.28.39.158"
     print("[RAVEN] Starting packet logger...")
     logger = PacketLoggerEmulator(
-        input_port=LOGGER_PORT,
-        output_port=RECEIVER_PORT,
+        input_port=DCS_PORT,
+        output_port=RAVEN_PORT,
+        output_ip=RAVEN_IP,
         protocol='udp',
         log_path=f"{path}/RAVEN_packets.bin"
     )

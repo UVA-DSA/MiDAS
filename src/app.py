@@ -155,7 +155,7 @@ def startThreads(path, rate, task):
 
     #start threads
     capture_thread.start()
-    # trakstar_thread.start()
+    trakstar_thread.start()
     # read_thread.start()
     PDS_thread.start()
     updateIndicator_thread.start()
@@ -163,7 +163,7 @@ def startThreads(path, rate, task):
     try:
         # Wait for threads to finish
         capture_thread.join()
-        # trakstar_thread.join()
+        trakstar_thread.join()
         # read_thread.join()
         PDS_thread.join()
         updateIndicator_thread.join()

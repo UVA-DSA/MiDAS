@@ -56,3 +56,7 @@ google-services.json
 *.hprof
 
 /.conda
+
+*.bin
+
+/post

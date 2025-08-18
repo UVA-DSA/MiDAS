@@ -9,7 +9,7 @@ OBS_CAPTURE_PORT = 5
 
 OBS_HOST = 'localhost'
 OBS_PORT = 4455
-OBS_WS_PASSWORD = "zYScVXTTKppdI00d"
+OBS_WS_PASSWORD = "q8O1uGZ9j95lQR26"
 
 # Replace these values with your smartwatch's IP, port
 smartwatch_1_ip = '192.168.0.104'

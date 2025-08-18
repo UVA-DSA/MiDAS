@@ -15,7 +15,7 @@ from time import sleep
 from queue import LifoQueue
 from config import smartwatch_1_id, smartwatch_1_ip,smartwatch_2_id,smartwatch_2_ip,smartwatch_port,camera_type_1, camera_type_2
 from Audio.audio_capture import capture_audio_transmit
-from RAVENPackets.get_RAVEN_packets import start_logger
+# from RAVENPackets.get_RAVEN_packets import start_logger
 
 import time
 import sys
@@ -280,8 +280,8 @@ def startProcesses(path, rate, task, watch_toggle):
     # audio_recorder_process = Process(name="Audio Capture", target=capture_audio_transmit, args=(audio_q, path, thread_stop))
     # audio_recorder_process.daemon = True
 
-    RAVEN_process = Process(name="RAVEN Capture", target=start_logger, args = (RAVEN_q, path, thread_stop))
-    RAVEN_process.daemon = True
+    # RAVEN_process = Process(name="RAVEN Capture", target=start_logger, args = (RAVEN_q, path, thread_stop))
+    # RAVEN_process.daemon = True
 
     #Has to be thread since shares memory with GUI, has to be on same process
     updateIndicator_process = threading.Thread(target=newGUI.updateIndicators, args=(gui_q,depth_img_q, OBS_img_q,zed_img_q, thread_stop))
@@ -289,7 +289,8 @@ def startProcesses(path, rate, task, watch_toggle):
 
     # camera_capture_process - add this to enable depth cam
     #  smartwatch_1_process, smartwatch_2_process, camera_capture_process
-    processes = [camera_capture_process_zed, video_capture_process, trakstar_process,read_process, PDS_process, trakstar_exec_process]
+    # processes = [camera_capture_process_zed, video_capture_process, trakstar_process,read_process, PDS_process, trakstar_exec_process]
+    processes = [video_capture_process, read_process]
     threads = [updateIndicator_process]
 
     if(watch_toggle):

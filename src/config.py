@@ -12,13 +12,17 @@ OBS_PORT = 4455
 OBS_WS_PASSWORD = "q8O1uGZ9j95lQR26"
 
 # Replace these values with your smartwatch's IP, port
-smartwatch_1_ip = 'Galaxy Watch5 (XP0A)'
-smartwatch_1_id = 'right'
+smartwatch_2_ip = 'Galaxy Watch5 (XP0A)'
+smartwatch_2_id = 'right'
+smartwatch_2_service_UUID='8b2e0001-5b3a-4f93-9f2a-5e0f5e5f0003'
+smartwatch_2_char_UUID='8b2e0002-5b3a-4f93-9f2a-5e0f5e5f0003'
 
 # 
 # smartwatch_2_ip = '172.27.176.73'
-smartwatch_2_ip ='192.168.0.101'
-smartwatch_2_id = 'left'
+smartwatch_1_ip ='Galaxy Watch5 (Y5JX)'
+smartwatch_1_id = 'left'
+smartwatch_1_service_UUID='8b2e0001-5b3a-4f93-9f2a-5e0f5e5f0003'
+smartwatch_1_char_UUID='8b2e0002-5b3a-4f93-9f2a-5e0f5e5f0003'
 
 smartwatch_port = 7889
 

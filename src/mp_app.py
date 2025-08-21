@@ -298,7 +298,7 @@ def startProcesses(path, rate, task, watch_toggle):
     if(watch_toggle):
         print("[Main Program] Enabling smartwatch processes")
         processes.append(smartwatch_1_process)
-        # processes.append(smartwatch_2_process)
+        processes.append(smartwatch_2_process)
 
 
     for process in processes:

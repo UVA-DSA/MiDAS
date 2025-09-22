@@ -3,5 +3,8 @@
         "__node_handle": "cpp",
         "optional": "cpp",
         "system_error": "cpp"
-    }
+    },
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python-envs.pythonProjects": []
 }

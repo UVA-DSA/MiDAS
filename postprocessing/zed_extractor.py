@@ -200,16 +200,16 @@ if __name__ == "__main__":
     # create parser here and just specifcy values here itself
 
     # output directory
-    output_path_dir = "G:\\Research\\MIDAS\\Organized\\09-18-25\\hamid\\t1\\hand_RGBD\\Zed\\frames\\output_frames"
+    output_path_dir = "G:\\Research\\MIDAS\\Organized\\09-18-25\\hamid\\t2\\hand_RGBD\\Zed\\frames\\output_frames"
     # make directory if it does not exist
     Path(output_path_dir).mkdir(parents=True, exist_ok=True)
 
 
     opt = argparse.Namespace(
-        mode=3,  # choose mode here
-        input_svo_file="G:\\Research\\MIDAS\\Organized\\09-18-25\\hamid\\t1\\hand_RGBD\\Zed\\frames\\part0_frames.svo2",   # path to your .svo file
-        output_avi_file="G:\\Research\\MIDAS\\Organized\\09-18-25\\hamid\\t1\\hand_RGBD\\Zed\\frames\\part0_frames.avi",       # output .avi if needed
-        output_path_dir="G:\\Research\\MIDAS\\Organized\\09-18-25\\hamid\\t1\\hand_RGBD\\Zed\\frames\\output_frames"     # output dir if needed
+        mode=1,  # choose mode here
+        input_svo_file="G:\\Research\\MIDAS\\Organized\\09-18-25\\hamid\\t2\\hand_RGBD\\Zed\\frames\\part0_frames.svo2",   # path to your .svo file
+        output_avi_file="G:\\Research\\MIDAS\\Organized\\09-18-25\\hamid\\t2\\hand_RGBD\\Zed\\frames\\rgbd_output.avi",       # output .avi if needed
+        output_path_dir="G:\\Research\\MIDAS\\Organized\\09-18-25\\hamid\\t2\\hand_RGBD\\Zed\\frames\\output_frames"     # output dir if needed
     )
 
     main(opt)

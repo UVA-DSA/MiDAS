@@ -1,7 +1,103 @@
+# config.py
 import torch
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 
-RECORD_RESULTS = True
+# trakstar candidates #
+trakstar_candidates = ['trakstar_sensor_0_azimuth', 'trakstar_sensor_1_azimuth', 'trakstar_sensor_2_azimuth', 'trakstar_sensor_3_azimuth', 'trakstar_sensor_0_elevation', 'trakstar_sensor_1_elevation', 'trakstar_sensor_2_elevation', 'trakstar_sensor_3_elevation', 'trakstar_sensor_0_roll', 'trakstar_sensor_1_roll', 'trakstar_sensor_2_roll', 'trakstar_sensor_3_roll', 'trakstar_sensor_0_x', 'trakstar_sensor_1_x', 'trakstar_sensor_2_x', 'trakstar_sensor_3_x', 'trakstar_sensor_0_y', 'trakstar_sensor_1_y', 'trakstar_sensor_2_y', 'trakstar_sensor_3_y', 'trakstar_sensor_0_z', 'trakstar_sensor_1_z', 'trakstar_sensor_2_z', 'trakstar_sensor_3_z']
+
+# console candidates #
+console_candidates = ['console_pos0', 'console_pos1', 'console_pos2', 'console_pos3', 'console_pos4', 'console_pos5', 'console_rot0', 'console_rot1', 'console_rot2', 'console_rot3', 'console_rot4', 'console_rot5', 'console_aux0', 'console_aux1', 'console_pedal']
+
+
+# raven candidates #
+raven_candidates = ['raven_field.pos0', 'raven_field.pos1', 'raven_field.pos2', 'raven_field.pos3', 'raven_field.pos4', 'raven_field.pos5', 'raven_field.ori0', 'raven_field.ori1', 'raven_field.ori2', 'raven_field.ori3', 'raven_field.ori4', 'raven_field.ori5', 'raven_field.ori6', 'raven_field.ori7', 'raven_field.ori8', 'raven_field.ori9', 'raven_field.ori10', 'raven_field.ori11', 'raven_field.ori12', 'raven_field.ori13', 'raven_field.ori14', 'raven_field.ori15', 'raven_field.ori16', 'raven_field.ori17']
+
+
+# sw_left candidates #
+sw_left_candidates = ['sw_left_x', 'sw_left_y', 'sw_left_z']
+
+# sw_right candidates #
+sw_right_candidates = ['sw_right_x', 'sw_right_y', 'sw_right_z']
+
+# 
+
+# ---------- Model-side configs ----------
+@dataclass
+class ModalityCfg:
+    name: str
+    in_dim: int               # derived from dataloader selections (len of selected columns)
+    # (optional) downsample, stride, etc. could be added here later
+
+@dataclass
+class ModelCfg:
+    d_model: int = 256
+    nhead: int = 4
+    num_layers: int = 4
+    dropout: float = 0.1
+    num_classes: int = 8
+    include_modalities: List[str] = field(default_factory=list)     # derived
+    fusion: str = "concat_tokens"                                   # "concat_tokens", "late_gated", "cross_attend"
+    modality_dropout_p: float = 0.0
+    modalities: Dict[str, ModalityCfg] = field(default_factory=dict) # derived {mod: ModalityCfg}
+
+# ---------- Dataloader (single source of truth) ----------
+dataloader_params: Dict = {
+    "base_path": "/standard/UVA-DSA/MIDAS/Organized/09-18-25/hamid/",
+    "batch_size": 16,
+    "fps": 30,
+    "train_trials": ["t1", "t2", "t3", "t4","t5"],
+    "val_trials":   ["t5", "t6", "t7"],
+    "test_trials":  ["t6", "t7"],
+
+    # Active modalities for this experiment (order matters for reporting):
+    "modalities": ["trakstar"],
+    # "modalities": ["raven"],
+
+    # Column selections (patterns or explicit names) per modality
+    "selections": {
+        "trakstar": trakstar_candidates,
+        # "trakstar": ["trakstar_sensor_0_x", "trakstar_sensor_0_y", "trakstar_sensor_0_z", "trakstar_sensor_1_x", "trakstar_sensor_1_y", "trakstar_sensor_1_z", "trakstar_sensor_2_x", "trakstar_sensor_2_y", "trakstar_sensor_2_z", "trakstar_sensor_3_x", "trakstar_sensor_3_y", "trakstar_sensor_3_z"],
+        "sw_left":  ["sw_left_x", "sw_left_y", "sw_left_z"],
+        "sw_right": ["sw_right_x", "sw_right_y", "sw_right_z"],
+        "raven":    ["raven_field.pos0","raven_field.pos1", "raven_field.pos2", "raven_field.ori0", "raven_field.ori1", "raven_field.ori2",],
+        # add others only when you use them:
+        # "console":  [...],
+        # "imu":      [...],
+    },
+
+    # Windowing
+    "observation_window": 120,   # 4s at 30 Hz
+    # "observation_window": -1,   # full clip for gesture
+    "step": 8,
+
+    # Labels / human-readable map
+    "keysteps": {
+        "S1": "Approach peg",
+        "S2": "Align & grasp",
+        "S3": "Lift peg",
+        "S4": "Transfer peg - Get together",
+        "S5": "Transfer peg - Exchange",
+        "S6": "Approach pole",
+        "S7": "Align & place",
+        "Idle": "Idle"
+    },
+
+    # (optional) normalization stats populated after computing on TRAIN
+    "train_class_stats": {},
+    "val_class_stats": {}
+}
+
+# ---------- Other hyperparams ----------
+learning_params = {
+    "lr": 1e-5,
+    "epochs": 50,
+    "weight_decay": 1e-5,
+    "patience": 3,
+    "lr_drop": 20,
+    "best_chkpoint": "./checkpoints/job_xxx/val_best_model.pt",
+}
 
 tcn_model_params = {
     "encoder_params": { #some of these gets updated during runtime based on the feature dimension of the given data
@@ -17,142 +113,103 @@ tcn_model_params = {
 }
 
 
+# Keep only what you actually use from the old blocks. If you still need TCN/audio/ResNet, keep them;
+# otherwise delete to avoid config drift.
 transformer_params = {
     "d_model": 256,
     "nhead": 4,
     "num_layers": 2,
-    "hidden_dim": 128,
-    "layer_dim": 4,
     "dropout": 0.1,
-    "input_dim": 1024,
-    "output_dim": 16,
     "batch_first": True,
-    # Parameters for audio feature extraction
-    'sample_rate' : 48000,  # Adjust based on your dataset
-    'n_mels' : 64,  # Number of Mel filter banks
-    'hop_length' : 512,
-    'n_fft' : 1024,
-    # resnet feature dim
-    'resnet_dim' : 2048
-
-
+    # audio/video params only if you really use them
+    "sample_rate": 48000,
+    "n_mels": 64,
+    "hop_length": 512,
+    "n_fft": 1024,
+    "resnet_dim": 2048,
 }
 
-learning_params = {
-    # "lr": 8.906324028628413e-5,
-    "lr": 1e-05,
-    "epochs": 30,
-    "weight_decay": 1e-5,
-    "patience": 3,
-    "lr_drop": 20,
-    "best_chkpoint": "./checkpoints/job_1256669_task_classification/val_best_model.pt",
-}
+# ---------- Derivation helpers ----------
+def build_model_cfg_from_dataloader(
+    dataloader_cfg: Dict,
+    *,
+    d_model: int = 256,
+    nhead: int = 4,
+    num_layers: int = 4,
+    dropout: float = 0.1,
+    num_classes: int = 8,
+    fusion: str = "concat_tokens",
+    modality_dropout_p: float = 0.1,
+) -> ModelCfg:
+    """Derive ModelCfg.modalities and include list from dataloader selections."""
+    mods = dataloader_cfg.get("modalities", [])
+    sel  = dataloader_cfg.get("selections", {})
 
-dataloader_params = {
+    # Validate: every listed modality must have a non-empty selection list
+    problems = []
+    modalities_dict: Dict[str, ModalityCfg] = {}
+    for m in mods:
+        cols = sel.get(m, [])
+        if not isinstance(cols, list) or len(cols) == 0:
+            problems.append(m)
+        else:
+            modalities_dict[m] = ModalityCfg(name=m, in_dim=len(cols))
+
+    if problems:
+        raise ValueError(
+            f"Missing or empty selections for modalities: {problems}. "
+            f"Add column selections in dataloader_params['selections']."
+        )
     
-    "task": "classification", # "segmentation" or "classification"
-    "batch_size": 1,
-    "observation_window": None,  # 5 seconds at 30 fps segmentation :::: classification None
-    "fold": 1,
-    "fps": 29.97,
-    # update task specific parameters (Experimenting segmentation with classification annotations)
-    "train_annotation_path": '/home/cjh9fw/Desktop/2024/repos/EgoExoEMS/Annotations/splits/trials/aaai26_train_split_classification.json',
-    "val_annotation_path": '/home/cjh9fw/Desktop/2024/repos/EgoExoEMS/Annotations/splits/trials/aaai26_val_split_classification.json',
-    "test_annotation_path": '/home/cjh9fw/Desktop/2024/repos/EgoExoEMS/Annotations/splits/trials/aaai26_test_split_classification.json',
-    # "train_annotation_path": '/home/cjh9fw/Desktop/2024/repos/EgoExoEMS/Annotations/splits/trials/aaai26_train_split_segmentation.json',
-    # "val_annotation_path": '/home/cjh9fw/Desktop/2024/repos/EgoExoEMS/Annotations/splits/trials/aaai26_val_split_segmentation.json',
-    # "test_annotation_path": '/home/cjh9fw/Desktop/2024/repos/EgoExoEMS/Annotations/splits/trials/aaai26_test_split_segmentation.json',
-    # Old dataset class
-    'base_path': '/home/cjh9fw/Desktop/2024/datasets/EMS_Datasets/Organized/EMS_Interventions/annotations/',
-    'modality': [  'resnet_ego','smartwatch','audio'],
-    'keysteps' : {
-                    "approach_patient": "Approach the patient",
-                    "check_responsiveness": "Check for responsiveness",
-                    "check_pulse": "Check patient's pulse",
-                    "check_breathing": "Check if patient is breathing",
-                    "chest_compressions": "Perform chest compressions",
-                    "request_aed": "Request an AED",
-                    "request_assistance": "Request additional assistance",
-                    "turn_on_aed": "Turn on the AED",
-                    "attach_defib_pads": "Attach defibrillator pads",
-                    "clear_for_analysis": "Clear for analysis",
-                    "clear_for_shock": "Clear for shock",
-                    "administer_shock_aed": "Administer shock using AED",
-                    "open_airway": "Open patient's airway",
-                    "place_bvm": "Place bag valve mask (BVM)",
-                    "ventilate_patient": "Ventilate patient",
-                    "no_action": "No action",
-                    "assess_patient": "Assess the patient",
-                    "explain_procedure": "Explain the ECG procedure to the patient",
-                    "shave_patient": "Shave/Cleanse the patient for ECG",
-                    "place_left_arm_lead": "Place the lead on left arm for ECG",
-                    "place_right_arm_lead": "Place the lead on right arm for ECG",
-                    "place_left_leg_lead": "Place the lead on left leg for ECG",
-                    "place_right_leg_lead": "Place the lead on right leg for ECG",
-                    "place_v1_lead": "Place the V1 lead on the patient",
-                    "place_v2_lead": "Place the V2 lead on the patient",
-                    "place_v3_lead": "Place the V3 lead on the patient",
-                    "place_v4_lead": "Place the V4 lead on the patient",
-                    "place_v5_lead": "Place the V5 lead on the patient",
-                    "place_v6_lead": "Place the V6 lead on the patient",
-                    "ask_patient_age_sex": "Ask the age and or sex of the patient",
-                    "request_patient_to_not_move": "Request the patient to not move",
-                    "turn_on_ecg": "Turn on the ECG machine",
-                    "connect_leads_to_ecg": "Verify all ECG leads are properly connected",
-                    "obtain_ecg_recording": "Obtain the ECG recording",
-                    "interpret_and_report": "Interpret the ECG and report findings",
-                    "transport": "Transport the patient to the hospital",
-                    "check_grip_strength": "Check grip strength",
-                    "check_symptom_duration": "Check symptom duration",
-                    "review_medications": "Review medications",
-                    "inquire_medication_anticoagulants": "Inquire about anticoagulant medications",
-                    "inquire_hpi_and_pmh": "Inquire about HPI and PMH",
-                    "inquire_substance_use": "Inquire about substance use",
-                    "notify_hospital_of_stroke_alert": "Notify hospital of stroke alert",
-                    "check_blood_pressure": "Check blood pressure",
-                    "check_heart_rate": "Check heart rate",
-                    "check_oxygen_saturation": "Check oxygen saturation",
-                    "check_respiratory_rate": "Check respiratory rate",
-                    "face_droop_check": "Check for facial droop",
-                    "arm_drift_check": "Check for arm drift",
-                    "speech_abnormality_check": "Check for speech abnormalities",
-                    "assess_balance_and_coordination": "Assess balance and coordination",
-                    "document_lkw_time": "Document last known well time",
-                    "check_vision_deficits": "Check for vision deficits",
-                    "evaluate_aphasia": "Evaluate for aphasia",
-                    "assess_neglect_signs": "Assess for neglect signs",
-                    "prepare_glucometer_and_strip": "Prepare glucometer and test strip",
-                    "read_and_record_glucose_level": "Read and record glucose level",
-                    "suction_airway": "Suction airway",
-                    "inset_NPA": "Insert NPA",
-                    "load_patient_to_stretcher": "Load patient to stretcher",
-                    "secure_patient_on_stretcher": "Secure patient on stretcher",
-                    "handoff_patient_to_hospital": "Handoff patient to hospital staff",
-                    "check_perrl": "Check PERRL",
-                    "check_skin_condition": "Check skin condition",
-                    "check_a&o": "Check A&O",
-                    "notify_hospital": "Notify hospital",
-                    "document_hpi_and_pmh": "Document HPI and PMH"
-                },
-            "train_class_stats": {},
-            "val_class_stats": {}
+    num_classes = len(dataloader_cfg.get("keysteps", {}))
 
-}
+    return ModelCfg(
+        d_model=d_model,
+        nhead=nhead,
+        num_layers=num_layers,
+        dropout=dropout,
+        num_classes=num_classes,
+        include_modalities=list(modalities_dict.keys()),  # preserve order from 'mods'
+        fusion=fusion,
+        modality_dropout_p=modality_dropout_p,
+        modalities=modalities_dict,
+    )
 
+# ---------- Unified args namespace ----------
+RECORD_RESULTS = True
 
 class DefaultArgsNamespace:
     def __init__(self):
-        
         self.record_results = RECORD_RESULTS
-
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        # Model parameters
-        self.tcn_model_params = tcn_model_params
+
+        # Single source of truth:
+        self.dataloader_params = dataloader_params
+
+        # Model config is DERIVED from dataloader config:
+        self.mmtransformercfg = build_model_cfg_from_dataloader(
+            self.dataloader_params,
+            d_model=128,
+            nhead=4,
+            num_layers=2,
+            dropout=0.1,
+            num_classes=10,
+            fusion="cross_attend", # "concat_tokens", "late_gated", "cross_attend"
+            modality_dropout_p=0.1,
+        )
+
+        # Keep extra blocks only if used by your codebase:
+        self.learning_params = learning_params
         self.transformer_params = transformer_params
 
-        # Learning parameters
-        self.learning_params = learning_params
+        self.tcn_model_params = tcn_model_params
 
-        # DataLoader parameters
-        self.dataloader_params = dataloader_params
+
+
+
+
+# ---------- Test ----------
+if __name__ == "__main__":
+    args = DefaultArgsNamespace()
+    print("Active modalities:", args.mmtransformercfg.include_modalities)
+    print("Modalities (name -> in_dim):", {k: v.in_dim for k, v in args.mmtransformercfg.modalities.items()})

@@ -31,17 +31,6 @@ if __name__ == "__main__":
 
     args = DefaultArgsNamespace()
 
-    wandb_logger = wandb.init(
-        # set the wandb project where this run will be logged
-        project="EgoExoEMS",
-        group="Keystep Recognition",
-        mode="disabled",
-        name="Rebuttal - ego,exo,imu",
-        notes="",
-        config={
-        "args": args,
-        }
-    )
 
     keysteps = args.dataloader_params['keysteps']
     out_classes = len(keysteps)

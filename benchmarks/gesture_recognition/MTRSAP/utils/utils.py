@@ -1,13 +1,17 @@
 #import from models folder transtcn
+from models.mmtransformer import ModularMultimodalTransformer
 from models.transtcn import TransformerModel, MultimodalFusion
 import torch
 from datautils.ems import *
 import torch.nn as nn
 from sklearn.metrics import precision_score, recall_score, f1_score
 import csv
-from EgoExoEMS.EgoExoEMS import  WindowEgoExoEMSDataset, EgoExoEMSDataset, collate_fn, transform, window_collate_fn
 from functools import partial
 import torch.nn.functional as F
+
+from datautils.midas import MultimodalGestureDataset
+
+
 
 fusion = MultimodalFusion()
 
@@ -26,11 +30,9 @@ class ClassBalancedLoss(nn.Module):
         loss = F.nll_loss(log_probs, labels, weight=weights)
         return loss
 
-def init_model(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def init_model(args, device):
     model = TransformerModel(args)
     model.to(device)
-
 
     num_classes = len(args.dataloader_params["keysteps"])
     class_counts = args.dataloader_params["train_class_stats"]
@@ -58,7 +60,7 @@ def init_model(args):
     # Class balanced loss
     criterion = ClassBalancedLoss(beta=0.99, num_classes=num_classes, class_counts=class_counts)
         
-    return model, optimizer, criterion, device
+    return model, optimizer, criterion
 
 
 def preprocess(x, modality, backbone, device, task='classification'):
@@ -490,76 +492,389 @@ def get_dataloaders(args):
 
 
 
-''' ***** EGOEXOEMS DATASET ***** '''
+# ''' ***** EGOEXOEMS DATASET ***** '''
 
 
-# add wandb logging
-def eee_train_one_epoch(model, train_loader, criterion, optimizer, device, logger):
+# # add wandb logging
+# def eee_train_one_epoch(model, train_loader, criterion, optimizer, device, logger):
+#     model.train()
+#     total_loss = 0
+#     for i, batch in enumerate(train_loader):
+
+#         i3d_rgb_features = batch['rgb']
+#         i3d_flow_features = batch['flow']
+
+#         # move to device
+#         i3d_rgb_features = i3d_rgb_features.to(device)
+#         i3d_flow_features = i3d_flow_features.to(device)
+
+#         # get labels
+#         labels = batch['keystep_id']
+#         labels = labels.to(device)
+
+#         optimizer.zero_grad()
+#         output = model(i3d_rgb_features)
+
+
+#         loss = criterion(output, labels)
+#         loss.backward()
+#         optimizer.step()
+#         total_loss += loss.item()
+
+#         if i % 1 == 0:
+#             print("\n ***** ")
+#             print(batch['frames'].shape, batch['audio'].shape, batch['flow'].shape, batch['rgb'].shape, batch['keystep_label'], batch['keystep_id'], batch['start_frame'], batch['end_frame'],batch['start_t'], batch['end_t'],  batch['subject_id'], batch['trial_id'])
+#             print(f"Pred: {torch.argmax(output, dim=1)} GT: {labels}")
+#             logger.log({"train_loss": loss.item()})
+#             print(f"Batch: {i}, Loss: {loss.item()}")
+#             print(" ***** \n")
+
+#     return total_loss / len(train_loader)
+
+
+# # validate the model 
+# def eee_validate(model, val_loader, criterion, device, logger):
+#     model.eval()
+#     total_loss = 0
+#     with torch.no_grad():
+#         for i, batch in enumerate(val_loader):
+
+#             i3d_rgb_features = batch['rgb']
+#             i3d_flow_features = batch['flow']
+
+#             # move to device
+#             i3d_rgb_features = i3d_rgb_features.to(device)
+#             i3d_flow_features = i3d_flow_features.to(device)
+
+#             # get labels
+#             labels = batch['keystep_id']
+#             labels = labels.to(device)
+
+#             output = model(i3d_rgb_features)
+
+#             loss = criterion(output, labels)
+#             total_loss += loss.item()
+#             if i % 1 == 0:
+#                 logger.log({"val_loss": loss.item()})
+
+#     return total_loss / len(val_loader)
+
+
+# # test the model
+# def eee_test_model(model, test_loader, criterion, device, logger, epoch, results_dir):
+#     model.eval()
+#     total_loss = 0
+
+
+#     accuracy = 0.0
+#     gt = []
+#     preds = []
+    
+
+#     with torch.no_grad():
+#         for i, batch in enumerate(test_loader):
+
+#             i3d_rgb_features = batch['rgb']
+#             i3d_flow_features = batch['flow']
+
+#             # move to device
+#             i3d_rgb_features = i3d_rgb_features.to(device)
+#             i3d_flow_features = i3d_flow_features.to(device)
+
+#             # get labels
+#             labels = batch['keystep_id']
+#             labels = labels.to(device)
+
+#             output = model(i3d_rgb_features)
+#             pred = torch.argmax(output, dim=1)
+#             gt.append(labels.item())
+#             preds.append(pred.item())
+    
+#     # Calculate metrics
+#     accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)
+#     precision = precision_score(gt, preds, average='macro')
+#     recall = recall_score(gt, preds, average='macro')
+#     f1 = f1_score(gt, preds, average='macro')
+
+#     # Log metrics to wandb
+#     logger.log({
+#         "test_accuracy": accuracy,
+#         "test_precision": precision,
+#         "test_recall": recall,
+#         "test_f1": f1,
+#         "epoch": epoch
+#     })
+    
+#     # Save metrics to CSV
+#     metrics_path = f'{results_dir}/metrics.csv'
+#     with open(metrics_path, mode='a', newline='') as file:
+#         writer = csv.writer(file)
+#         if not os.path.isfile(metrics_path):
+#             writer.writerow(["epoch", "accuracy", "precision", "recall", "f1"])
+#         writer.writerow([epoch, accuracy, precision, recall, f1])
+    
+#     return accuracy
+
+
+
+
+# # return train,val,test dataloaders using the EgoExoEMSDataset class
+# def eee_get_dataloaders(args):
+    
+#     if(args.dataloader_params["task"] == 'classification'):
+#         print("*" * 10, "=" * 10, "*" * 10)
+#         print("Loading dataloader for Classification task")
+
+#         train_dataset = EgoExoEMSDataset(annotation_file=args.dataloader_params["train_annotation_path"],
+#                                         data_base_path='',
+#                                         fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+
+#         val_dataset = EgoExoEMSDataset(annotation_file=args.dataloader_params["val_annotation_path"],
+#                                         data_base_path='',
+#                                         fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+
+#         test_dataset = EgoExoEMSDataset(annotation_file=args.dataloader_params["test_annotation_path"],
+#                                         data_base_path='',
+#                                         fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+
+
+#         train_class_stats = train_dataset._get_class_stats()
+#         print("Train class stats: ", train_class_stats)
+#         # print number of keys in the dictionary
+#         print("Train Number of classes: ", len(train_class_stats.keys()))
+
+#         val_class_stats = val_dataset._get_class_stats()
+#         print("val class stats: ", val_class_stats)
+#         # print number of keys in the dictionary
+#         print("Val Number of classes: ", len(val_class_stats.keys()))
+
+#         # Create DataLoaders for training and validation subsets
+#         train_loader = DataLoader(train_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=True)
+#         test_loader = DataLoader(test_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False)
+#         val_loader = DataLoader(val_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False)
+
+#         print("train dataset size: ", len(train_dataset))
+#         print("val dataset size: ", len(val_dataset))
+#         print("test dataset size: ", len(test_dataset))
+    
+#     elif (args.dataloader_params["task"] == 'segmentation'):
+#         print("*" * 10, "=" * 10, "*" * 10)
+#         print("Loading dataloader for Segmentation task")
+        
+#         train_dataset = WindowEgoExoEMSDataset(annotation_file=args.dataloader_params["train_annotation_path"],
+#                                         data_base_path='',
+#                                         fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+
+#         val_dataset = WindowEgoExoEMSDataset(annotation_file=args.dataloader_params["val_annotation_path"],
+#                                         data_base_path='',
+#                                         fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+
+#         test_dataset = WindowEgoExoEMSDataset(annotation_file=args.dataloader_params["test_annotation_path"],
+#                                         data_base_path='',
+#                                         fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+
+#         train_class_stats = train_dataset._get_class_stats()
+#         print("Train class stats: ", train_class_stats)
+#         # print number of keys in the dictionary
+#         print("Train Number of classes: ", len(train_class_stats.keys()))
+
+#         val_class_stats = val_dataset._get_class_stats()
+#         print("val class stats: ", val_class_stats)
+#         # print number of keys in the dictionary
+#         print("Val Number of classes: ", len(val_class_stats.keys()))
+
+#         test_class_stats = test_dataset._get_class_stats()
+#         print("test class stats: ", test_class_stats)
+#         # print number of keys in the dictionary
+#         print("Test Number of classes: ", len(test_class_stats.keys()))
+
+        
+#         # Use a partial function or lambda to pass the frames_per_clip argument
+#         collate_fn_with_args = partial(window_collate_fn, frames_per_clip=args.dataloader_params["observation_window"])
+
+#         # Create DataLoaders for training and validation subsets
+#         train_loader = DataLoader(train_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=True, collate_fn=collate_fn_with_args)
+#         test_loader = DataLoader(test_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False, collate_fn=collate_fn_with_args)
+#         val_loader = DataLoader(val_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False, collate_fn=collate_fn_with_args)
+
+#         print("train dataset size: ", len(train_dataset))
+#         print("val dataset size: ", len(val_dataset))
+#         print("test dataset size: ", len(test_dataset))
+
+#     return train_loader, val_loader, test_loader, train_class_stats, val_class_stats
+
+
+
+
+# return train,val,test dataloaders using the MIDAS dataset class
+def MIDAS_get_dataloaders(args):
+    
+    print("*" * 10, "=" * 10, "*" * 10)
+    print("Loading dataloader for Classification task")
+
+    train_dataset = MultimodalGestureDataset(
+        base_path=args.dataloader_params["base_path"],
+        csv_paths=args.dataloader_params["train_trials"],
+        clip_len=args.dataloader_params["observation_window"],
+        step=args.dataloader_params["step"],
+        include_modalities=args.dataloader_params["modalities"],
+
+        # Allowlist patterns (fnmatch)
+        modality_selections= args.dataloader_params['selections'],
+
+        # modality_exclude={
+        #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
+        # },
+
+        normalize=True,
+    )
+
+    val_dataset = MultimodalGestureDataset(
+        base_path=args.dataloader_params["base_path"],
+        csv_paths=args.dataloader_params["val_trials"],
+        clip_len=args.dataloader_params["observation_window"],
+        step=args.dataloader_params["step"],
+        include_modalities=args.dataloader_params["modalities"],
+
+        modality_selections= args.dataloader_params['selections'],
+
+        # modality_exclude={
+        #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
+        # },
+        normalize=True,
+    )
+
+    test_dataset = MultimodalGestureDataset(
+        base_path=args.dataloader_params["base_path"],
+        csv_paths=args.dataloader_params["test_trials"],
+        clip_len=args.dataloader_params["observation_window"],
+        step=args.dataloader_params["step"],
+        include_modalities=args.dataloader_params["modalities"],
+
+        modality_selections= args.dataloader_params['selections'],
+
+        # modality_exclude={
+        #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
+        # },
+        normalize=True,
+    )
+
+    train_class_stats = train_dataset._get_class_stats()
+    print("Train class stats: ", train_class_stats)
+
+    val_class_stats = val_dataset._get_class_stats()
+    print("Val class stats: ", val_class_stats)
+
+    test_class_stats = test_dataset._get_class_stats()
+    print("Test class stats: ", test_class_stats)
+
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True,
+                        collate_fn=MultimodalGestureDataset.collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False,
+                        collate_fn=MultimodalGestureDataset.collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False,
+                        collate_fn=MultimodalGestureDataset.collate_fn)
+    
+    return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+
+def print_one_batch(loader):
+    batch = next(iter(loader))
+
+    # print more details about batch content
+    for k, v in batch.items():
+        if isinstance(v, torch.Tensor):
+            print(f"{k}: dtype={v.dtype}, shape={tuple(v.shape)}, "
+                f"min={v.min().item():.3f}, max={v.max().item():.3f}")
+        elif k == "gesture_code":
+            # show a few sample codes for sanity
+            print(f"{k}: {len(v)} items -> {v[:5]}{' ...' if len(v) > 5 else ''}")
+        elif isinstance(v, list):
+            print(f"{k}: list of {len(v)} items, first 3: {v[:3]}")
+        else:
+            print(f"{k}: type={type(v)}, value={v}")
+
+
+
+# MMT Model initialization
+
+def initialize_mmt_model(args, device):
+    print("Initializing MMT model...")
+    print("MMT Config: ", args.mmtransformercfg)
+    model = ModularMultimodalTransformer(args.mmtransformercfg)
+    model = model.to(device)
+    print(model)
+
+    # optimizer 
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_params['lr'], weight_decay=args.learning_params['weight_decay'])
+
+    # scheduler
+    criterion = nn.CrossEntropyLoss()
+
+    return model, optimizer, criterion
+
+def build_inputs(batch, active_modalities):
+    return {m: batch[m] for m in active_modalities if m in batch}
+
+
+def train_mmt_one_epoch(model, train_loader, criterion, optimizer, device, logger, args):
     model.train()
     total_loss = 0
     for i, batch in enumerate(train_loader):
 
-        i3d_rgb_features = batch['rgb']
-        i3d_flow_features = batch['flow']
+        try:
 
-        # move to device
-        i3d_rgb_features = i3d_rgb_features.to(device)
-        i3d_flow_features = i3d_flow_features.to(device)
+            inputs = build_inputs(batch, args.dataloader_params["modalities"])
+            inputs = {k: v.to(device) for k,v in inputs.items()}
 
-        # get labels
-        labels = batch['keystep_id']
-        labels = labels.to(device)
+            logits = model(inputs)
 
-        optimizer.zero_grad()
-        output = model(i3d_rgb_features)
+            loss = criterion(logits, batch['label'].to(device))
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            total_loss += loss.item()
+
+            if i % 10 == 0:
+                print(f"Batch {i}, Loss: {loss.item()}")
 
 
-        loss = criterion(output, labels)
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
 
-        if i % 1 == 0:
-            print("\n ***** ")
-            print(batch['frames'].shape, batch['audio'].shape, batch['flow'].shape, batch['rgb'].shape, batch['keystep_label'], batch['keystep_id'], batch['start_frame'], batch['end_frame'],batch['start_t'], batch['end_t'],  batch['subject_id'], batch['trial_id'])
-            print(f"Pred: {torch.argmax(output, dim=1)} GT: {labels}")
-            logger.log({"train_loss": loss.item()})
-            print(f"Batch: {i}, Loss: {loss.item()}")
-            print(" ***** \n")
+        except Exception as e:
+            print(f"Error in batch {i}: {e}")
+            # print stack trace
+            import traceback
+            traceback.print_exc()
+            continue
 
     return total_loss / len(train_loader)
 
 
-# validate the model 
-def eee_validate(model, val_loader, criterion, device, logger):
+
+def validate_mmt(model, val_loader, criterion, device, logger, args):
     model.eval()
     total_loss = 0
     with torch.no_grad():
         for i, batch in enumerate(val_loader):
+            try:
+                inputs = build_inputs(batch, args.dataloader_params["modalities"])
+                inputs = {k: v.to(device) for k,v in inputs.items()}
 
-            i3d_rgb_features = batch['rgb']
-            i3d_flow_features = batch['flow']
+                logits = model(inputs)
 
-            # move to device
-            i3d_rgb_features = i3d_rgb_features.to(device)
-            i3d_flow_features = i3d_flow_features.to(device)
+                loss = criterion(logits, batch['label'].to(device))
+                total_loss += loss.item()
+                if i % 10 == 0:
+                    logger.log({"val_loss": loss.item()})
 
-            # get labels
-            labels = batch['keystep_id']
-            labels = labels.to(device)
-
-            output = model(i3d_rgb_features)
-
-            loss = criterion(output, labels)
-            total_loss += loss.item()
-            if i % 1 == 0:
-                logger.log({"val_loss": loss.item()})
+            except Exception as e:
+                print(f"Error in batch {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
 
     return total_loss / len(val_loader)
 
-
-# test the model
-def eee_test_model(model, test_loader, criterion, device, logger, epoch, results_dir):
+def test_mmt_model(model, test_loader, criterion, device, logger, epoch, results_dir, args):
     model.eval()
     total_loss = 0
 
@@ -568,137 +883,274 @@ def eee_test_model(model, test_loader, criterion, device, logger, epoch, results
     gt = []
     preds = []
     
+    preds_detail = []
 
     with torch.no_grad():
         for i, batch in enumerate(test_loader):
+            try:
+                # forward
+                inputs = build_inputs(batch, args.dataloader_params["modalities"])
+                inputs = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}
 
-            i3d_rgb_features = batch['rgb']
-            i3d_flow_features = batch['flow']
+                logits = model(inputs)                            # [B, C]
+                labels = batch["label"].to(device, non_blocking=True)  # [B]
+                loss = criterion(logits, labels)
+                total_loss += loss.item()
 
-            # move to device
-            i3d_rgb_features = i3d_rgb_features.to(device)
-            i3d_flow_features = i3d_flow_features.to(device)
+                # predictions
+                pred = torch.argmax(logits, dim=1)               # [B]
 
-            # get labels
-            labels = batch['keystep_id']
-            labels = labels.to(device)
+                # accumulate scalar lists
+                gt.extend(batch["label"].cpu().tolist())         # extend with B items
+                preds.extend(pred.cpu().tolist())                # extend with B items
 
-            output = model(i3d_rgb_features)
-            pred = torch.argmax(output, dim=1)
-            gt.append(labels.item())
-            preds.append(pred.item())
-    
+                # optional: probs if you need them
+                probs = torch.softmax(logits, dim=1).detach().cpu().tolist()
+
+                # detailed per-sample records
+                B = pred.shape[0]
+                trial_ids      = batch.get("trial_id",      [None]*B)   # might be list[str] or tensor
+                subject_ids    = batch.get("subject_id",    [None]*B)
+                gesture_codes  = batch.get("gesture_code",  [None]*B)   # usually list[str]
+
+                for i in range(B):
+                    preds_detail.append({
+                        "trial_id":      trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item(),
+                        "subject_id":    subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item(),
+                        "gesture_code":  gesture_codes[i] if isinstance(gesture_codes, list) else gesture_codes[i],
+                        "pred_label":    int(pred[i].cpu().item()),
+                        "logits":        logits[i].detach().cpu().tolist(),
+                        "probs":         probs[i],
+                    })
+
+            except Exception as e:
+                print(f"Error in batch {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                # print(f"Batch data: {batch}")
+                continue
+
+            # break
+            
     # Calculate metrics
     accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)
     precision = precision_score(gt, preds, average='macro')
     recall = recall_score(gt, preds, average='macro')
     f1 = f1_score(gt, preds, average='macro')
 
-    # Log metrics to wandb
-    logger.log({
-        "test_accuracy": accuracy,
-        "test_precision": precision,
-        "test_recall": recall,
-        "test_f1": f1,
+    results = {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
         "epoch": epoch
-    })
+    }
+    # Log metrics to wandb
+    logger.log(results)
     
     # Save metrics to CSV
     metrics_path = f'{results_dir}/metrics.csv'
     with open(metrics_path, mode='a', newline='') as file:
         writer = csv.writer(file)
-        if not os.path.isfile(metrics_path):
-            writer.writerow(["epoch", "accuracy", "precision", "recall", "f1"])
-        writer.writerow([epoch, accuracy, precision, recall, f1])
+        writer.writerow(["epoch",  "precision", "recall", "f1", "accuracy"])
+        writer.writerow([epoch,  precision, recall, f1, accuracy])
+
+    # Save detailed predictions to CSV
+    preds_path = f'{results_dir}/preds.csv'
+    print("Saving predictions to: ", preds_path)
+    with open(preds_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["trial_id", "subject_id", "gesture_code", "pred_label","probs"])
+        for pred in preds_detail:
+            writer.writerow([pred["trial_id"], pred["subject_id"], pred["gesture_code"], pred["pred_label"], pred["probs"]])
+    return results
+
+
+def mmt_preprocess(batch, args, backbone, device):
+    """
+    Concatenate all active modalities into a single tensor [B, T, F_total].
+    - Pads along time if modalities have different T in this batch.
+    - Respects the order in args.dataloader_params["modalities"].
+    """
+    active_mods = [m for m in args.dataloader_params["modalities"] if m in batch]
+    if not active_mods:
+        raise ValueError("No active modalities found in batch matching args.dataloader_params['modalities'].")
+
+    # Collect tensors and find max T in this batch
+    mod_tensors = []
+    T_max = 0
+    B_ref = None
+    for m in active_mods:
+        x = batch[m]
+        if not isinstance(x, torch.Tensor):
+            raise TypeError(f"Expected tensor for modality '{m}', got {type(x)}")
+        if x.dim() != 3:
+            raise ValueError(f"Expected [B, T, F] for modality '{m}', got shape {tuple(x.shape)}")
+        B, T, F = x.shape
+        if B_ref is None:
+            B_ref = B
+        elif B != B_ref:
+            raise ValueError(f"Batch size mismatch across modalities: got {B_ref} and {B} for '{m}'")
+        T_max = max(T_max, T)
+        mod_tensors.append((m, x))
+
+    # Pad (if needed) each modality to T_max along time, then concat along feature dim
+    padded_list = []
+    for m, x in mod_tensors:
+        B, T, F = x.shape
+        if T < T_max:
+            pad = x.new_zeros((B, T_max - T, F))
+            x = torch.cat([x, pad], dim=1)  # right-pad in time
+        padded_list.append(x)
+
+    X = torch.cat(padded_list, dim=-1).to(device, non_blocking=True)  # [B, T_max, sum(F)]
+    return X
+
+
+def get_feature_dim(loader, args, device):
+    batch = next(iter(loader))
+    preprocessed_inputs = mmt_preprocess(batch, args, None, device)
+    return preprocessed_inputs.size(-1)
+
+
+def train_transtcn_one_epoch(model, train_loader, criterion, optimizer, device, logger, args):
     
-    return accuracy
+    model.train()
+    total_loss = 0
+    for i, batch in enumerate(train_loader):
+
+        try:
+
+            preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+            logits = model(preprocessed_inputs)
+
+            loss = criterion(logits, batch['label'].to(device))
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            total_loss += loss.item()
+
+            if i % 10 == 0:
+                print(f"Batch {i}, Loss: {loss.item()}")
 
 
 
+        except Exception as e:
+            print(f"Error in batch {i}: {e}")
+            # print stack trace
+            import traceback
+            traceback.print_exc()
+            continue
 
-# return train,val,test dataloaders using the EgoExoEMSDataset class
-def eee_get_dataloaders(args):
+    return total_loss / len(train_loader)
+
+
+def validate_transtcn(model, val_loader, criterion, device, logger, args):
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            try:
+                preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+                logits = model(preprocessed_inputs)
+
+                loss = criterion(logits, batch['label'].to(device))
+                total_loss += loss.item()
+                if i % 10 == 0:
+                    logger.log({"val_loss": loss.item()})
+
+            except Exception as e:
+                print(f"Error in batch {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+    return total_loss / len(val_loader)
+
+def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, results_dir, args):
+    model.eval()
+    total_loss = 0
+
+
+    accuracy = 0.0
+    gt = []
+    preds = []
     
-    if(args.dataloader_params["task"] == 'classification'):
-        print("*" * 10, "=" * 10, "*" * 10)
-        print("Loading dataloader for Classification task")
+    preds_detail = []
 
-        train_dataset = EgoExoEMSDataset(annotation_file=args.dataloader_params["train_annotation_path"],
-                                        data_base_path='',
-                                        fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+    with torch.no_grad():
+        for i, batch in enumerate(test_loader):
+            try:
+                # forward
+                preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+                logits = model(preprocessed_inputs)                            # [B, C]
+                labels = batch["label"].to(device, non_blocking=True)  # [B]
+                loss = criterion(logits, labels)
+                total_loss += loss.item()
 
-        val_dataset = EgoExoEMSDataset(annotation_file=args.dataloader_params["val_annotation_path"],
-                                        data_base_path='',
-                                        fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+                # predictions
+                pred = torch.argmax(logits, dim=1)               # [B]
 
-        test_dataset = EgoExoEMSDataset(annotation_file=args.dataloader_params["test_annotation_path"],
-                                        data_base_path='',
-                                        fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+                # accumulate scalar lists
+                gt.extend(batch["label"].cpu().tolist())         # extend with B items
+                preds.extend(pred.cpu().tolist())                # extend with B items
 
+                # optional: probs if you need them
+                probs = torch.softmax(logits, dim=1).detach().cpu().tolist()
 
-        train_class_stats = train_dataset._get_class_stats()
-        print("Train class stats: ", train_class_stats)
-        # print number of keys in the dictionary
-        print("Train Number of classes: ", len(train_class_stats.keys()))
+                # detailed per-sample records
+                B = pred.shape[0]
+                trial_ids      = batch.get("trial_id",      [None]*B)   # might be list[str] or tensor
+                subject_ids    = batch.get("subject_id",    [None]*B)
+                gesture_codes  = batch.get("gesture_code",  [None]*B)   # usually list[str]
 
-        val_class_stats = val_dataset._get_class_stats()
-        print("val class stats: ", val_class_stats)
-        # print number of keys in the dictionary
-        print("Val Number of classes: ", len(val_class_stats.keys()))
+                for i in range(B):
+                    preds_detail.append({
+                        "trial_id":      trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item(),
+                        "subject_id":    subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item(),
+                        "gesture_code":  gesture_codes[i] if isinstance(gesture_codes, list) else gesture_codes[i],
+                        "pred_label":    int(pred[i].cpu().item()),
+                        "logits":        logits[i].detach().cpu().tolist(),
+                        "probs":         probs[i],
+                    })
 
-        # Create DataLoaders for training and validation subsets
-        train_loader = DataLoader(train_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False)
-        val_loader = DataLoader(val_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False)
+            except Exception as e:
+                print(f"Error in batch {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                # print(f"Batch data: {batch}")
+                continue
 
-        print("train dataset size: ", len(train_dataset))
-        print("val dataset size: ", len(val_dataset))
-        print("test dataset size: ", len(test_dataset))
-    
-    elif (args.dataloader_params["task"] == 'segmentation'):
-        print("*" * 10, "=" * 10, "*" * 10)
-        print("Loading dataloader for Segmentation task")
-        
-        train_dataset = WindowEgoExoEMSDataset(annotation_file=args.dataloader_params["train_annotation_path"],
-                                        data_base_path='',
-                                        fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+            # break
+            
+    # Calculate metrics
+    accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)
+    precision = precision_score(gt, preds, average='macro')
+    recall = recall_score(gt, preds, average='macro')
+    f1 = f1_score(gt, preds, average='macro')
+    results = {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "epoch": epoch
+    }
+    # Log metrics to wandb
+    logger.log(results)
 
-        val_dataset = WindowEgoExoEMSDataset(annotation_file=args.dataloader_params["val_annotation_path"],
-                                        data_base_path='',
-                                        fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
+    # Save metrics to CSV
+    metrics_path = f'{results_dir}/metrics.csv'
+    with open(metrics_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["epoch",  "precision", "recall", "f1", "accuracy"])
+        writer.writerow([epoch,  precision, recall, f1, accuracy])  
 
-        test_dataset = WindowEgoExoEMSDataset(annotation_file=args.dataloader_params["test_annotation_path"],
-                                        data_base_path='',
-                                        fps=args.dataloader_params["fps"], frames_per_clip=args.dataloader_params["observation_window"], transform=transform, data_types=args.dataloader_params["modality"], task=args.dataloader_params["task"])
-
-        train_class_stats = train_dataset._get_class_stats()
-        print("Train class stats: ", train_class_stats)
-        # print number of keys in the dictionary
-        print("Train Number of classes: ", len(train_class_stats.keys()))
-
-        val_class_stats = val_dataset._get_class_stats()
-        print("val class stats: ", val_class_stats)
-        # print number of keys in the dictionary
-        print("Val Number of classes: ", len(val_class_stats.keys()))
-
-        test_class_stats = test_dataset._get_class_stats()
-        print("test class stats: ", test_class_stats)
-        # print number of keys in the dictionary
-        print("Test Number of classes: ", len(test_class_stats.keys()))
-
-        
-        # Use a partial function or lambda to pass the frames_per_clip argument
-        collate_fn_with_args = partial(window_collate_fn, frames_per_clip=args.dataloader_params["observation_window"])
-
-        # Create DataLoaders for training and validation subsets
-        train_loader = DataLoader(train_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=True, collate_fn=collate_fn_with_args)
-        test_loader = DataLoader(test_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False, collate_fn=collate_fn_with_args)
-        val_loader = DataLoader(val_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False, collate_fn=collate_fn_with_args)
-
-        print("train dataset size: ", len(train_dataset))
-        print("val dataset size: ", len(val_dataset))
-        print("test dataset size: ", len(test_dataset))
-
-    return train_loader, val_loader, test_loader, train_class_stats, val_class_stats
-
-
+        # Save detailed predictions to CSV
+    preds_path = f'{results_dir}/preds.csv'
+    print("Saving predictions to: ", preds_path)
+    with open(preds_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["trial_id", "subject_id", "gesture_code", "pred_label","probs"])
+        for pred in preds_detail:
+            writer.writerow([pred["trial_id"], pred["subject_id"], pred["gesture_code"], pred["pred_label"], pred["probs"]])
+    return results

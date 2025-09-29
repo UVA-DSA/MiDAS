@@ -11,13 +11,14 @@ import fnmatch
 # --- Add these imports at the top (or ensure they exist) ---
 import glob
 from pathlib import Path
+import re
+
 
 # --- Add these helpers above the class (or make them @staticmethods) ---
 def _gather_csvs_from_dir(dir_path: str, glob_pattern: str = "*.csv", recursive: bool = False) -> list[str]:
     pattern = str(Path(dir_path) / ("**/" + glob_pattern if recursive else glob_pattern))
     return sorted(glob.glob(pattern, recursive=recursive))
 
-import re
 
 def _infer_trial_id(path: str) -> str:
     p = Path(path)
@@ -32,6 +33,7 @@ def _infer_trial_id(path: str) -> str:
         return p.parent.parent.name
     # Else use parent folder; fallback to stem
     return p.parent.name or p.stem
+
 
 def _read_and_tag_csv(path: str, fillna_value: float | None) -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -49,7 +51,7 @@ class MultimodalGestureDataset(Dataset):
         "sw_left":     lambda c: c.startswith("sw_left_"),
         "sw_right":    lambda c: c.startswith("sw_right_"),
         "console":     lambda c: c.startswith("console_"),
-        "raven_field": lambda c: c.startswith("raven_field."),
+        "raven":       lambda c: c.startswith("raven_"),
         "pedals":      lambda c: c.startswith("Pedal "),
         # "timestamps": lambda c: c.endswith("_time_ns") or c.endswith("_delta_ns"),
     }
@@ -57,11 +59,12 @@ class MultimodalGestureDataset(Dataset):
     def __init__(
         self,
         # One of these:
-        csv_path: str | None = None,              # old behavior (single file)
-        dir_path: str | None = None,              # NEW: directory containing many CSVs
-        csv_paths: Optional[Sequence[str]] = None,# NEW: explicit list of CSV paths
-        glob_pattern: str = "*.csv",              # NEW: which files to pick in dir
-        recursive: bool = False,                  # NEW: recurse into subfolders
+        base_path: str | None = None,             # used for appending csv_paths (keep as-is if you rely on it)
+        csv_path: str | None = None,              # single file
+        dir_path: str | None = None,              # directory containing many CSVs
+        csv_paths: Optional[Sequence[str]] = None,# explicit list of CSV paths
+        glob_pattern: str = "*.csv",              # pattern for dir scan
+        recursive: bool = False,                  # recurse into subfolders
 
         clip_len: int = 32,
         step: int = 8,
@@ -78,7 +81,7 @@ class MultimodalGestureDataset(Dataset):
         modality_selections: Optional[Dict[str, Sequence[str]]] = None,
         modality_exclude: Optional[Dict[str, Sequence[str]]] = None,
         seed: int = 0,
-        windowing: str = "fixed",   # keep your earlier extension if you added it
+        windowing: str = "fixed",   # kept for back-compat; clip_len takes precedence now
     ):
         super().__init__()
 
@@ -95,15 +98,22 @@ class MultimodalGestureDataset(Dataset):
         else:
             raise ValueError("Provide one of: csv_path, dir_path, or csv_paths.")
 
-        dfs = [_read_and_tag_csv(p, fillna_value=None) for p in collected_paths]
+        # NOTE: This block preserves your existing behavior; if you pass absolute paths,
+        #       prefer: dfs = [_read_and_tag_csv(p, fillna_value=None) for p in collected_paths]
+        #       but we keep your current pattern to avoid breaking existing pipelines.
+        if base_path is not None:
+            dfs = [_read_and_tag_csv(base_path + p + "/synched_data/final_annotation_" + p + ".csv", fillna_value=None)
+                   for p in collected_paths]
+        else:
+            dfs = [_read_and_tag_csv(p, fillna_value=None) for p in collected_paths]
+
         self.df = pd.concat(dfs, axis=0, ignore_index=True)
 
         sort_keys = ["trial_id", "obs_frame_idx", "source_csv"]
         self.df = self.df.sort_values(sort_keys, kind="mergesort").reset_index(drop=True)
         # (stable mergesort helps maintain per-file order when keys tie)
 
-
-        # Now handle NaNs globally (after union of columns)
+        # Handle NaNs globally (after union of columns)
         if fillna_value is not None:
             self.df = self.df.fillna(fillna_value)
 
@@ -116,7 +126,7 @@ class MultimodalGestureDataset(Dataset):
         sort_keys = ["trial_id", "obs_frame_idx"] if "trial_id" in self.df.columns else ["obs_frame_idx"]
         self.df = self.df.sort_values(sort_keys).reset_index(drop=True)
 
-        # ---------- Rest of your existing init follows ----------
+        # ---------- Build class map & modality columns ----------
         self.class_map = dict(class_map) if class_map else {
             c: i for i, c in enumerate(sorted(self.df["gesture_code"].dropna().unique().tolist()))
         }
@@ -125,7 +135,7 @@ class MultimodalGestureDataset(Dataset):
         self.modality_selections = modality_selections or {}
         self.modality_exclude = modality_exclude or {}
 
-        self.modality_cols = {}
+        self.modality_cols: Dict[str, List[str]] = {}
         all_cols = list(self.df.columns)
 
         def match_any(patterns: Sequence[str], col: str) -> bool:
@@ -149,7 +159,7 @@ class MultimodalGestureDataset(Dataset):
             if numeric:
                 self.modality_cols[m] = numeric
 
-        # Gesture runs per trial (keep segments separated across trials)
+        # ---------- Gesture runs per trial (separate trials/files) ----------
         self.df["_run_boundary"] = (
             (self.df["gesture_code"] != self.df["gesture_code"].shift(1)) |
             (self.df["trial_id"]     != self.df["trial_id"].shift(1))     |
@@ -157,25 +167,30 @@ class MultimodalGestureDataset(Dataset):
         )
         self.df["_run_id"] = self.df["_run_boundary"].cumsum()
 
-
+        # ---------- Windowing ----------
         self.clip_len = int(clip_len)
         self.step = int(step)
+        self.full_clip = (self.clip_len == -1)   # NEW: full-gesture mode flag
         self.drop_short_segments = bool(drop_short_segments)
-        self.windowing = windowing  # if you kept the full/fixed option
-        self.samples = []
-        self._make_windows()  # unchanged except it groups by _run_id
+        self.windowing = windowing  # kept for back-compat; ignored if full_clip is True
+        self.samples: List[Dict] = []
+        self._make_windows()  # builds samples
 
+        # ---------- Normalization ----------
         self.normalize = normalize
         self.norm_stats = normalization_stats or {}
         if self.normalize and not self.norm_stats:
             self._compute_norm_stats()
 
+        # ---------- Optional images ----------
         self.image_dir = image_dir
         self.image_pattern = image_pattern
         self.image_loader = image_loader
+
+        # ---------- RNG ----------
         self.rng = np.random.default_rng(seed)
 
-
+    # ---------------- Window builder ----------------
     def _make_windows(self):
         self.samples.clear()
         for _, seg in self.df.groupby("_run_id", sort=False):
@@ -183,6 +198,16 @@ class MultimodalGestureDataset(Dataset):
             seg_len = len(seg)
             base = int(seg.index[0])
 
+            if self.full_clip:
+                # One sample = entire gesture segment
+                self.samples.append({
+                    "start": base,
+                    "end": base + seg_len,
+                    "gesture_code": label_str
+                })
+                continue
+
+            # ---- fixed-length windows (existing behavior) ----
             if seg_len < self.clip_len:
                 if self.drop_short_segments:
                     continue
@@ -192,8 +217,13 @@ class MultimodalGestureDataset(Dataset):
                 continue
 
             for s in range(0, max_start + 1, self.step):
-                self.samples.append({"start": base + s, "end": base + s + self.clip_len, "gesture_code": label_str})
+                self.samples.append({
+                    "start": base + s,
+                    "end": base + s + self.clip_len,
+                    "gesture_code": label_str
+                })
 
+    # ---------------- Normalization stats ----------------
     def _compute_norm_stats(self):
         if not self.samples:
             raise RuntimeError("No samples to compute normalization stats from.")
@@ -206,6 +236,7 @@ class MultimodalGestureDataset(Dataset):
             std[std == 0] = 1.0
             self.norm_stats[m] = (mean, std)
 
+    # ---------------- Dataset API ----------------
     def __len__(self) -> int:
         return len(self.samples)
 
@@ -232,7 +263,7 @@ class MultimodalGestureDataset(Dataset):
         code = s["gesture_code"]
         label = self.class_map[code]
 
-        item = {}
+        item: Dict[str, torch.Tensor | str] = {}
         for m in self.modality_cols.keys():
             item[m] = self._get_modality_tensor(start, end, m)  # [T, F]
 
@@ -246,6 +277,13 @@ class MultimodalGestureDataset(Dataset):
             item["images"] = imgs
         return item
 
+    # ---------------- Stats helpers ----------------
+    def _get_class_stats(self) -> Dict[str, int]:
+        stats = {c: 0 for c in self.class_map.keys()}
+        for s in self.samples:
+            stats[s["gesture_code"]] += 1
+        return stats
+
     @property
     def num_classes(self) -> int:
         return len(self.class_map)
@@ -255,125 +293,184 @@ class MultimodalGestureDataset(Dataset):
         inv = {v: k for k, v in self.class_map.items()}
         return [inv[i] for i in range(len(inv))]
 
+    # ---------------- Padding helpers (for variable-length) ----------------
+    @staticmethod
+    def _pad_and_stack_2d(seqs: List[torch.Tensor], pad_value: float = 0.0):
+        """
+        Pad a list of [T, F] tensors to [B, T_max, F] and return (padded, mask).
+        mask: [B, T_max] with True for valid timesteps.
+        """
+        lengths = [s.shape[0] for s in seqs]
+        B = len(seqs)
+        T_max = max(lengths)
+        F = seqs[0].shape[1]
+        device = seqs[0].device
+        out = seqs[0].new_full((B, T_max, F), pad_value)
+        mask = torch.zeros(B, T_max, dtype=torch.bool, device=device)
+        for i, s in enumerate(seqs):
+            t = s.shape[0]
+            out[i, :t] = s
+            mask[i, :t] = True
+        return out, mask
+
+    @staticmethod
+    def _pad_and_stack_1d(seqs: List[torch.Tensor], pad_value: int = 0):
+        """
+        Pad a list of [T] tensors to [B, T_max] and return (padded, mask).
+        """
+        lengths = [s.shape[0] for s in seqs]
+        B = len(seqs)
+        T_max = max(lengths)
+        device = seqs[0].device
+        out = seqs[0].new_full((B, T_max), pad_value)
+        mask = torch.zeros(B, T_max, dtype=torch.bool, device=device)
+        for i, s in enumerate(seqs):
+            t = s.shape[0]
+            out[i, :t] = s
+            mask[i, :t] = True
+        return out, mask
+
+    # ---------------- Collate ----------------
     @staticmethod
     def collate_fn(batch):
-        out = {}
+        """
+        Fixed-length clips -> stack as before.
+        Full-gesture (variable-length) -> pad per modality and return attention masks.
+        """
+        out: Dict[str, torch.Tensor] = {}
         keys = list(batch[0].keys())
-        tensor_modalities = [k for k in keys if isinstance(batch[0][k], torch.Tensor)
+
+        # Identify tensor modalities (exclude label/idx/images)
+        tensor_modalities = [k for k in keys
+                             if isinstance(batch[0][k], torch.Tensor)
                              and k not in ("label", "obs_frame_idx", "images")]
+
+        # Detect variable length (any modality with differing T within the batch)
+        def lengths_equal_for_mod(m):
+            lens = [b[m].shape[0] for b in batch]
+            return len(set(lens)) == 1
+
+        variable_length = False
+        if tensor_modalities:
+            variable_length = any(not lengths_equal_for_mod(m) for m in tensor_modalities)
+
+        if not variable_length:
+            # ---- fixed-length: original behavior ----
+            for m in tensor_modalities:
+                out[m] = torch.stack([b[m] for b in batch], dim=0)  # [B, T, F]
+            out["label"] = torch.stack([b["label"] for b in batch], dim=0)  # [B]
+            out["obs_frame_idx"] = torch.stack([b["obs_frame_idx"] for b in batch], dim=0)  # [B, T]
+            out["gesture_code"] = [b["gesture_code"] for b in batch]
+            if "images" in batch[0]:
+                out["images"] = torch.stack([b["images"] for b in batch], dim=0)  # [B, T, C, H, W]
+            return out
+
+        # ---- variable-length (full-gesture) ----
+        attention_mask: Dict[str, torch.Tensor] = {}
         for m in tensor_modalities:
-            out[m] = torch.stack([b[m] for b in batch], dim=0)  # [B, T, F]
-        out["label"] = torch.stack([b["label"] for b in batch], dim=0)
-        out["obs_frame_idx"] = torch.stack([b["obs_frame_idx"] for b in batch], dim=0)
+            seqs = [b[m] for b in batch]                     # list of [T, F]
+            padded, mask = MultimodalGestureDataset._pad_and_stack_2d(seqs, pad_value=0.0)
+            out[m] = padded                                  # [B, T_max, F]
+            attention_mask[m] = mask                         # [B, T_max] (True=valid)
+
+        # Pad obs_frame_idx similarly
+        obs_seqs = [b["obs_frame_idx"] for b in batch]       # list of [T]
+        obs_padded, obs_mask = MultimodalGestureDataset._pad_and_stack_1d(obs_seqs, pad_value=0)
+        out["obs_frame_idx"] = obs_padded                    # [B, T_max]
+        out["obs_mask"] = obs_mask                           # [B, T_max]
+
+        out["label"] = torch.stack([b["label"] for b in batch], dim=0)          # [B]
         out["gesture_code"] = [b["gesture_code"] for b in batch]
-        if "images" in batch[0]:
-            out["images"] = torch.stack([b["images"] for b in batch], dim=0)
+
+        # Package per-modality masks (handy for per-modality encoders)
+        out["attention_mask"] = attention_mask               # dict: {mod: [B, T_max]}
+
+        # Images: add padding if you need variable-length visuals later
         return out
 
 
-# test block
-
-from torch.utils.data import DataLoader
-
+# ---------------- test block ----------------
 if __name__ == "__main__":
+    from torch.utils.data import DataLoader
+
+    ROOT_DIR = "/standard/UVA-DSA/MIDAS/Organized/09-18-25/hamid"
 
     train_files = [
-    "G:/Research/MIDAS/Organized/09-18-25/hamid/t1/synched_data/final_annotation_t1.csv",
-    "G:/Research/MIDAS/Organized/09-18-25/hamid/t2/synched_data/final_annotation_t2.csv",
-    "G:/Research/MIDAS/Organized/09-18-25/hamid/t3/synched_data/final_annotation_t3.csv",
-    "G:/Research/MIDAS/Organized/09-18-25/hamid/t4/synched_data/final_annotation_t4.csv",
-    "G:/Research/MIDAS/Organized/09-18-25/hamid/t5/synched_data/final_annotation_t5.csv"
+        f"{ROOT_DIR}/t1/synched_data/final_annotation_t1.csv",
+        f"{ROOT_DIR}/t2/synched_data/final_annotation_t2.csv",
+        f"{ROOT_DIR}/t3/synched_data/final_annotation_t3.csv",
+        f"{ROOT_DIR}/t4/synched_data/final_annotation_t4.csv",
+        f"{ROOT_DIR}/t5/synched_data/final_annotation_t5.csv"
     ]
 
     test_files = [
-    "G:/Research/MIDAS/Organized/09-18-25/hamid/t6/synched_data/final_annotation_t6.csv",
-    "G:/Research/MIDAS/Organized/09-18-25/hamid/t7/synched_data/final_annotation_t7.csv"
+        f"{ROOT_DIR}/t6/synched_data/final_annotation_t6.csv",
+        f"{ROOT_DIR}/t7/synched_data/final_annotation_t7.csv"
     ]
-    
+
+    # ----- Fixed-length example (unchanged behavior) -----
     train_dataset = MultimodalGestureDataset(
         csv_paths=train_files,
-        clip_len=30,
+        clip_len=30,  # fixed 1s @ 30Hz
         step=8,
         include_modalities=["trakstar", "sw_left", "console"],
-
-        # Allowlist patterns (fnmatch)
         modality_selections={
-            # Only sensors 0 and 2, and only x/y/azimuth features
             "trakstar": [
                 "trakstar_sensor_0_*x", "trakstar_sensor_0_*y", "trakstar_sensor_0_azimuth",
                 "trakstar_sensor_2_*x", "trakstar_sensor_2_*y", "trakstar_sensor_2_azimuth",
             ],
-            # Only smartwatch-left x and y (drop z)
             "sw_left": ["sw_left_x", "sw_left_y"],
-            # Only console position, not rotation
             "console": ["console_pos*"],
         },
-
-        # Denylist patterns if you want to drop something after allowlist
         modality_exclude={
-            "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
+            "trakstar": ["*elevation*", "*roll*"],
         },
-
         normalize=True,
     )
 
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True,
-                        collate_fn=MultimodalGestureDataset.collate_fn)
+                              collate_fn=MultimodalGestureDataset.collate_fn)
     batch = next(iter(train_loader))
 
     # print more details about batch content
     for k, v in batch.items():
         if isinstance(v, torch.Tensor):
             print(f"{k}: dtype={v.dtype}, shape={tuple(v.shape)}, "
-                f"min={v.min().item():.3f}, max={v.max().item():.3f}")
+                  f"min={v.min().item():.3f}, max={v.max().item():.3f}")
         elif k == "gesture_code":
-            # show a few sample codes for sanity
             print(f"{k}: {len(v)} items -> {v[:5]}{' ...' if len(v) > 5 else ''}")
         elif isinstance(v, list):
             print(f"{k}: list of {len(v)} items, first 3: {v[:3]}")
         else:
             print(f"{k}: type={type(v)}, value={v}")
 
-    # iterate through all samples to check for errors
     print(f"\nTrain Dataset has {len(train_dataset)} samples, {train_dataset.num_classes} classes: {train_dataset.classes}")
 
-    # use loader to iterate through all samples to check for errors
-    for i, sample in enumerate(train_loader):
+    # iterate through all batches once
+    for i, _ in enumerate(train_loader):
         pass
-
     print(f"Iterated through all {i+1} batches from Train DataLoader successfully.")
 
-    # test dataset
-    test_dataset = MultimodalGestureDataset(
+    # ----- Full-gesture example (clip_len == -1) -----
+    full_dataset = MultimodalGestureDataset(
         csv_paths=test_files,
-        clip_len=30,
-        step=8,
+        clip_len=-1,  # <-- entire gesture segments
         include_modalities=["trakstar", "sw_left", "console"],
         normalize=True,
     )
 
-    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False,
-                        collate_fn=MultimodalGestureDataset.collate_fn)
-    test_batch = next(iter(test_loader))
+    full_loader = DataLoader(full_dataset, batch_size=8, shuffle=False,
+                             collate_fn=MultimodalGestureDataset.collate_fn)
+    full_batch = next(iter(full_loader))
 
-    # print more details about test batch content
-    for k, v in test_batch.items():
-        if isinstance(v, torch.Tensor):
-            print(f"{k}: dtype={v.dtype}, shape={tuple(v.shape)}, "
-                f"min={v.min().item():.3f}, max={v.max().item():.3f}")
-        elif k == "gesture_code":
-            # show a few sample codes for sanity
-            print(f"{k}: {len(v)} items -> {v[:5]}{' ...' if len(v) > 5 else ''}")
-        elif isinstance(v, list):
-            print(f"{k}: list of {len(v)} items, first 3: {v[:3]}")
-        else:
-            print(f"{k}: type={type(v)}, value={v}")
+    print("\n[Full-gesture mode] Keys:", full_batch.keys())
+    for m, x in full_batch.items():
+        if isinstance(x, torch.Tensor):
+            print(m, x.shape)
+    if "attention_mask" in full_batch:
+        print("Per-modality masks:", {k: v.shape for k, v in full_batch["attention_mask"].items()})
 
-    # iterate through all samples to check for errors
-    print(f"\nTest Dataset has {len(test_dataset)} samples, {test_dataset.num_classes} classes: {test_dataset.classes}")
-
-    # use loader to iterate through all samples to check for errors
-    for i, sample in enumerate(test_loader):
+    print(f"\nFull-gesture Dataset has {len(full_dataset)} samples, {full_dataset.num_classes} classes: {full_dataset.classes}")
+    for i, _ in enumerate(full_loader):
         pass
-
-    print(f"Iterated through all {i+1} batches from Test DataLoader successfully.")
+    print(f"Iterated through all {i+1} batches from Full-gesture DataLoader successfully.")

@@ -179,7 +179,7 @@ class TransformerModel(nn.Module):
         self.nhead = args.transformer_params["nhead"]
         self.batch_first = args.transformer_params["batch_first"]
 
-        self.modality = args.dataloader_params["modality"]
+        self.modality = args.dataloader_params["modalities"]
 
         self.encoder_params = args.tcn_model_params["encoder_params"]
         self.decoder_params = args.tcn_model_params["decoder_params"]

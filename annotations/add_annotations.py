@@ -19,12 +19,12 @@ def combine_csvs(annotation_csv, data_csv):
 
 
 if __name__ == "__main__":
-    trial_name = "t7"
+    trial_name = "bt5"
 
-    base_dir = Path(r"G:/Research/MIDAS/Organized/09-18-25/hamid") / trial_name / "synched_data"
+    base_dir = Path(r"/standard/UVA-DSA/MIDAS/Organized/final_data") / trial_name / "synched_data"
 
     annotation_csv_path = base_dir / f"peg_{trial_name}_final_annotation_frames.csv"
-    data_csv_path = base_dir / f"synced_all_{trial_name}.csv"
+    data_csv_path = base_dir / f"synched_all_{trial_name}.csv"
     output_csv_path = base_dir / f"final_annotation_{trial_name}.csv"
 
     # Load CSVs

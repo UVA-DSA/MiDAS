@@ -2,3 +2,5 @@
 **/logs/
 **/results/
 **/wandb/
+plots_out
+datautils/viz**

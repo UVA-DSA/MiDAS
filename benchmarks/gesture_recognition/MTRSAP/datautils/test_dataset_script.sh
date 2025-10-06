@@ -3,14 +3,14 @@
 # --- this job will be run on any available node
 # and simply output the node's hostname to
 # my_job.output
-#SBATCH --job-name="EgoExoEMS MTRSAP Benchmark"
-#SBATCH --error="./logs/job-%j-mtrsap_train_script.err"
-#SBATCH --output="./logs/job-%j-mtrsap_train_script.output"
+#SBATCH --job-name="MIDAS Dataset Test"
+#SBATCH --error="./logs/job-%j-midas_dataset_test.err"
+#SBATCH --output="./logs/job-%j-midas_dataset_test.output"
 #SBATCH --partition="gpu"
-#SBATCH --gres=gpu:1
-#SBATCH --time=3-00:00:00
+#SBATCH --gres=gpu:a40:1
+#SBATCH --time=0-01:00:00
 #SBATCH --cpus-per-task=12
-#SBATCH --mem=32G
+#SBATCH --mem=16G
 #SBATCH --ntasks=1
 #SBATCH --account="uva-dsa"
 
@@ -18,8 +18,8 @@ module purge &&
 module load miniforge  &&
 source /home/cjh9fw/.bashrc  &&
 echo "$HOSTNAME" &&
-conda activate egoems &&
+conda activate egoexoems &&
 # python -u train_recognition.py --job_id 5555555  &&
-python -u train_recognition.py --job_id "$SLURM_JOB_ID"  &&
+python -u midas.py --job_id "$SLURM_JOB_ID"  &&
 echo "Done" &&
 exit

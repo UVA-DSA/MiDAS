@@ -1,6 +1,8 @@
 #import from models folder transtcn
 from models.mmtransformer import ModularMultimodalTransformer
 from models.transtcn import TransformerModel, MultimodalFusion
+from models.tcn import TCNClassifier, MultiBranchTCNClassifier
+from models.mstcn import MS_TCN2
 import torch
 from datautils.ems import *
 import torch.nn as nn
@@ -718,6 +720,7 @@ def MIDAS_get_dataloaders(args):
         clip_len=args.dataloader_params["observation_window"],
         step=args.dataloader_params["step"],
         include_modalities=args.dataloader_params["modalities"],
+        sample_rate=args.dataloader_params["sample_rate"],
 
         # Allowlist patterns (fnmatch)
         modality_selections= args.dataloader_params['selections'],
@@ -735,6 +738,8 @@ def MIDAS_get_dataloaders(args):
         clip_len=args.dataloader_params["observation_window"],
         step=args.dataloader_params["step"],
         include_modalities=args.dataloader_params["modalities"],
+        sample_rate=args.dataloader_params["sample_rate"],
+
 
         modality_selections= args.dataloader_params['selections'],
 
@@ -750,6 +755,7 @@ def MIDAS_get_dataloaders(args):
         clip_len=args.dataloader_params["observation_window"],
         step=args.dataloader_params["step"],
         include_modalities=args.dataloader_params["modalities"],
+        sample_rate=args.dataloader_params["sample_rate"],
 
         modality_selections= args.dataloader_params['selections'],
 
@@ -768,11 +774,11 @@ def MIDAS_get_dataloaders(args):
     test_class_stats = test_dataset._get_class_stats()
     print("Test class stats: ", test_class_stats)
 
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True,
+    train_loader = DataLoader(train_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=True,
                         collate_fn=MultimodalGestureDataset.collate_fn)
-    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False,
+    val_loader = DataLoader(val_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False,
                         collate_fn=MultimodalGestureDataset.collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False,
+    test_loader = DataLoader(test_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False,
                         collate_fn=MultimodalGestureDataset.collate_fn)
     
     return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
@@ -965,51 +971,152 @@ def test_mmt_model(model, test_loader, criterion, device, logger, epoch, results
             writer.writerow([pred["trial_id"], pred["subject_id"], pred["gesture_code"], pred["pred_label"], pred["probs"]])
     return results
 
-
 def mmt_preprocess(batch, args, backbone, device):
     """
-    Concatenate all active modalities into a single tensor [B, T, F_total].
-    - Pads along time if modalities have different T in this batch.
-    - Respects the order in args.dataloader_params["modalities"].
-    """
-    active_mods = [m for m in args.dataloader_params["modalities"] if m in batch]
-    if not active_mods:
-        raise ValueError("No active modalities found in batch matching args.dataloader_params['modalities'].")
+    Build [B, T_max, F_total] by concatenating features from the modalities
+    listed in args.dataloader_params["modalities"].
 
-    # Collect tensors and find max T in this batch
-    mod_tensors = []
+    Rules for image data:
+      - If "images_feat" is listed in modalities AND present in batch, use it directly.
+      - Else if "images" is listed AND present, run backbone.extract_resnet on frames to get per-frame features.
+      - "images" frames themselves are NOT concatenated to model inputs; they are for viz.
+    """
+    if not hasattr(args, "dataloader_params") or "modalities" not in args.dataloader_params:
+        raise ValueError("args.dataloader_params['modalities'] not found.")
+
+    wanted_mods = list(args.dataloader_params["modalities"])
+
+    # Expand the effective list with image logic:
+    # Prefer precomputed features if requested/present; otherwise fall back to frames->backbone.
+    effective_mods = []
+    for m in wanted_mods:
+        if m == "images_feat":
+            if "images_feat" in batch:
+                effective_mods.append("images_feat")
+            # if images_feat was requested but not present, we do NOT silently
+            # substitute frames; keep behavior strict and explicit.
+        elif m == "images":
+            if "images_feat" in batch:
+                # If user asked for "images" but precomputed features are already available,
+                # prefer features for the model (frames are for viz). Add only once.
+                if "images_feat" not in effective_mods:
+                    effective_mods.append("images_feat")
+            elif "images" in batch:
+                # We will compute features from frames using the provided backbone.
+                effective_mods.append("images")  # means: derive features from frames below
+        else:
+            if m in batch:
+                effective_mods.append(m)
+
+    if not effective_mods:
+        raise ValueError(
+            "No active modalities found in batch matching args.dataloader_params['modalities'] "
+            "(nothing to concatenate)."
+        )
+
+    mod_tensors = []  # list of (name, tensor[B,T,F])
     T_max = 0
     B_ref = None
-    for m in active_mods:
+
+    for m in effective_mods:
+        if m == "images_feat":
+            x = batch["images_feat"]  # [B, T, F_img]
+            if not isinstance(x, torch.Tensor) or x.dim() != 3:
+                raise ValueError(f"'images_feat' must be [B,T,F], got {type(x)} with shape {getattr(x,'shape',None)}")
+            B, T, F = x.shape
+            if B_ref is None:
+                B_ref = B
+            elif B != B_ref:
+                raise ValueError(f"Batch size mismatch across modalities: expected {B_ref}, got {B} for 'images_feat'")
+
+            # Respect images_mask if present (zero out invalid timesteps)
+            img_mask = batch.get("images_mask", None)  # [B,T] bool
+            if img_mask is not None:
+                if not isinstance(img_mask, torch.Tensor) or img_mask.shape[:2] != (B, T):
+                    raise ValueError(f"images_mask must be [B,T] bool, got {type(img_mask)} with shape {getattr(img_mask,'shape',None)}")
+                mask = img_mask.to(device=device, dtype=x.dtype).unsqueeze(-1)  # [B,T,1]
+                x = x.to(device, non_blocking=True) * mask
+            else:
+                x = x.to(device, non_blocking=True)
+
+            mod_tensors.append((m, x))
+            T_max = max(T_max, T)
+            continue
+
+        if m == "images":
+            # Derive features from frames using the provided backbone
+            imgs = batch["images"]  # [B, T, C, H, W], float in [0,1]
+            if not isinstance(imgs, torch.Tensor) or imgs.dim() != 5:
+                raise ValueError(f"'images' must be [B,T,C,H,W], got {type(imgs)} with shape {getattr(imgs,'shape',None)}")
+
+            B, T, C, H, W = imgs.shape
+            if B_ref is None:
+                B_ref = B
+            elif B != B_ref:
+                raise ValueError(f"Batch size mismatch across modalities: expected {B_ref}, got {B} for 'images'")
+
+            imgs = imgs.to(device, non_blocking=True)
+
+            # Backbone is user-provided; expected to output per-frame features.
+            # We flatten B,T -> (B*T) for feature extraction, then reshape back.
+            imgs_btchw = imgs.view(B * T, C, H, W)
+
+            with torch.no_grad():
+                feats = backbone.extract_resnet(imgs_btchw)  # expected [B*T, D] or [B*T, D, 1, 1]
+
+            if feats.dim() == 4:
+                # pool to [N, D]
+                feats = torch.nn.functional.adaptive_avg_pool2d(feats, (1, 1)).flatten(1)
+            elif feats.dim() == 2:
+                pass
+            else:
+                feats = feats.view(feats.size(0), -1)
+
+            feats = feats.view(B, T, -1)  # [B, T, Fimg]
+
+            # Respect images_mask if present (zero out invalid timesteps)
+            img_mask = batch.get("images_mask", None)  # [B,T] bool
+            if img_mask is not None:
+                if not isinstance(img_mask, torch.Tensor) or img_mask.shape != (B, T):
+                    raise ValueError(f"images_mask must be [B,T] bool, got {type(img_mask)} with shape {getattr(img_mask,'shape',None)}")
+                mask = img_mask.to(device=device, dtype=feats.dtype).unsqueeze(-1)  # [B,T,1]
+                feats = feats * mask
+
+            mod_tensors.append(("images_feat", feats))  # store as images_feat going forward
+            T_max = max(T_max, T)
+            continue
+
+        # ---- Non-image modalities: expected [B, T, F] ----
         x = batch[m]
-        if not isinstance(x, torch.Tensor):
-            raise TypeError(f"Expected tensor for modality '{m}', got {type(x)}")
-        if x.dim() != 3:
-            raise ValueError(f"Expected [B, T, F] for modality '{m}', got shape {tuple(x.shape)}")
+        if not isinstance(x, torch.Tensor) or x.dim() != 3:
+            raise ValueError(f"Expected [B,T,F] for modality '{m}', got {type(x)} with shape {getattr(x,'shape',None)}")
+
         B, T, F = x.shape
         if B_ref is None:
             B_ref = B
         elif B != B_ref:
             raise ValueError(f"Batch size mismatch across modalities: got {B_ref} and {B} for '{m}'")
-        T_max = max(T_max, T)
-        mod_tensors.append((m, x))
 
-    # Pad (if needed) each modality to T_max along time, then concat along feature dim
-    padded_list = []
-    for m, x in mod_tensors:
+        T_max = max(T_max, T)
+        mod_tensors.append((m, x.to(device, non_blocking=True)))
+
+    # Right-pad each [B,T,F] to T_max along time, then concat on feature dim
+    padded = []
+    for _, x in mod_tensors:
         B, T, F = x.shape
         if T < T_max:
             pad = x.new_zeros((B, T_max - T, F))
-            x = torch.cat([x, pad], dim=1)  # right-pad in time
-        padded_list.append(x)
+            x = torch.cat([x, pad], dim=1)
+        padded.append(x)
 
-    X = torch.cat(padded_list, dim=-1).to(device, non_blocking=True)  # [B, T_max, sum(F)]
+    X = torch.cat(padded, dim=-1)  # [B, T_max, sum(F)]
     return X
 
 
-def get_feature_dim(loader, args, device):
+
+def get_feature_dim(loader, args, model, device):
     batch = next(iter(loader))
-    preprocessed_inputs = mmt_preprocess(batch, args, None, device)
+    preprocessed_inputs = mmt_preprocess(batch, args, model, device)
     return preprocessed_inputs.size(-1)
 
 
@@ -1021,7 +1128,7 @@ def train_transtcn_one_epoch(model, train_loader, criterion, optimizer, device, 
 
         try:
 
-            preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+            preprocessed_inputs = mmt_preprocess(batch, args, model, device)  # [B, T, F_total]
             logits = model(preprocessed_inputs)
 
             loss = criterion(logits, batch['label'].to(device))
@@ -1153,4 +1260,619 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
         writer.writerow(["trial_id", "subject_id", "gesture_code", "pred_label","probs"])
         for pred in preds_detail:
             writer.writerow([pred["trial_id"], pred["subject_id"], pred["gesture_code"], pred["pred_label"], pred["probs"]])
+    return results
+
+
+
+def initialize_tcn_model(args, input_dim, device, num_classes):
+    print("Initializing TCN model...")
+    print("TCN Config: input_dim=", input_dim, ", num_classes=", num_classes)
+
+    model = TCNClassifier(input_dim=input_dim, num_classes=num_classes)
+    model = model.to(device)
+    print(model)
+
+    # optimizer 
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_params['lr'], weight_decay=args.learning_params['weight_decay'])
+
+    # scheduler
+    criterion = nn.CrossEntropyLoss()
+
+    return model, optimizer, criterion
+
+
+def initialize_multi_tcn_model(args, device, feature_dim):
+    print("Initializing Multi-TCN model...")
+    print("Multi-TCN Config: ", args.multi_tcncfg)
+    model = MultiBranchTCNClassifier(modality_input_dims=args.tc, num_classes=args.num_classes, **args.multi_tcncfg)
+    model = model.to(device)
+    print(model)
+
+    # optimizer 
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_params['lr'], weight_decay=args.learning_params['weight_decay'])
+
+    # scheduler
+    criterion = nn.CrossEntropyLoss()
+
+    return model, optimizer, criterion
+
+
+
+def train_TCN_one_epoch(model, train_loader, criterion, optimizer, device, logger, args):
+    
+    model.train()
+    total_loss = 0
+    for i, batch in enumerate(train_loader):
+
+        try:
+
+            preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+            logits = model(preprocessed_inputs)
+
+            loss = criterion(logits, batch['label'].to(device))
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            total_loss += loss.item()
+
+            if i % 10 == 0:
+                print(f"Batch {i}, Loss: {loss.item()}")
+
+
+
+        except Exception as e:
+            print(f"Error in batch {i}: {e}")
+            # print stack trace
+            import traceback
+            traceback.print_exc()
+            continue
+
+    return total_loss / len(train_loader)
+
+
+def validate_TCN(model, val_loader, criterion, device, logger, args):
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            try:
+                preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+                logits = model(preprocessed_inputs)
+
+                loss = criterion(logits, batch['label'].to(device))
+                total_loss += loss.item()
+                if i % 10 == 0:
+                    logger.log({"val_loss": loss.item()})
+
+            except Exception as e:
+                print(f"Error in batch {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+    return total_loss / len(val_loader)
+
+def test_TCN_model(model, test_loader, criterion, device, logger, epoch, results_dir, args):
+    model.eval()
+    total_loss = 0
+
+
+    accuracy = 0.0
+    gt = []
+    preds = []
+    
+    preds_detail = []
+
+    with torch.no_grad():
+        for i, batch in enumerate(test_loader):
+            try:
+                # forward
+                preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+                logits = model(preprocessed_inputs)                            # [B, C]
+                labels = batch["label"].to(device, non_blocking=True)  # [B]
+                loss = criterion(logits, labels)
+                total_loss += loss.item()
+
+                # predictions
+                pred = torch.argmax(logits, dim=1)               # [B]
+
+                # accumulate scalar lists
+                gt.extend(batch["label"].cpu().tolist())         # extend with B items
+                preds.extend(pred.cpu().tolist())                # extend with B items
+
+                # optional: probs if you need them
+                probs = torch.softmax(logits, dim=1).detach().cpu().tolist()
+
+                # detailed per-sample records
+                B = pred.shape[0]
+                trial_ids      = batch.get("trial_id",      [None]*B)   # might be list[str] or tensor
+                subject_ids    = batch.get("subject_id",    [None]*B)
+                gesture_codes  = batch.get("gesture_code",  [None]*B)   # usually list[str]
+
+                for i in range(B):
+                    preds_detail.append({
+                        "trial_id":      trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item(),
+                        "subject_id":    subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item(),
+                        "gesture_code":  gesture_codes[i] if isinstance(gesture_codes, list) else gesture_codes[i],
+                        "pred_label":    int(pred[i].cpu().item()),
+                        "logits":        logits[i].detach().cpu().tolist(),
+                        "probs":         probs[i],
+                    })
+
+            except Exception as e:
+                print(f"Error in batch {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                # print(f"Batch data: {batch}")
+                continue
+
+            # break
+            
+    # Calculate metrics
+    accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)
+    precision = precision_score(gt, preds, average='macro')
+    recall = recall_score(gt, preds, average='macro')
+    f1 = f1_score(gt, preds, average='macro')
+    results = {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "epoch": epoch
+    }
+    # Log metrics to wandb
+    logger.log(results)
+
+    # Save metrics to CSV
+    metrics_path = f'{results_dir}/metrics.csv'
+    with open(metrics_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["epoch",  "precision", "recall", "f1", "accuracy"])
+        writer.writerow([epoch,  precision, recall, f1, accuracy])  
+
+        # Save detailed predictions to CSV
+    preds_path = f'{results_dir}/preds.csv'
+    print("Saving predictions to: ", preds_path)
+    with open(preds_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["trial_id", "subject_id", "gesture_code", "pred_label","probs"])
+        for pred in preds_detail:
+            writer.writerow([pred["trial_id"], pred["subject_id"], pred["gesture_code"], pred["pred_label"], pred["probs"]])
+    return results
+
+
+# =========================
+# MS-TCN++ utilities
+# =========================
+
+IGNORE_INDEX = -100  # make sure your dataloader uses this for pad frames if you have variable-length sequences
+
+def initialize_mstcn_model(args, input_dim, device, num_classes):
+    print("Initializing MS-TCN++ model...")
+    print("MSTCN++ Config: input_dim=", input_dim, ", num_classes=", num_classes)
+
+    model = MS_TCN2(
+        num_layers_PG=args.mstcn_model_params['num_layers_PG'],
+        num_layers_R=args.mstcn_model_params['num_layers_R'],
+        num_R=args.mstcn_model_params['num_R'],
+        num_f_maps=args.mstcn_model_params['num_f_maps'],
+        dim=input_dim,
+        num_classes=num_classes
+    ).to(device)
+
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=args.learning_params['lr'],
+        weight_decay=args.learning_params['weight_decay']
+    )
+
+    # Loss fns + weights
+    loss_fns = {
+        "ce": nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX),
+        "mse": nn.MSELoss(reduction="none"),
+        # args.learning_params is a dict in your code – use .get(...)
+        "lambda_smooth": args.learning_params.get("lambda_smooth", 0.15),
+        "num_classes": num_classes
+    }
+
+    return model, optimizer, loss_fns
+
+
+@torch.no_grad()
+def _masked_accuracy_from_logits(logits_BCT, target_BT, mask_B1T):
+    """
+    logits_BCT: (B, C, T)
+    target_BT:  (B, T) long
+    mask_B1T:   (B, 1, T) float {0,1}
+    """
+    # valid positions exclude IGNORE_INDEX and respect mask
+    valid = (mask_B1T.squeeze(1) > 0.5) & (target_BT != IGNORE_INDEX)
+    pred = logits_BCT.argmax(dim=1)  # (B, T)
+    correct = (pred.eq(target_BT) & valid).sum().item()
+    total = valid.sum().item()
+    return (correct / total) if total > 0 else 0.0
+
+
+def _as_stage_list(predictions):
+    """
+    Normalize model output into a list of (B,C,T).
+    MS-TCN++ may return a list of tensors or a stacked tensor (S,B,C,T).
+    """
+    if isinstance(predictions, (list, tuple)):
+        return list(predictions)
+    # assume (S,B,C,T)
+    return [predictions[s] for s in range(predictions.shape[0])]
+
+
+def mstcn_compute_loss(predictions, target_BT, mask_B1T, loss_fns):
+    """
+    predictions: list[(B,C,T)] or (S,B,C,T)
+    target_BT:   (B,T) long with class indices; pads should be IGNORE_INDEX
+    mask_B1T:    (B,1,T) float {0,1} (1 for valid frames)
+    """
+    stages = _as_stage_list(predictions)
+    ce = loss_fns["ce"]
+    mse = loss_fns["mse"]
+    lam = float(loss_fns.get("lambda_smooth", 0.15))
+
+    total_loss = 0.0
+    for p in stages:  # p: (B,C,T)
+        # -------- Cross-Entropy per stage --------
+        total_loss += ce(p, target_BT)  # CE expects (N,C,*) + target (N,*)
+
+        # -------- Temporal smoothing on log-probs --------
+        T = p.size(-1)
+        if lam > 0.0 and T > 1:
+            logp_t   = F.log_softmax(p[:, :, 1:],   dim=1)          # (B,C,T-1)
+            logp_tm1 = F.log_softmax(p.detach()[:, :, :-1], dim=1)  # (B,C,T-1), stop-grad
+            per_elem = mse(logp_t, logp_tm1)                        # (B,C,T-1)
+            per_elem = torch.clamp(per_elem, min=0.0, max=16.0)
+            m = mask_B1T[:, :, 1:]                                  # (B,1,T-1)
+            smoothed = (per_elem * m).mean()
+            total_loss += lam * smoothed
+
+    return total_loss
+
+
+def train_mstcn_one_epoch(model, train_loader, loss_fns, optimizer, device, logger, args):
+    """
+    Expects each batch dict to have:
+      - 'label' : (B,) or (B,T) long
+      - optionally 'mask': (B,1,T) float {0,1}; if missing, we create all-ones
+    And your mmt_preprocess returns: (B, T, F_total). We convert to (B, F_total, T).
+    """
+    model.train()
+    running_loss = 0.0
+    running_acc  = 0.0
+    n_batches = 0
+
+    for i, batch in enumerate(train_loader):
+        try:
+            # ----- Inputs -----
+            x_BTF = mmt_preprocess(batch, args, None, device)  # (B, T, F_total)
+            if x_BTF.dim() != 3:
+                raise ValueError(f"mmt_preprocess must return (B,T,F), got shape {tuple(x_BTF.shape)}")
+            x_BCT = x_BTF.permute(0, 2, 1).contiguous()        # (B, C=F_total, T)
+
+            # ----- Targets -----
+            labels = batch['label'].to(device)                 # (B,) or (B,T)
+            B, C, T = x_BCT.shape
+            
+            # skip batches with time length < 30
+            if T < 30:
+                continue
+
+            if labels.dim() == 1:
+                # Expand single label per sequence across time to match MS-TCN++ interface
+                labels = labels.unsqueeze(1).expand(-1, T).contiguous()  # (B,T)
+            elif labels.dim() == 2:
+                if labels.size(1) != T:
+                    raise ValueError(f"Label time length {labels.size(1)} != input T {T}")
+            else:
+                raise ValueError(f"'label' must be (B,) or (B,T); got {tuple(labels.shape)}")
+
+            # ----- Mask (optional) -----
+            if 'mask' in batch:
+                mask = batch['mask'].to(device)                # (B,1,T) preferred
+                # be lenient: accept (B,T) and upgrade
+                if mask.dim() == 2:
+                    mask = mask.unsqueeze(1)
+                if mask.size(-1) != T:
+                    raise ValueError(f"Mask time length {mask.size(-1)} != T {T}")
+            else:
+                mask = torch.ones((B, 1, T), device=device, dtype=torch.float32)
+            
+            # print(f"Batch {i}: x_BCT shape={x_BCT.shape}, labels shape={labels.shape}, mask shape={mask.shape}")
+            # print(f"Labels: {labels}")
+            # ----- Forward / Backward -----
+            optimizer.zero_grad()
+            preds = model(x_BCT)                                # list[(B,C,T)] or (S,B,C,T)
+            loss = mstcn_compute_loss(preds, labels, mask, loss_fns)
+            loss.backward()
+            optimizer.step()
+
+            # ----- Metrics from final stage -----
+            stages = _as_stage_list(preds)
+            final_logits = stages[-1]                           # (B,C,T)
+            acc = _masked_accuracy_from_logits(final_logits, labels, mask)
+
+            running_loss += float(loss.item())
+            running_acc  += float(acc)
+            n_batches += 1
+
+            if i % 10 == 0:
+                print(f"Batch {i}: loss={loss.item():.4f}, acc={acc:.4f}")
+
+        except Exception as e:
+            print(f"Error in batch {i}: {e}")
+            import traceback; traceback.print_exc()
+            continue
+
+    if n_batches == 0:
+        return 0.0
+
+    epoch_loss = running_loss / n_batches
+    epoch_acc  = running_acc  / n_batches
+    if logger is not None:
+        try:
+            logger.info(f"Train epoch: loss={epoch_loss:.4f}, acc={epoch_acc:.4f}")
+        except Exception:
+            pass
+    return epoch_loss
+def validate_mstcn(model, val_loader, loss_fns, device, logger, args):
+    model.eval()
+    running_loss = 0.0
+    running_acc  = 0.0
+    n_batches    = 0
+
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            try:
+                # ----- Inputs -----
+                x_BTF = mmt_preprocess(batch, args, None, device)  # (B, T, F_total)
+                if x_BTF.dim() != 3:
+                    raise ValueError(f"mmt_preprocess must return (B,T,F), got shape {tuple(x_BTF.shape)}")
+                x_BCT = x_BTF.permute(0, 2, 1).contiguous()        # (B, C=F_total, T)
+
+                # ----- Targets -----
+                labels = batch['label'].to(device)                 # (B,) or (B,T)
+                B, C, T = x_BCT.shape
+
+                # skip batches with time length < 30
+                if T < 30:
+                    continue
+
+                if labels.dim() == 1:
+                    labels = labels.unsqueeze(1).expand(-1, T).contiguous()  # (B,T)
+                elif labels.dim() == 2:
+                    if labels.size(1) != T:
+                        raise ValueError(f"Label time length {labels.size(1)} != input T {T}")
+                else:
+                    raise ValueError(f"'label' must be (B,) or (B,T); got {tuple(labels.shape)}")
+
+                # ----- Mask (optional) -----
+                if 'mask' in batch:
+                    mask = batch['mask'].to(device)                # (B,1,T) preferred
+                    if mask.dim() == 2:
+                        mask = mask.unsqueeze(1)
+                    if mask.size(-1) != T:
+                        raise ValueError(f"Mask time length {mask.size(-1)} != T {T}")
+                else:
+                    mask = torch.ones((B, 1, T), device=device, dtype=torch.float32)
+
+                # ----- Forward & loss -----
+                preds = model(x_BCT)                                # list[(B,C,T)] or (S,B,C,T)
+                loss  = mstcn_compute_loss(preds, labels, mask, loss_fns)
+
+                # ----- Metrics from final stage -----
+                stages = _as_stage_list(preds)
+                final_logits = stages[-1]                           # (B,C,T)
+                acc = _masked_accuracy_from_logits(final_logits, labels, mask)
+
+                running_loss += float(loss.item())
+                running_acc  += float(acc)
+                n_batches    += 1
+
+                if i % 10 == 0:
+                    print(f"[VAL] Batch {i}: loss={loss.item():.4f}, acc={acc:.4f}")
+
+            except Exception as e:
+                print(f"[VAL] Error in batch {i}: {e}")
+                import traceback; traceback.print_exc()
+                continue
+
+    if n_batches == 0:
+        if logger is not None:
+            try:
+                logger.warning("Validation had zero successful batches.")
+            except Exception:
+                pass
+        return {"loss": 0.0, "acc": 0.0}
+
+    val_loss = running_loss / n_batches
+    val_acc  = running_acc  / n_batches
+
+    if logger is not None:
+        try:
+            logger.info(f"Validation: loss={val_loss:.4f}, acc={val_acc:.4f}")
+        except Exception:
+            pass
+
+    return {"loss": val_loss, "acc": val_acc}
+
+
+
+import os
+import csv
+import numpy as np
+from sklearn.metrics import precision_score, recall_score, f1_score
+
+def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, results_dir, args):
+    """
+    Frame-wise test loop for MS-TCN++.
+    - Computes average loss over batches using mstcn_compute_loss
+    - Aggregates frame-level predictions vs. labels (mask + IGNORE_INDEX respected)
+    - Reports macro precision/recall/F1 on valid frames
+    - Saves metrics.csv (appends) and per-sample predictions as npy files
+
+    Expects each batch to contain:
+      - 'label': (B,) or (B,T) long (if (B,), we expand to (B,T))
+      - optional 'mask': (B,1,T) float in {0,1}; if absent, uses all-ones
+      - optional metadata: 'trial_id', 'subject_id', 'gesture_code'
+    """
+    os.makedirs(results_dir, exist_ok=True)
+
+    model.eval()
+    running_loss = 0.0
+    n_batches    = 0
+
+    # For global metrics (flatten after masking)
+    all_gt_frames   = []
+    all_pred_frames = []
+
+    # Optional: keep a compact per-sample artifact (npy) rather than huge CSV rows
+    per_sample_records = []  # a small summary per sample
+
+    with torch.no_grad():
+        for i, batch in enumerate(test_loader):
+            try:
+                # ----- Inputs -----
+                x_BTF = mmt_preprocess(batch, args, None, device)  # (B,T,F)
+                if x_BTF.dim() != 3:
+                    raise ValueError(f"mmt_preprocess must return (B,T,F), got shape {tuple(x_BTF.shape)}")
+                x_BCT = x_BTF.permute(0, 2, 1).contiguous()        # (B,C=F,T)
+                B, C, T = x_BCT.shape
+
+                # skip batches with time length < 30
+                if T < 30:
+                    continue
+
+                # ----- Targets -----
+                labels = batch['label'].to(device)                 # (B,) or (B,T)
+                if labels.dim() == 1:
+                    labels = labels.unsqueeze(1).expand(-1, T).contiguous()  # (B,T)
+                elif labels.dim() == 2 and labels.size(1) != T:
+                    raise ValueError(f"Label time length {labels.size(1)} != input T {T}")
+                elif labels.dim() != 2:
+                    raise ValueError(f"'label' must be (B,) or (B,T); got {tuple(labels.shape)}")
+
+                # ----- Mask (optional) -----
+                if 'mask' in batch:
+                    mask = batch['mask'].to(device)                # (B,1,T) preferred
+                    if mask.dim() == 2:
+                        mask = mask.unsqueeze(1)
+                    if mask.size(-1) != T:
+                        raise ValueError(f"Mask time length {mask.size(-1)} != T {T}")
+                else:
+                    mask = torch.ones((B, 1, T), device=device, dtype=torch.float32)
+
+                # ----- Forward & Loss -----
+                preds = model(x_BCT)                                # list[(B,C,T)] or (S,B,C,T)
+                loss  = mstcn_compute_loss(preds, labels, mask, loss_fns)
+                running_loss += float(loss.item())
+                n_batches    += 1
+
+                # ----- Final-stage logits → predictions -----
+                stages = _as_stage_list(preds)
+                final_logits = stages[-1]                           # (B,C,T)
+                pred_BT = final_logits.argmax(dim=1)               # (B,T)
+
+                # ----- Collect masked frames for global metrics -----
+                # valid = mask & label != IGNORE_INDEX
+                valid = (mask.squeeze(1) > 0.5) & (labels != IGNORE_INDEX)
+                gt_flat   = labels[valid].detach().cpu().numpy()
+                pred_flat = pred_BT[valid].detach().cpu().numpy()
+                if gt_flat.size > 0:
+                    all_gt_frames.append(gt_flat)
+                    all_pred_frames.append(pred_flat)
+
+                # ----- Optional: save per-sample predictions/probs -----
+                # (safer to store per-sample npy files than giant CSV rows)
+                probs_BCT = torch.softmax(final_logits, dim=1).detach().cpu().numpy()  # (B,C,T)
+                trial_ids     = batch.get("trial_id",    [None]*B)
+                subject_ids   = batch.get("subject_id",  [None]*B)
+                gesture_codes = batch.get("gesture_code",[None]*B)
+
+                # Make iterables uniform
+                if torch.is_tensor(trial_ids):     trial_ids     = trial_ids.cpu().tolist()
+                if torch.is_tensor(subject_ids):   subject_ids   = subject_ids.cpu().tolist()
+                if torch.is_tensor(gesture_codes): gesture_codes = gesture_codes.cpu().tolist()
+
+                for b in range(B):
+                    # derive a filename stem
+                    stem = str(trial_ids[b]) if trial_ids[b] is not None else f"sample_{i}_{b}"
+                    # save predictions and (optionally) probabilities
+                    np.save(os.path.join(results_dir, f"{stem}_pred.npy"),
+                            pred_BT[b].detach().cpu().numpy())
+                    # probs can be large; save only if you want them
+                    if getattr(args, "save_probs", False):
+                        np.save(os.path.join(results_dir, f"{stem}_probs.npy"),
+                                probs_BCT[b])
+
+                    # short summary for CSV
+                    per_sample_records.append({
+                        "trial_id":     trial_ids[b],
+                        "subject_id":   subject_ids[b],
+                        "gesture_code": gesture_codes[b],
+                        "T":            int(T),
+                        "valid_frames": int(valid[b].sum().item()),
+                    })
+
+                if i % 10 == 0:
+                    logger.log({"test_batch_loss": loss.item()})
+
+            except Exception as e:
+                print(f"[TEST] Error in batch {i}: {e}")
+                import traceback; traceback.print_exc()
+                continue
+
+    # ----- Aggregate metrics -----
+    if n_batches == 0:
+        results = {"loss": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0, "accuracy": 0.0, "epoch": epoch}
+        logger.log(results)
+        return results
+
+    avg_loss = running_loss / n_batches
+
+    if len(all_gt_frames) == 0:
+        # No valid frames collected
+        accuracy = precision = recall = f1 = 0.0
+    else:
+        gt_all   = np.concatenate(all_gt_frames, axis=0)
+        pred_all = np.concatenate(all_pred_frames, axis=0)
+        accuracy  = float((gt_all == pred_all).mean())
+        precision = float(precision_score(gt_all, pred_all, average='macro', zero_division=0))
+        recall    = float(recall_score(gt_all, pred_all, average='macro', zero_division=0))
+        f1        = float(f1_score(gt_all, pred_all, average='macro', zero_division=0))
+
+    results = {
+        "epoch":     epoch,
+        "loss":      avg_loss,
+        "precision": precision,
+        "recall":    recall,
+        "f1":        f1,
+        "accuracy":  accuracy,
+    }
+    logger.log(results)
+
+    # ----- Save metrics to CSV (append) -----
+    metrics_path = os.path.join(results_dir, "metrics.csv")
+    fresh_file = not os.path.exists(metrics_path)
+    with open(metrics_path, mode='a', newline='') as f:
+        w = csv.writer(f)
+        if fresh_file:
+            w.writerow(["epoch", "loss", "precision", "recall", "f1", "accuracy"])
+        w.writerow([epoch, avg_loss, precision, recall, f1, accuracy])
+
+    # ----- Save a compact per-sample summary CSV -----
+    # (detailed framewise preds are saved as .npy per sample above)
+    samples_path = os.path.join(results_dir, "samples.csv")
+    fresh_file = not os.path.exists(samples_path)
+    with open(samples_path, mode='a', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=["trial_id", "subject_id", "gesture_code", "T", "valid_frames"])
+        if fresh_file:
+            w.writeheader()
+        for rec in per_sample_records:
+            w.writerow(rec)
+
     return results

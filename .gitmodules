@@ -1,0 +1,3 @@
+[submodule "benchmarks/gesture_recognition/MS-TCN2"]
+	path = benchmarks/gesture_recognition/MS-TCN2
+	url = https://github.com/sj-li/MS-TCN2.git

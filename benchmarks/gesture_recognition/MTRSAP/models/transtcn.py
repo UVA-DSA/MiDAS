@@ -131,17 +131,13 @@ class CNN_Encoder(nn.Module):
         self.encoder = nn.Sequential(
             nn.Conv1d(in_channels=in_channels, out_channels=512, kernel_size=kernel_size, stride=1, padding=kernel_size//2),
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=1, stride=1),  # No change in temporal dimension
             nn.Conv1d(in_channels=512, out_channels=256, kernel_size=kernel_size, stride=1, padding=kernel_size//2),
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=1, stride=1),  # No change in temporal dimension
             nn.Conv1d(in_channels=256, out_channels=out_channels, kernel_size=kernel_size, stride=1, padding=kernel_size//2),
             nn.ReLU(),
-            nn.MaxPool1d(kernel_size=1, stride=1)  # No change in temporal dimension
         )
 
     def forward(self, x):
-        x = x.permute(0, 2, 1)
         x = self.encoder(x)
         return x
     
@@ -166,6 +162,27 @@ class CNN_Decoder(nn.Module):
         # print('decoder_out',x.shape)
         return x
     
+class LeanTemporalEncoder(nn.Module):
+    def __init__(self, in_ch=2048, hid=256, k=9, dilations=(1,2,4,8), groups=32):
+        super().__init__()
+        self.reduce = nn.Conv1d(in_ch, hid, kernel_size=1)
+        layers = []
+        for d in dilations:
+            pad = (k//2) * d
+            layers += [
+                nn.Conv1d(hid, hid, kernel_size=k, padding=pad, dilation=d),
+                nn.GroupNorm(groups, hid),
+                nn.ReLU(inplace=True),
+            ]
+        self.temporal = nn.Sequential(*layers)
+
+    def forward(self, x):   # x: (B, 2048, T)
+        x = self.reduce(x)  # (B, 256, T)
+        # print("After reduction:", x.shape)
+        x = self.temporal(x)# (B, 256, T)
+        # print("After temporal:", x.shape)
+        return x
+    
     
 class TransformerModel(nn.Module):
     def __init__(self, args: DefaultArgsNamespace):
@@ -178,6 +195,8 @@ class TransformerModel(nn.Module):
         self.num_layers = args.transformer_params["num_layers"]
         self.nhead = args.transformer_params["nhead"]
         self.batch_first = args.transformer_params["batch_first"]
+
+        self.seq_to_one = args.transformer_params["seq_to_one"]
 
         self.modality = args.dataloader_params["modalities"]
 
@@ -229,9 +248,12 @@ class TransformerModel(nn.Module):
         self.wav2vec_project_layer = nn.Linear(self.wav2vec_model.config.hidden_size, self.input_dim)
         self.wav2vec_project_layer_multimodal = nn.Linear(self.wav2vec_model.config.hidden_size,  args.transformer_params['resnet_dim'] )
         # Ensure wav2vec model is in evaluation mode
-        self.wav2vec_model.eval()
+        # self.wav2vec_model.eval()
 
         
+        # simple cnn encoder
+        self.lean_temporal_encoder = LeanTemporalEncoder(in_ch=features_dim, hid=self.d_model, k=9, dilations=(1,2,4,8), groups=32)
+
     def extract_resnet(self, x):
         # check the shape of the input tensor
             # extract resnet50 features
@@ -320,20 +342,22 @@ class TransformerModel(nn.Module):
     def forward(self, x):
         
         # # TCN encoder
-        x = self.encoder(x)
+        if self.seq_to_one:
+            x = self.encoder(x)
+        else:
+            x = self.lean_temporal_encoder(x)
         # print("encoder_out",x.shape)
-        x = x.permute(0, 2, 1)
-        
-        # # Add positional encoding
-        x = self.pe(x)
-        # print("pe_out",x.shape)
-        
-        # # Transformer expects input of shape (batch_size, seq_len, d_model)
-        x = self.transformer(x)
+            
+        x = x.permute(0, 2, 1).contiguous()    # (B, T, d_model)
+        x = self.pe(x)                         # (B, T, d_model)
+        x = self.transformer(x)                # (B, T, d_model)
+        x = self.out(x)                        # (B, T, C)
 
-        # # Further processing can be done here (e.g., pooling, classification)
-        x = self.out(x)
-        x = self.max_pool(x)  # Shape: (batch_size, output_dim)
+        if self.seq_to_one:
+            # sequence classification path (NOT for frame-wise segmentation)
+            x = self.max_pool(x)               # (B, C)
+            return x
+
+        # frame-wise logits expected by your loss: (B, C, T)
+        return x.transpose(1, 2).contiguous()  # (B, C, T)
         
-        return x
-    

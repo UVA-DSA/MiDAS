@@ -1,34 +1,41 @@
 # config.py
 import torch
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+import random
+import math
 
+# ------------------ Feature candidate lists ------------------
+trakstar_candidates = [
+    'trakstar_sensor_0_azimuth','trakstar_sensor_1_azimuth','trakstar_sensor_2_azimuth','trakstar_sensor_3_azimuth',
+    'trakstar_sensor_0_elevation','trakstar_sensor_1_elevation','trakstar_sensor_2_elevation','trakstar_sensor_3_elevation',
+    'trakstar_sensor_0_roll','trakstar_sensor_1_roll','trakstar_sensor_2_roll','trakstar_sensor_3_roll',
+    'trakstar_sensor_0_x','trakstar_sensor_1_x','trakstar_sensor_2_x','trakstar_sensor_3_x',
+    'trakstar_sensor_0_y','trakstar_sensor_1_y','trakstar_sensor_2_y','trakstar_sensor_3_y',
+    'trakstar_sensor_0_z','trakstar_sensor_1_z','trakstar_sensor_2_z','trakstar_sensor_3_z'
+]
 
-# trakstar candidates #
-trakstar_candidates = ['trakstar_sensor_0_azimuth', 'trakstar_sensor_1_azimuth', 'trakstar_sensor_2_azimuth', 'trakstar_sensor_3_azimuth', 'trakstar_sensor_0_elevation', 'trakstar_sensor_1_elevation', 'trakstar_sensor_2_elevation', 'trakstar_sensor_3_elevation', 'trakstar_sensor_0_roll', 'trakstar_sensor_1_roll', 'trakstar_sensor_2_roll', 'trakstar_sensor_3_roll', 'trakstar_sensor_0_x', 'trakstar_sensor_1_x', 'trakstar_sensor_2_x', 'trakstar_sensor_3_x', 'trakstar_sensor_0_y', 'trakstar_sensor_1_y', 'trakstar_sensor_2_y', 'trakstar_sensor_3_y', 'trakstar_sensor_0_z', 'trakstar_sensor_1_z', 'trakstar_sensor_2_z', 'trakstar_sensor_3_z']
+console_candidates = [
+    'console_pos0','console_pos1','console_pos2','console_pos3','console_pos4','console_pos5',
+    'console_rot0','console_rot1','console_rot2','console_rot3','console_rot4','console_rot5',
+    'console_aux0','console_aux1','console_pedal'
+]
 
-# console candidates #
-console_candidates = ['console_pos0', 'console_pos1', 'console_pos2', 'console_pos3', 'console_pos4', 'console_pos5', 'console_rot0', 'console_rot1', 'console_rot2', 'console_rot3', 'console_rot4', 'console_rot5', 'console_aux0', 'console_aux1', 'console_pedal']
+raven_candidates = [
+    'raven_field.pos0','raven_field.pos1','raven_field.pos2','raven_field.pos3','raven_field.pos4','raven_field.pos5',
+    'raven_field.ori0','raven_field.ori1','raven_field.ori2','raven_field.ori3','raven_field.ori4','raven_field.ori5',
+    'raven_field.ori6','raven_field.ori7','raven_field.ori8','raven_field.ori9','raven_field.ori10','raven_field.ori11',
+    'raven_field.ori12','raven_field.ori13','raven_field.ori14','raven_field.ori15','raven_field.ori16','raven_field.ori17'
+]
 
+sw_left_candidates  = ['sw_left_x','sw_left_y','sw_left_z']
+sw_right_candidates = ['sw_right_x','sw_right_y','sw_right_z']
 
-# raven candidates #
-raven_candidates = ['raven_field.pos0', 'raven_field.pos1', 'raven_field.pos2', 'raven_field.pos3', 'raven_field.pos4', 'raven_field.pos5', 'raven_field.ori0', 'raven_field.ori1', 'raven_field.ori2', 'raven_field.ori3', 'raven_field.ori4', 'raven_field.ori5', 'raven_field.ori6', 'raven_field.ori7', 'raven_field.ori8', 'raven_field.ori9', 'raven_field.ori10', 'raven_field.ori11', 'raven_field.ori12', 'raven_field.ori13', 'raven_field.ori14', 'raven_field.ori15', 'raven_field.ori16', 'raven_field.ori17']
-
-
-# sw_left candidates #
-sw_left_candidates = ['sw_left_x', 'sw_left_y', 'sw_left_z']
-
-# sw_right candidates #
-sw_right_candidates = ['sw_right_x', 'sw_right_y', 'sw_right_z']
-
-# 
-
-# ---------- Model-side configs ----------
+# ------------------ Model-side configs ------------------
 @dataclass
 class ModalityCfg:
     name: str
     in_dim: int               # derived from dataloader selections (len of selected columns)
-    # (optional) downsample, stride, etc. could be added here later
 
 @dataclass
 class ModelCfg:
@@ -37,40 +44,61 @@ class ModelCfg:
     num_layers: int = 4
     dropout: float = 0.1
     num_classes: int = 8
-    include_modalities: List[str] = field(default_factory=list)     # derived
-    fusion: str = "concat_tokens"                                   # "concat_tokens", "late_gated", "cross_attend"
+    include_modalities: List[str] = field(default_factory=list)       # derived
+    fusion: str = "concat_tokens"                                     # "concat_tokens", "late_gated", "cross_attend"
     modality_dropout_p: float = 0.0
-    modalities: Dict[str, ModalityCfg] = field(default_factory=dict) # derived {mod: ModalityCfg}
+    modalities: Dict[str, ModalityCfg] = field(default_factory=dict)  # derived {mod: ModalityCfg}
 
-# ---------- Dataloader (single source of truth) ----------
+# ------------------ Dataloader (single source of truth) ------------------
 dataloader_params: Dict = {
-    "base_path": "/standard/UVA-DSA/MIDAS/Organized/09-18-25/hamid/",
-    "batch_size": 16,
-    "fps": 30,
-    "train_trials": ["t1", "t2", "t3", "t4","t5"],
-    "val_trials":   ["t5", "t6", "t7"],
-    "test_trials":  ["t6", "t7"],
+    "experiment_name": "hamid_console_DS_NOCLUTCH_only",
+    "base_path": "/standard/UVA-DSA/MIDAS/Organized/final_data/",
+    "batch_size": 4,
+    "sample_rate": 10,
+    "ignore_clutch": True,  # whether to ignore clutching periods in data
+    "clutch_pressed_value": 0, # value indicating clutch pressed in console_aux1
+    "return_images": False,             # actually load frames
+
+    # List **all** trials here once:
+    # "all_trials": ["bt1","bt2","bt3","bt4","bt5"], # bootcamp data
+    "all_trials": ["t1","t3","t4","t5", "t6","t7"], # hamid data
+
+    # Cross-validation control:
+    #   scheme: "leave_one_out" | "group_k_fold"
+    #   k: for group_k_fold (ignored for leave_one_out)
+    #   val_ratio: fraction of the non-test trials used for validation (0 < val_ratio < 1)
+    #   seed: for deterministic shuffles
+    #   shuffle: whether to shuffle trial order before splitting
+    "cv": {
+        "scheme": "leave_one_out",   # or "group_k_fold"
+        "k": 5,                      # used only if scheme == "group_k_fold"
+        "val_ratio": 0.25,           # from the remaining (non-test) trials
+        "seed": 42,
+        "shuffle": True
+    },
 
     # Active modalities for this experiment (order matters for reporting):
-    "modalities": ["trakstar"],
-    # "modalities": ["raven"],
-
-    # Column selections (patterns or explicit names) per modality
+    # "modalities": ["console"],
+    "modalities": ["console"],
+    # "modalities": ["sw_left","sw_right"],
+    # "modalities": ["raven","console"],
+    # "modalities": ["trakstar"],
+    # Column selections per modality
     "selections": {
-        "trakstar": trakstar_candidates,
-        # "trakstar": ["trakstar_sensor_0_x", "trakstar_sensor_0_y", "trakstar_sensor_0_z", "trakstar_sensor_1_x", "trakstar_sensor_1_y", "trakstar_sensor_1_z", "trakstar_sensor_2_x", "trakstar_sensor_2_y", "trakstar_sensor_2_z", "trakstar_sensor_3_x", "trakstar_sensor_3_y", "trakstar_sensor_3_z"],
-        "sw_left":  ["sw_left_x", "sw_left_y", "sw_left_z"],
-        "sw_right": ["sw_right_x", "sw_right_y", "sw_right_z"],
-        "raven":    ["raven_field.pos0","raven_field.pos1", "raven_field.pos2", "raven_field.ori0", "raven_field.ori1", "raven_field.ori2",],
-        # add others only when you use them:
-        # "console":  [...],
-        # "imu":      [...],
+        # "trakstar": trakstar_candidates,
+        # "trakstar": ['trakstar_sensor_0_x','trakstar_sensor_0_y','trakstar_sensor_0_z',
+        #                 'trakstar_sensor_1_x','trakstar_sensor_1_y','trakstar_sensor_1_z',
+        #                 'trakstar_sensor_2_x','trakstar_sensor_2_y','trakstar_sensor_2_z',
+        #              'trakstar_sensor_3_x','trakstar_sensor_3_y','trakstar_sensor_3_z'],
+        # "sw_left":  sw_left_candidates,
+        # "sw_right": sw_right_candidates,
+        # "raven":    raven_candidates,
+        "console":  console_candidates,
     },
 
     # Windowing
-    "observation_window": 120,   # 4s at 30 Hz
-    # "observation_window": -1,   # full clip for gesture
-    "step": 8,
+    "observation_window": 10,   # 1s at 30 Hz; use -1 for full-gesture mode
+    "step": 1,
 
     # Labels / human-readable map
     "keysteps": {
@@ -89,21 +117,21 @@ dataloader_params: Dict = {
     "val_class_stats": {}
 }
 
-# ---------- Other hyperparams ----------
+# ------------------ Other hyperparams ------------------
 learning_params = {
     "lr": 1e-5,
-    "epochs": 50,
+    "epochs": 1,
     "weight_decay": 1e-5,
-    "patience": 3,
+    "patience": 10,
     "lr_drop": 20,
     "best_chkpoint": "./checkpoints/job_xxx/val_best_model.pt",
 }
 
 tcn_model_params = {
-    "encoder_params": { #some of these gets updated during runtime based on the feature dimension of the given data
-        "in_channels": 1024,
-        "kernel_size": 45,
-        "out_channels": 256,
+    "encoder_params": {
+        "in_channels": 128,
+        "kernel_size": 13,
+        "out_channels": 64,
     },
     "decoder_params": {
         "in_channels": 60,
@@ -112,16 +140,12 @@ tcn_model_params = {
     }
 }
 
-
-# Keep only what you actually use from the old blocks. If you still need TCN/audio/ResNet, keep them;
-# otherwise delete to avoid config drift.
 transformer_params = {
-    "d_model": 256,
+    "d_model": 64,
     "nhead": 4,
     "num_layers": 2,
     "dropout": 0.1,
     "batch_first": True,
-    # audio/video params only if you really use them
     "sample_rate": 48000,
     "n_mels": 64,
     "hop_length": 512,
@@ -129,7 +153,110 @@ transformer_params = {
     "resnet_dim": 2048,
 }
 
-# ---------- Derivation helpers ----------
+# ------------------ CV helpers ------------------
+def _split_train_val(remaining: List[str], val_ratio: float, seed: int) -> Tuple[List[str], List[str]]:
+    """Split remaining trials into train/val by a ratio (deterministic)."""
+    rnd = random.Random(seed)
+    rem = list(remaining)
+    rnd.shuffle(rem)
+    val_n = max(1, int(round(len(rem) * val_ratio))) if len(rem) > 1 else 0
+    val_trials = rem[:val_n] if val_n > 0 else []
+    train_trials = rem[val_n:]
+    # Ensure at least one train trial
+    if not train_trials and len(rem) > 0:
+        train_trials = rem[-1:]
+        val_trials = rem[:-1]
+    return train_trials, val_trials
+
+def _chunks(lst: List[str], k: int) -> List[List[str]]:
+    """Split list into k near-equal chunks (deterministic, no external deps)."""
+    n = len(lst)
+    base = n // k
+    extra = n % k
+    chunks = []
+    start = 0
+    for i in range(k):
+        size = base + (1 if i < extra else 0)
+        chunks.append(lst[start:start+size])
+        start += size
+    return chunks
+
+def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
+    """
+    Build trial-level CV folds based on dataloader_cfg["cv"] and ["all_trials"].
+    If cv['val_same_as_test'] is True, the validation set will be identical to the test set
+    (useful when data is very limited).
+    """
+    cv = dataloader_cfg.get("cv", {})
+    scheme = cv.get("scheme", "leave_one_out")
+    k = int(cv.get("k", 5))
+    val_ratio = float(cv.get("val_ratio", 0.2))
+    seed = int(cv.get("seed", 0))
+    shuffle = bool(cv.get("shuffle", True))
+    val_same_as_test = bool(cv.get("val_same_as_test", False))
+
+    trials = list(dataloader_cfg.get("all_trials", []))
+    if not trials:
+        raise ValueError("Please set dataloader_params['all_trials'] to the list of all trial IDs.")
+
+    trials_sorted = list(trials)
+    if shuffle:
+        rnd = random.Random(seed)
+        rnd.shuffle(trials_sorted)
+    else:
+        trials_sorted.sort()
+
+    folds: List[Dict[str, List[str]]] = []
+
+    if scheme == "leave_one_out":
+        # Each trial becomes test once
+        for i, test_trial in enumerate(trials_sorted, start=1):
+            remaining = [t for t in trials_sorted if t != test_trial]
+            if val_same_as_test:
+                train_trials = remaining
+                val_trials = [test_trial]
+            else:
+                train_trials, val_trials = _split_train_val(remaining, val_ratio, seed + i)
+
+            folds.append({
+                "name": f"loo_{test_trial}" + ("_valEqTest" if val_same_as_test else ""),
+                "train_trials": train_trials,
+                "val_trials": val_trials,
+                "test_trials": [test_trial],
+            })
+
+    elif scheme == "group_k_fold":
+        if k < 2:
+            raise ValueError("group_k_fold requires k >= 2")
+        test_chunks = _chunks(trials_sorted, k)
+        for i, test_trials in enumerate(test_chunks, start=1):
+            remaining = [t for t in trials_sorted if t not in test_trials]
+            if val_same_as_test:
+                train_trials = remaining
+                val_trials = list(test_trials)
+            else:
+                train_trials, val_trials = _split_train_val(remaining, val_ratio, seed + i)
+
+            folds.append({
+                "name": f"kfold_{i:02d}_of_{k}" + ("_valEqTest" if val_same_as_test else ""),
+                "train_trials": train_trials,
+                "val_trials": val_trials,
+                "test_trials": test_trials,
+            })
+    else:
+        raise ValueError(f"Unknown CV scheme: {scheme}")
+
+    # Sanity: ensure non-empty train/test
+    cleaned = []
+    for f in folds:
+        tr, va, te = f["train_trials"], f["val_trials"], f["test_trials"]
+        if len(te) == 0 or len(tr) == 0:
+            continue
+        cleaned.append(f)
+    return cleaned
+
+
+# ------------------ Model config derivation ------------------
 def build_model_cfg_from_dataloader(
     dataloader_cfg: Dict,
     *,
@@ -145,23 +272,28 @@ def build_model_cfg_from_dataloader(
     mods = dataloader_cfg.get("modalities", [])
     sel  = dataloader_cfg.get("selections", {})
 
-    # Validate: every listed modality must have a non-empty selection list
     problems = []
     modalities_dict: Dict[str, ModalityCfg] = {}
     for m in mods:
         cols = sel.get(m, [])
+        if m == "images":
+            modalities_dict[m] = ModalityCfg(name=m, in_dim=2048)  # set placeholder feature dim (ResNet output etc.)
+            continue
+
         if not isinstance(cols, list) or len(cols) == 0:
             problems.append(m)
-        else:
-            modalities_dict[m] = ModalityCfg(name=m, in_dim=len(cols))
+            continue
+
+        modalities_dict[m] = ModalityCfg(name=m, in_dim=len(cols))
 
     if problems:
         raise ValueError(
             f"Missing or empty selections for modalities: {problems}. "
             f"Add column selections in dataloader_params['selections']."
         )
-    
-    num_classes = len(dataloader_cfg.get("keysteps", {}))
+
+    # derive num_classes from keysteps map
+    num_classes = len(dataloader_cfg.get("keysteps", {})) or num_classes
 
     return ModelCfg(
         d_model=d_model,
@@ -169,47 +301,66 @@ def build_model_cfg_from_dataloader(
         num_layers=num_layers,
         dropout=dropout,
         num_classes=num_classes,
-        include_modalities=list(modalities_dict.keys()),  # preserve order from 'mods'
+        include_modalities=list(modalities_dict.keys()),
         fusion=fusion,
         modality_dropout_p=modality_dropout_p,
         modalities=modalities_dict,
     )
 
-# ---------- Unified args namespace ----------
+# ------------------ Unified args namespace ------------------
 RECORD_RESULTS = True
 
 class DefaultArgsNamespace:
-    def __init__(self):
+    def __init__(self, fold_index: int = 0):
         self.record_results = RECORD_RESULTS
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Single source of truth:
-        self.dataloader_params = dataloader_params
+        # Source config
+        self.dataloader_params = dict(dataloader_params)  # shallow copy
 
-        # Model config is DERIVED from dataloader config:
+        # Build folds and pick one
+        folds = build_cv_splits(self.dataloader_params)
+        if not folds:
+            raise RuntimeError("No valid CV folds were produced.")
+        if fold_index < 0 or fold_index >= len(folds):
+            raise IndexError(f"fold_index {fold_index} out of range [0, {len(folds)-1}]")
+        self.fold = folds[fold_index]
+
+        # Inject chosen fold back into dataloader_params for the rest of the pipeline
+        self.dataloader_params["train_trials"] = self.fold["train_trials"]
+        self.dataloader_params["val_trials"]   = self.fold["val_trials"]
+        self.dataloader_params["test_trials"]  = self.fold["test_trials"]
+
+        # Make experiment name reflect the fold
+        base_exp = self.dataloader_params.get("experiment_name", "exp")
+        self.dataloader_params["experiment_name"] = f"{base_exp}_{self.fold['name']}"
+
+        # Model config derived from dataloader config
         self.mmtransformercfg = build_model_cfg_from_dataloader(
             self.dataloader_params,
             d_model=128,
             nhead=4,
             num_layers=2,
             dropout=0.1,
-            num_classes=10,
-            fusion="cross_attend", # "concat_tokens", "late_gated", "cross_attend"
+            fusion="concat_tokens",  # or "late_gated","cross_attend"
             modality_dropout_p=0.1,
         )
 
-        # Keep extra blocks only if used by your codebase:
+        # Other blocks (kept if your code references them)
         self.learning_params = learning_params
         self.transformer_params = transformer_params
-
         self.tcn_model_params = tcn_model_params
 
-
-
-
-
-# ---------- Test ----------
+# ------------------ Test ------------------
 if __name__ == "__main__":
-    args = DefaultArgsNamespace()
-    print("Active modalities:", args.mmtransformercfg.include_modalities)
-    print("Modalities (name -> in_dim):", {k: v.in_dim for k, v in args.mmtransformercfg.modalities.items()})
+    # Example: iterate over all folds
+    args0 = DefaultArgsNamespace(fold_index=0)
+    print("Experiment:", args0.dataloader_params["experiment_name"])
+    print("Fold:", args0.fold["name"])
+    print("Train:", args0.dataloader_params["train_trials"])
+    print("Val:",   args0.dataloader_params["val_trials"])
+    print("Test:",  args0.dataloader_params["test_trials"])
+    print("Active modalities:", args0.mmtransformercfg.include_modalities)
+    print("Modalities (name -> in_dim):", {k: v.in_dim for k, v in args0.mmtransformercfg.modalities.items()})
+
+    print("Number of folds available:", len(build_cv_splits(dataloader_params)))

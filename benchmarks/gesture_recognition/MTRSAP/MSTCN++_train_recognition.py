@@ -122,6 +122,8 @@ class DefaultArgsNamespace:
         self.tcn_model_params    = dict(cfg.get("tcn_model_params", {}))
         self.record_results      = bool(cfg.get("record_results", True))
 
+        self.mstcn_model_params   = dict(cfg.get("mstcn_model_params", {}))
+
 
 if __name__ == "__main__":
 
@@ -141,7 +143,7 @@ if __name__ == "__main__":
     # base job id (stable across folds)
     if cmd_args.job_id is None:
         cmd_args.job_id = str(int(time.time()))
-    base_job_id = "MTRSAP_" + cmd_args.job_id
+    base_job_id = "MSTCN++_" + cmd_args.job_id
 
     # build folds *from file config* (for printing)
     folds = build_cv_splits(cfg["dataloader_params"])
@@ -219,19 +221,15 @@ if __name__ == "__main__":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {device}")
 
-        # Initial model (with dummy dims)
-        args.transformer_params['input_dim'] = 128
-        args.transformer_params['output_dim'] = 8
-        model, optimizer, criterion = init_model(args, device)
-
         # Feature dims
-        feature_dim = get_feature_dim(train_loader, args, model, device)
+        feature_dim = get_feature_dim(train_loader, args, None, device)
         print(f"Feature dimension: {feature_dim}")
-        args.transformer_params['input_dim'] = feature_dim
-        args.transformer_params['output_dim'] = out_classes
+  
+        model,optimizer,criterion = initialize_tcn_model(args,feature_dim,device,out_classes)
 
-        # Model reinit with correct dims
-        model, optimizer, criterion = init_model(args, device)
+        # initialize mstcn++ model
+        model, optimizer, loss_fns = initialize_mstcn_model(args, feature_dim, device, out_classes)
+
         scheduler = StepLR(optimizer, step_size=args.learning_params["lr_drop"], gamma=0.1)
 
         # Track best val
@@ -243,22 +241,23 @@ if __name__ == "__main__":
             print("*"*10, "="*10, "*"*10)
             print(f"[{experiment_name}] Epoch: {epoch}")
 
-            train_loss = train_transtcn_one_epoch(model, train_loader, criterion, optimizer, device, wandb_logger, args)
+            train_loss = train_mstcn_one_epoch(model, train_loader, loss_fns, optimizer, device, wandb_logger, args)
+
             wandb_logger.log({"avg_train_loss": train_loss, "epoch": epoch})
             print(f"Epoch: {epoch}, Train Loss: {train_loss}")
 
-            val_loss = validate_transtcn(model, val_loader, criterion, device, wandb_logger, args)
+            val_loss = validate_mstcn(model, val_loader, loss_fns, device, wandb_logger, args)
             print(f"Epoch: {epoch}, Val Loss: {val_loss}")
 
-            if val_loss < min_val_loss:
-                min_val_loss = val_loss
+            if val_loss["loss"] < min_val_loss:
+                min_val_loss = val_loss["loss"]
                 # torch.save(model.state_dict(), best_val_path)  # uncomment if you want real best-ckpt saving
 
             scheduler.step()
 
             epoch_dir = os.path.join(fold_results_dir, "epochs")
             os.makedirs(epoch_dir, exist_ok=True)
-            _ = test_transtcn_model(model, test_loader, criterion, device, wandb_logger, epoch, epoch_dir, args)
+            _ = test_MSTCN_model(model, test_loader, loss_fns, device, wandb_logger, epoch, epoch_dir, args)
 
             print("*"*10, "="*10, "*"*10)
 
@@ -267,8 +266,8 @@ if __name__ == "__main__":
             model.load_state_dict(torch.load(best_val_path, map_location=device))
             print(f"Loaded best val checkpoint from: {best_val_path}")
 
-        final_results = test_transtcn_model(
-            model, test_loader, criterion, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args
+        final_results = test_MSTCN_model(
+            model, test_loader, loss_fns, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args
         )
         print(f"[{experiment_name}] Final Test Results: {final_results}")
 

@@ -15,6 +15,7 @@ GESTURE_NAMES = ["S1", "S2", "S3", "S4", "S5", "S6", "S7"]
 @dataclass
 class SplitIndices:
 	train_idx: List[int]
+	val_idx: List[int]
 	test_idx: List[int]
 
 
@@ -43,11 +44,19 @@ def build_transforms(cfg: Dict) -> Tuple[Callable, Callable]:
 	scale = cfg["dataset"]["augment"]["random_resized_crop_scale"]
 	hflip_p = float(cfg["dataset"]["augment"]["horizontal_flip_prob"])
 	cj_b, cj_c, cj_s, cj_h = cfg["dataset"]["augment"]["color_jitter"]
+	
+	# Additional brightness/contrast augmentation
+	extra_bc = cfg["dataset"]["augment"].get("extra_brightness_contrast", [0.3, 0.3])
+	extra_brightness, extra_contrast = extra_bc
 
 	train_tf = T.Compose([
 		T.RandomResizedCrop(image_size, scale=tuple(scale)),
 		T.RandomHorizontalFlip(p=hflip_p),
 		T.ColorJitter(brightness=cj_b, contrast=cj_c, saturation=cj_s, hue=cj_h),
+		# Additional brightness and contrast augmentation
+		T.RandomApply([
+			T.ColorJitter(brightness=extra_brightness, contrast=extra_contrast, saturation=0.0, hue=0.0)
+		], p=0.5),
 		T.ToTensor(),
 		T.Normalize(mean=mean, std=std),
 	])
@@ -62,9 +71,27 @@ def build_transforms(cfg: Dict) -> Tuple[Callable, Callable]:
 	return train_tf, test_tf
 
 
-def stratified_split(df: pd.DataFrame, test_size: float, random_state: int, stratify_by: str = "label") -> SplitIndices:
+def stratified_split(df: pd.DataFrame, train_size: float, val_size: float, test_size: float, random_state: int, stratify_by: str = "label") -> SplitIndices:
 	from sklearn.model_selection import train_test_split
 	idx = list(range(len(df)))
 	labels = df[stratify_by]
-	train_idx, test_idx = train_test_split(idx, test_size=test_size, random_state=random_state, stratify=labels)
-	return SplitIndices(train_idx=train_idx, test_idx=test_idx)
+	
+	# First split: separate train from (val + test)
+	train_idx, temp_idx = train_test_split(
+		idx, 
+		test_size=(val_size + test_size), 
+		random_state=random_state, 
+		stratify=labels
+	)
+	
+	# Second split: separate val from test
+	# Adjust stratify labels for the remaining data
+	temp_labels = [labels[i] for i in temp_idx]
+	val_idx, test_idx = train_test_split(
+		temp_idx,
+		test_size=test_size/(val_size + test_size),  # Proportion of temp data to use for test
+		random_state=random_state,
+		stratify=temp_labels
+	)
+	
+	return SplitIndices(train_idx=train_idx, val_idx=val_idx, test_idx=test_idx)

@@ -1,0 +1,82 @@
+record_results: true
+
+dataloader_params:
+  experiment_name: "hamid_smartwatch_DS_NOCLUTCH_only"
+  base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
+  batch_size: 4
+  sample_rate: 10
+  ignore_clutch: true
+  clutch_pressed_value: 0
+  return_images: false
+  all_trials: ["t1","t3","t4","t5","t6","t7"]
+
+  cv:
+    scheme: "leave_one_out"
+    k: 5
+    val_ratio: 0.25
+    seed: 42
+    shuffle: true
+
+  modalities: ["sw_left", "sw_right"]
+
+  selections:
+    sw_left: [ 
+      "sw_left_x","sw_left_y","sw_left_z"
+    ]
+    sw_right: [ 
+      "sw_right_x","sw_right_y","sw_right_z"
+    ]
+
+  observation_window: 10
+  step: 1
+
+  keysteps:
+    S1: "Approach peg"
+    S2: "Align & grasp"
+    S3: "Lift peg"
+    S4: "Transfer peg - Get together"
+    S5: "Transfer peg - Exchange"
+    S6: "Approach pole"
+    S7: "Align & place"
+    Idle: "Idle"
+
+learning_params:
+  lr: 1.0e-5
+  epochs: 10
+  weight_decay: 1.0e-5
+  patience: 10
+  lr_drop: 20
+  best_chkpoint: "./checkpoints/job_xxx/val_best_model.pt"
+
+tcn_model_params:
+  encoder_params:
+    in_channels: 128
+    kernel_size: 13
+    out_channels: 64
+  decoder_params:
+    in_channels: 60
+    kernel_size: 31
+    out_channels: 60
+
+transformer_params:
+  d_model: 64
+  nhead: 4
+  num_layers: 2
+  dropout: 0.1
+  batch_first: true
+  sample_rate: 48000
+  n_mels: 64
+  hop_length: 512
+  n_fft: 1024
+  resnet_dim: 2048
+  seq_to_one: true
+
+
+# optional overrides for build_model_cfg_from_dataloader
+model_cfg_overrides:
+  d_model: 128
+  nhead: 4
+  num_layers: 2
+  dropout: 0.1
+  fusion: "concat_tokens"
+  modality_dropout_p: 0.1

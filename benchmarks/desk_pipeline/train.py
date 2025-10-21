@@ -107,32 +107,35 @@ def build_scheduler(optimizer, cfg, steps_per_epoch: int):
 	min_lr = float(cfg["scheduler"]["min_lr"])
 	max_epochs = int(cfg["training"]["epochs"])
 	if name == "cosine":
-		total_steps = max_epochs * steps_per_epoch
-		warmup_steps = warmup_epochs * steps_per_epoch
-		def lr_lambda(current_step: int):
-			if current_step < warmup_steps:
-				return float(current_step) / float(max(1, warmup_steps))
-			progress = (current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
-			# cosine from 1 -> 0
-			return 0.5 * (1.0 + np.cos(np.pi * progress))
-		return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+		# Use ReduceLROnPlateau for validation-based scheduling
+		return torch.optim.lr_scheduler.ReduceLROnPlateau(
+			optimizer, 
+			mode='max', 
+			factor=0.5, 
+			patience=3, 
+			min_lr=min_lr
+		)
 	raise ValueError(f"Unsupported scheduler: {name}")
 
 
-def save_checkpoint(state: Dict, is_best: bool, ckpt_dir: str, epoch: int, keep_last_k: int, logger):
+def save_checkpoint(state: Dict, is_best: bool, ckpt_dir: str, epoch: int, keep_all: bool, logger):
 	os.makedirs(ckpt_dir, exist_ok=True)
 	path = os.path.join(ckpt_dir, f"epoch_{epoch:03d}.pth")
 	torch.save(state, path)
 	logger.info(f"Saved checkpoint: {path}")
-	# Clean up older checkpoints if exceeding keep_last_k
-	ckpts = sorted([p for p in os.listdir(ckpt_dir) if p.endswith('.pth')])
-	if len(ckpts) > keep_last_k:
-		to_remove = ckpts[:-keep_last_k]
-		for name in to_remove:
-			try:
-				os.remove(os.path.join(ckpt_dir, name))
-			except OSError:
-				pass
+	
+	# Keep all checkpoints if requested
+	if not keep_all:
+		# Clean up older checkpoints if not keeping all
+		ckpts = sorted([p for p in os.listdir(ckpt_dir) if p.endswith('.pth') and 'best' not in p])
+		if len(ckpts) > 3:  # Keep last 3 regular checkpoints
+			to_remove = ckpts[:-3]
+			for name in to_remove:
+				try:
+					os.remove(os.path.join(ckpt_dir, name))
+				except OSError:
+					pass
+	
 	if is_best:
 		best_path = os.path.join(ckpt_dir, "best.pth")
 		import shutil
@@ -161,16 +164,30 @@ def main():
 	df = pd.read_csv(index_csv)
 	train_tf, test_tf = build_transforms(cfg)
 
-	split = stratified_split(df, test_size=float(cfg["split"]["test_size"]), random_state=int(cfg["split"]["random_state"]), stratify_by=str(cfg["split"]["stratify_by"]))
+	split = stratified_split(
+		df, 
+		train_size=float(cfg["split"]["train_size"]),
+		val_size=float(cfg["split"]["val_size"]),
+		test_size=float(cfg["split"]["test_size"]),
+		random_state=int(cfg["split"]["random_state"]), 
+		stratify_by=str(cfg["split"]["stratify_by"])
+	)
 
 	train_ds = DeskFramesDataset(df.iloc[split.train_idx].reset_index(drop=True), transform=train_tf)
+	val_ds = DeskFramesDataset(df.iloc[split.val_idx].reset_index(drop=True), transform=test_tf)
 	test_ds = DeskFramesDataset(df.iloc[split.test_idx].reset_index(drop=True), transform=test_tf)
 
 	train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_mem)
+	val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
 	test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_mem)
 
-	model = ResNet50ForGestures(num_classes=int(cfg["training"]["num_classes"]), pretrained=True)
+	model = ResNet50ForGestures(num_classes=int(cfg["training"]["num_classes"]), pretrained=True, freeze_early_layers=True)
 	model.to(device)
+	
+	# Log trainable parameters
+	trainable_params = model.get_trainable_params()
+	total_params = sum(p.numel() for p in model.parameters())
+	logger.info(f"Model parameters: {total_params:,} total, {trainable_params:,} trainable ({trainable_params/total_params*100:.1f}%)")
 
 	optimizer = build_optimizer(model, cfg)
 	scheduler = build_scheduler(optimizer, cfg, steps_per_epoch=max(1, len(train_loader)))
@@ -178,7 +195,7 @@ def main():
 
 	best_metric_name = cfg["checkpoint"]["best_metric"]
 	maximize = bool(cfg["checkpoint"]["maximize"])
-	keep_last_k = int(cfg["checkpoint"]["keep_last_k"])
+	keep_all = bool(cfg["checkpoint"]["keep_all"])
 	ckpt_dir = paths["ckpt_dir"]
 	step_log_interval = int(cfg["logging"]["step_log_interval"])
 	csv_log = bool(cfg["logging"]["csv_log"])
@@ -193,14 +210,18 @@ def main():
 		logger.info(f"Epoch {epoch}")
 		start_t = time.time()
 		train_loss, train_acc, train_prec, train_rec, train_f1 = train_one_epoch(model, train_loader, optimizer, scaler, device, step_log_interval, logger)
-		val_loss, val_acc, val_prec, val_rec, val_f1, val_cm = evaluate(model, test_loader, device)
-		scheduler.step()
+		val_loss, val_acc, val_prec, val_rec, val_f1, val_cm = evaluate(model, val_loader, device)
+		test_loss, test_acc, test_prec, test_rec, test_f1, test_cm = evaluate(model, test_loader, device)
+		
+		# Step scheduler based on validation metric
+		scheduler.step(val_f1)
 		elapsed = time.time() - start_t
 
 		logger.info(
 			f"Epoch {epoch} done in {elapsed:.1f}s | "
 			f"train_loss={train_loss:.4f} acc={train_acc:.4f} prec={train_prec:.4f} rec={train_rec:.4f} f1={train_f1:.4f} | "
-			f"val_loss={val_loss:.4f} acc={val_acc:.4f} prec={val_prec:.4f} rec={val_rec:.4f} f1={val_f1:.4f}"
+			f"val_loss={val_loss:.4f} acc={val_acc:.4f} prec={val_prec:.4f} rec={val_rec:.4f} f1={val_f1:.4f} | "
+			f"test_loss={test_loss:.4f} acc={test_acc:.4f} prec={test_prec:.4f} rec={test_rec:.4f} f1={test_f1:.4f}"
 		)
 
 		metric_value = {
@@ -226,12 +247,14 @@ def main():
 			"scaler_state": scaler.state_dict() if scaler is not None else None,
 			"best_value": best_value,
 		}
-		save_checkpoint(state, is_better, ckpt_dir, epoch, keep_last_k, logger)
+		save_checkpoint(state, is_better, ckpt_dir, epoch, keep_all, logger)
 
-		# Save confusion matrix
+		# Save confusion matrices for both val and test
 		if cfg["logging"]["save_confusion_matrix"]:
-			cm_path = os.path.join(paths["logs_dir"], f"confusion_matrix_epoch_{epoch:03d}.png")
-			save_confmat(val_cm, [f"S{i}" for i in range(1,8)], cm_path)
+			val_cm_path = os.path.join(paths["logs_dir"], f"confusion_matrix_val_epoch_{epoch:03d}.png")
+			test_cm_path = os.path.join(paths["logs_dir"], f"confusion_matrix_test_epoch_{epoch:03d}.png")
+			save_confmat(val_cm, [f"S{i}" for i in range(1,8)], val_cm_path)
+			save_confmat(test_cm, [f"S{i}" for i in range(1,8)], test_cm_path)
 
 		# CSV log
 		if csv_log:
@@ -247,6 +270,11 @@ def main():
 				"val_prec": val_prec,
 				"val_rec": val_rec,
 				"val_f1": val_f1,
+				"test_loss": test_loss,
+				"test_acc": test_acc,
+				"test_prec": test_prec,
+				"test_rec": test_rec,
+				"test_f1": test_f1,
 				"best_value": best_value,
 				"lr": optimizer.param_groups[0]["lr"],
 			})

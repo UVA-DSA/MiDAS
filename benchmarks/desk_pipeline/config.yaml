@@ -8,7 +8,7 @@ paths:
 
 preprocess:
   overwrite: false
-  target_fps: 1
+  target_fps: 10
   jpeg_quality: 90
   num_workers: 0
 
@@ -21,9 +21,13 @@ dataset:
     random_resized_crop_scale: [0.8, 1.0]
     horizontal_flip_prob: 0.5
     color_jitter: [0.2, 0.2, 0.2, 0.1]
+    # Additional brightness/contrast augmentation (applied with 50% probability)
+    extra_brightness_contrast: [0.3, 0.3]  # brightness, contrast
 
 split:
-  test_size: 0.3
+  train_size: 0.7
+  val_size: 0.15
+  test_size: 0.15
   random_state: 42
   stratify_by: "label"
 
@@ -32,7 +36,7 @@ training:
   device: "cuda"
   num_classes: 7
   epochs: 40
-  batch_size: 64
+  batch_size: 32
   num_workers: 4
   pin_memory: true
   amp: true
@@ -41,7 +45,7 @@ training:
 optim:
   name: "adamw"
   lr: 0.0005
-  weight_decay: 0.05
+  weight_decay: 0.1
   betas: [0.9, 0.999]
   eps: 1.0e-8
 
@@ -54,13 +58,14 @@ checkpoint:
   interval_epochs: 1
   best_metric: "val_f1_macro"
   maximize: true
-  keep_last_k: 3
+  keep_all: true  # Keep all checkpoints, don't delete any
   resume: false
 
 early_stopping:
   enabled: true
-  patience: 8
+  patience: 5
   min_delta: 0.0005
+  monitor: "val_f1_macro"  # Monitor validation metric
 
 logging:
   step_log_interval: 50

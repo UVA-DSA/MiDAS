@@ -74,10 +74,28 @@ def extract_frames_1hz(video_path: str, out_dir: str, target_fps: int, jpeg_qual
 
 
 def discover_videos(video_dir: str) -> List[str]:
+	"""Discover videos, selecting only one per trial (right if available, otherwise left)."""
 	videos: List[str] = []
+	# Group by subject and trial
+	video_groups = {}
+	
 	for name in os.listdir(video_dir):
 		if name.lower().endswith('.avi') and VIDEO_RE.search(name):
-			videos.append(os.path.join(video_dir, name))
+			m = VIDEO_RE.match(name)
+			if m:
+				subj, trial, side = m.group(1), m.group(2), m.group(3).lower()
+				key = (subj, trial)
+				if key not in video_groups:
+					video_groups[key] = []
+				video_groups[key].append((side, os.path.join(video_dir, name)))
+	
+	# Select one video per trial (right if available, otherwise left)
+	for (subj, trial), video_list in video_groups.items():
+		# Sort by side (right first, then left)
+		video_list.sort(key=lambda x: (x[0] != 'right', x[0]))
+		selected_video = video_list[0][1]  # Take the first (preferred) video
+		videos.append(selected_video)
+	
 	return sorted(videos)
 
 

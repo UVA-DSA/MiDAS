@@ -139,6 +139,7 @@ class CNN_Encoder(nn.Module):
 
     def forward(self, x):
         x = self.encoder(x)
+        # permute to (B, out_channels, T)
         return x
     
     
@@ -340,9 +341,9 @@ class TransformerModel(nn.Module):
         return features
 
     def forward(self, x):
-        
         # # TCN encoder
         if self.seq_to_one:
+            x = x.permute(0, 2, 1).contiguous()    # (B, d_model, T)
             x = self.encoder(x)
         else:
             x = self.lean_temporal_encoder(x)

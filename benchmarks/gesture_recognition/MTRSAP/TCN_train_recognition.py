@@ -139,7 +139,7 @@ if __name__ == "__main__":
     print(cfg)
 
     # base job id (stable across folds)
-    if cmd_args.job_id is None:
+    if cmd_args.job_id is None or cmd_args.job_id == "0":
         cmd_args.job_id = str(int(time.time()))
     base_job_id = "TCN_" + cmd_args.job_id
 
@@ -175,6 +175,10 @@ if __name__ == "__main__":
     for fi in fold_indices:
         print(f"\n=== Running Fold {fi}: {folds[fi]['name']} ===")
         args = DefaultArgsNamespace(cfg, fold_index=fi)
+
+        modalitys = args.dataloader_params['modalities']
+        modality_string = '_'.join(modalitys)
+        args.dataloader_params['experiment_name'] = f"{modality_string}_{args.dataloader_params['sample_rate']}hz"
         experiment_name = args.dataloader_params['experiment_name']
 
         # per-fold folders (unique)
@@ -220,7 +224,7 @@ if __name__ == "__main__":
         print(f"Using device: {device}")
 
         # Feature dims
-        feature_dim = get_feature_dim(train_loader, args, device)
+        feature_dim = get_feature_dim(train_loader, args, None, device)
         print(f"Feature dimension: {feature_dim}")
   
         model,optimizer,criterion = initialize_tcn_model(args,feature_dim,device,out_classes)
@@ -230,6 +234,8 @@ if __name__ == "__main__":
         # Track best val
         best_val_path = os.path.join(fold_ckpt_dir, 'val_best_model.pt')
         min_val_loss = float('inf')
+
+        best_model = None
 
         # Train loop
         for epoch in range(1, args.learning_params["epochs"] + 1):
@@ -245,13 +251,16 @@ if __name__ == "__main__":
 
             if val_loss < min_val_loss:
                 min_val_loss = val_loss
+                best_model = model
                 # torch.save(model.state_dict(), best_val_path)  # uncomment if you want real best-ckpt saving
 
             scheduler.step()
 
             epoch_dir = os.path.join(fold_results_dir, "epochs")
             os.makedirs(epoch_dir, exist_ok=True)
-            _ = test_TCN_model(model, test_loader, criterion, device, wandb_logger, epoch, epoch_dir, args)
+            if best_model is not None:
+                print(f"Testing best model at epoch {epoch} on test set...")
+                _ = test_TCN_model(best_model, test_loader, criterion, device, wandb_logger, epoch, epoch_dir, args)
 
             print("*"*10, "="*10, "*"*10)
 
@@ -261,7 +270,7 @@ if __name__ == "__main__":
             print(f"Loaded best val checkpoint from: {best_val_path}")
 
         final_results = test_TCN_model(
-            model, test_loader, criterion, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args
+            best_model, test_loader, criterion, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args
         )
         print(f"[{experiment_name}] Final Test Results: {final_results}")
 

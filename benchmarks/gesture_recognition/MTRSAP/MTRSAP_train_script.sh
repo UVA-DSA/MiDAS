@@ -14,7 +14,7 @@
 #SBATCH --ntasks=1
 #SBATCH --account="uva-dsa"
 
-CFG_PATH="./configs/RAVEN_DATA/exp1_window_10hz.yaml"
+CFG_PATH="./configs/MTRSAP/exp_image_resnet_deskpt_10hz.yaml"
 
 module purge &&
 module load miniforge  &&
@@ -23,5 +23,6 @@ echo "$HOSTNAME" &&
 conda activate egoexoems &&
 # python -u train_recognition.py --job_id 5555555  &&
 python -u MTRSAP_train_recognition.py --job_id "$SLURM_JOB_ID" --config "$CFG_PATH" &&
+# python -u MTRSAP_train_recognition.py --job_id 0 --config "$CFG_PATH" --wandb on &&
 echo "Done" &&
 exit

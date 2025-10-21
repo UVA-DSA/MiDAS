@@ -1,0 +1,108 @@
+record_results: true
+
+dataloader_params:
+  experiment_name: "hamid_DS_NOCLUTCH_WINDOW_10hz"
+  base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
+  batch_size: 1
+  sample_rate: 10
+  ignore_clutch: true
+  clutch_pressed_value: 0
+  all_trials: ["t1","t3","t4","t5","t6","t7"]
+
+  cv:
+    scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat"
+    k: 5
+    val_ratio: 0.25
+    seed: 42
+    shuffle: true
+    val_same_as_test: true
+
+  modalities: ["console"]
+
+  selections:
+    console: [
+      "console_pos0","console_pos1","console_pos2","console_pos3","console_pos4","console_pos5",
+      "console_rot0","console_rot1","console_rot2","console_rot3","console_rot4","console_rot5",
+      "console_aux0","console_aux1","console_pedal"
+    ]
+    # raven: [
+    # "raven_field.pos0","raven_field.pos1","raven_field.pos2","raven_field.pos3","raven_field.pos4","raven_field.pos5",
+    # "raven_field.ori0","raven_field.ori1","raven_field.ori2","raven_field.ori3","raven_field.ori4","raven_field.ori5"
+    # # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
+    # # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
+    # ] # left rave: 0, 1 ,2 , right: 3,4,5
+    # images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    # trakstar: [
+    # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
+    # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
+    # "trakstar_sensor_0_roll","trakstar_sensor_1_roll","trakstar_sensor_2_roll","trakstar_sensor_3_roll",
+    # "trakstar_sensor_0_x","trakstar_sensor_1_x","trakstar_sensor_2_x","trakstar_sensor_3_x",
+    # "trakstar_sensor_0_y","trakstar_sensor_1_y","trakstar_sensor_2_y","trakstar_sensor_3_y",
+    # "trakstar_sensor_0_z","trakstar_sensor_1_z","trakstar_sensor_2_z","trakstar_sensor_3_z"
+    # ]
+    # sw_left: ["sw_left_x"]
+    # sw_right: ["sw_right_x"]
+
+
+  observation_window: 10
+  step: 1
+
+  keysteps:
+    S1: "Approach peg"
+    S2: "Align & grasp"
+    S3: "Lift peg"
+    S4: "Transfer peg - Get together"
+    S5: "Transfer peg - Exchange"
+    S6: "Approach pole"
+    S7: "Align & place"
+
+learning_params:
+  lr: 1.0e-5
+  epochs: 30
+  weight_decay: 1.0e-5
+  patience: 30
+  lr_drop: 30
+  best_chkpoint: "./checkpoints/job_xxx/val_best_model.pt"
+
+tcn_model_params:
+  encoder_params:
+    in_channels: 128
+    kernel_size: 13
+    out_channels: 64
+  decoder_params:
+    in_channels: 60
+    kernel_size: 31
+    out_channels: 60
+  input_dim: 64
+  num_classes: 8
+
+transformer_params:
+  d_model: 64
+  nhead: 4
+  num_layers: 2
+  dropout: 0.5
+  batch_first: true
+  sample_rate: 48000
+  n_mels: 64
+  hop_length: 512
+  n_fft: 1024
+  resnet_dim: 2048
+  seq_to_one: true
+
+
+# optional overrides for build_model_cfg_from_dataloader
+model_cfg_overrides:
+  d_model: 128
+  nhead: 4
+  num_layers: 2
+  dropout: 0.1
+  fusion: "cross_attend"
+  modality_dropout_p: 0.1
+
+
+mstcn_model_params:
+  features_dim: 2048
+  num_f_maps: 64
+  num_layers_PG: 11
+  num_layers_R: 10
+  num_R: 3

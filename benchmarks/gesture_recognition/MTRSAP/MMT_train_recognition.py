@@ -102,45 +102,47 @@ def load_yaml_config(path: str) -> Dict[str, Any]:
 
 # --------------- per-fold args namespace ---------------
 
-class YAMLArgsNamespace:
+class DefaultArgsNamespace:
     """
-    Minimal args namespace compatible with your utils.* functions.
-    Built from a YAML-loaded dict and a chosen CV fold.
+    A minimal args container built from a config dict that contains at least:
+      - dataloader_params
+      - learning_params
+      - transformer_params (optional)
+      - tcn_model_params (optional)
+      - model_cfg_overrides (optional)  # to override d_model, nhead, etc.
     """
-    def __init__(self,
-                 full_cfg: Dict[str, Any],
-                 fold: Dict[str, List[str]]):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.device = device
+    def __init__(self, cfg: Dict[str, Any], fold_index: int = 0):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Deep-ish copies (shallow is ok if you don't mutate nested dicts later):
-        self.dataloader_params = dict(full_cfg["dataloader_params"])
-        self.learning_params   = dict(full_cfg["learning_params"])
-        self.transformer_params = dict(full_cfg["transformer_params"])
-        self.tcn_model_params  = dict(full_cfg["tcn_model_params"])
+        # 1) take dataloader params from file (no global imports)
+        self.dataloader_params: Dict[str, Any] = dict(cfg["dataloader_params"])
 
-        # Inject fold splits
-        self.dataloader_params["train_trials"] = fold["train_trials"]
-        self.dataloader_params["val_trials"]   = fold["val_trials"]
-        self.dataloader_params["test_trials"]  = fold["test_trials"]
+        # 2) build CV folds from the loaded dataloader params
+        folds = build_cv_splits(self.dataloader_params)
+        if not folds:
+            raise RuntimeError("No valid CV folds were produced from the provided dataloader_params['all_trials'] and ['cv'].")
 
-        # Append fold name to experiment_name for unique per-fold run dirs
+        if fold_index < 0 or fold_index >= len(folds):
+            raise IndexError(f"fold_index {fold_index} out of range [0, {len(folds)-1}]")
+        self.fold = folds[fold_index]
+
+        # inject chosen fold back
+        self.dataloader_params["train_trials"] = self.fold["train_trials"]
+        self.dataloader_params["val_trials"]   = self.fold["val_trials"]
+        self.dataloader_params["test_trials"]  = self.fold["test_trials"]
+
         base_exp = self.dataloader_params.get("experiment_name", "exp")
-        self.dataloader_params["experiment_name"] = f"{base_exp}_{fold['name']}"
+        self.dataloader_params["experiment_name"] = f"{base_exp}_{self.fold['name']}"
 
-        # Build model cfg from dataloader choices (modalities/selections/keysteps)
-        self.mmtransformercfg = build_model_cfg_from_dataloader(
-            self.dataloader_params,
-            d_model=self.transformer_params.get("d_model", 128),
-            nhead=self.transformer_params.get("nhead", 4),
-            num_layers=self.transformer_params.get("num_layers", 2),
-            dropout=self.transformer_params.get("dropout", 0.1),
-            fusion="concat_tokens",
-            modality_dropout_p=0.1,
-        )
+        # 3) model cfg derived from dataloader selections (and optional overrides)
+        overrides = cfg.get("model_cfg_overrides", {})
+        self.mmtransformercfg = build_model_cfg_from_dataloader(self.dataloader_params, **overrides)
 
-        # for compatibility with some of your older codepaths
-        self.record_results = True
+        # 4) the rest
+        self.learning_params     = dict(cfg["learning_params"])
+        self.transformer_params  = dict(cfg.get("transformer_params", {}))
+        self.tcn_model_params    = dict(cfg.get("tcn_model_params", {}))
+        self.record_results      = bool(cfg.get("record_results", True))
 
 
 # --------------- main ---------------
@@ -197,7 +199,7 @@ if __name__ == "__main__":
         print(f"\n=== Running Fold {fi}: {fold['name']} ===")
 
         # Build args for this fold from YAML + fold
-        args = YAMLArgsNamespace(cfg, fold)
+        args = DefaultArgsNamespace(cfg, fi)
         experiment_name = args.dataloader_params['experiment_name']
 
         print("Loaded args:")

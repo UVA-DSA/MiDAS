@@ -14,7 +14,7 @@
 #SBATCH --ntasks=1
 #SBATCH --account="uva-dsa"
 
-CFG_PATH="./configs/RAVEN_DATA/exp4.yaml"
+CFG_PATH="./configs/TCN/exp_trakstar_sw_handkp_10hz.yaml"
 
 module purge &&
 module load miniforge  &&
@@ -23,5 +23,6 @@ echo "$HOSTNAME" &&
 conda activate egoexoems &&
 # python -u train_recognition.py --job_id 5555555  &&
 python -u TCN_train_recognition.py --job_id "$SLURM_JOB_ID" --config "$CFG_PATH" &&
+# python -u TCN_train_recognition.py --job_id 0 --config "$CFG_PATH" &&
 echo "Done" &&
 exit

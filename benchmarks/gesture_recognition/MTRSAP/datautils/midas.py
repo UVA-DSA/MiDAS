@@ -17,6 +17,40 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 from torchvision.io import VideoReader
 
+from sklearn.model_selection import StratifiedShuffleSplit
+
+import numpy as np
+from typing import Tuple, List
+
+def _labels_for_dataset_windows(ds) -> np.ndarray:
+    """Build integer labels per window from ds.samples and ds.class_map (no __getitem__)."""
+    return np.asarray([ds.class_map[s["gesture_code"]] for s in ds.samples], dtype=np.int64)
+
+def stratified_gesture_train_test(
+    y: np.ndarray,
+    test_ratio: float,
+    seed: int = 0,
+) -> Tuple[List[int], List[int]]:
+    """Return stratified (train_idx, test_idx)."""
+    try:
+        X = np.arange(len(y))
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=seed)
+        train_idx, test_idx = next(sss.split(X, y))
+        return train_idx.tolist(), test_idx.tolist()
+    except Exception:
+        # Fallback: manual per-class split
+        rng = np.random.default_rng(seed)
+        tr, te = [], []
+        for c in np.unique(y):
+            idx = np.where(y == c)[0]
+            rng.shuffle(idx)
+            n = len(idx)
+            n_te = max(1, int(round(n * test_ratio))) if n > 1 else 0
+            te.extend(idx[:n_te].tolist())
+            tr.extend(idx[n_te:].tolist())
+        return tr, te
+
+
 
 # --------------- basic helpers ---------------
 def class_coverage(df_train, df_test):
@@ -49,10 +83,64 @@ def _read_and_tag_csv(
     ignore_clutch: bool = False,
     clutch_column: str = "console_pedal",
     clutch_pressed_value: int | float | bool = 1,
+    drop_neg1: bool = True,
+    neg1_exclude_cols: Optional[Sequence[str]] = ("obs_frame_idx","seq","server_time", 'frame_number', 'timestamp', 'trakstar_time_ns','trakstar_delta_ns','sw_left_time_ns', 'sw_left_delta_ns', 'sw_right_time_ns', 'sw_right_delta_ns', 'raven_console_time_ns', 'raven_console_delta_ns'),
 ) -> pd.DataFrame:
     df = pd.read_csv(path)
     df["source_csv"] = str(path)
     df["trial_id"] = _infer_trial_id(path)
+
+    # drop first rows with -1 in any of the columns until first valid row
+    
+    if drop_neg1:
+        print(f"Dropping -1 rows for file: {path}")
+        # ---- Drop rows with sentinel (-1) ----
+        # Config:
+        drop_mode = "all"  # "leading" -> drop only initial bad run; "all" -> drop every bad row anywhere
+        treat_nan_as_missing = False
+        exclude_cols = set(neg1_exclude_cols or ())
+
+        # Pick columns to check (include numeric & object; exclude IDs/timestamps etc.)
+        check_cols = [c for c in df.columns if c not in exclude_cols]
+        if check_cols:
+            # Coerce to numeric so strings like "-1" are caught; (no df mutation)
+            vals = df[check_cols].apply(pd.to_numeric, errors="coerce")
+
+            bad_cell = vals.eq(-1)
+            if treat_nan_as_missing:
+                bad_cell = bad_cell | vals.isna()
+
+            row_is_bad = bad_cell.any(axis=1)  # “bad” row if ANY checked column is -1 (or NaN if enabled)
+
+            total_bad = int(row_is_bad.sum())
+            print(f"Total rows with -1 in checked columns: {total_bad} / {len(df)}")
+
+            if drop_mode == "leading":
+                # count how many consecutive bad rows from the very start
+                arr = row_is_bad.to_numpy()
+                if arr.size == 0:
+                    leading_bad = 0
+                elif not arr[0]:
+                    leading_bad = 0
+                else:
+                    # first clean index (first False). If none, drop all.
+                    idx = np.nonzero(~arr)[0]
+                    leading_bad = int(idx[0]) if idx.size > 0 else len(arr)
+
+                print(f"Leading bad rows at file start: {leading_bad}")
+                if leading_bad > 0:
+                    df = df.iloc[leading_bad:].reset_index(drop=True)
+
+            elif drop_mode == "all":
+                before = len(df)
+                df = df.loc[~row_is_bad].reset_index(drop=True)
+                print(f"Dropped {before - len(df)} rows containing -1 anywhere.")
+
+            else:
+                raise ValueError("drop_mode must be 'leading' or 'all'")
+            print(f"After dropping rows: {len(df)}")
+    else:
+        print(f"Not dropping -1 rows for file: {path}")
 
     # downsample (prefer obs_frame_idx modulo)
     if downsample_stride > 1:
@@ -72,8 +160,13 @@ def _read_and_tag_csv(
             keep_mask = ~(col == float(clutch_pressed_value))
         df = df[keep_mask].reset_index(drop=True)
 
-    if fillna_value is not None:
-        df = df.fillna(fillna_value)
+    # if fillna_value is not None:
+    #     df = df.fillna(fillna_value)
+    # drop rows with NaN values 
+    df = df.dropna().reset_index(drop=True)
+
+
+
     return df
 
 def _format_video_pattern(pattern: str, csv_path: str, trial_id: str) -> str:
@@ -243,18 +336,23 @@ class MultimodalGestureDataset(Dataset):
 
     # CSV-based modality column rules (images handled specially)
     DEFAULT_MODALITY_RULES: Dict[str, Callable[[str], bool]] = {
-        "trakstar": lambda c: c.startswith("trakstar_sensor_"),
+        "trakstar": lambda c: c.startswith("trakstar_"),
         "sw_left":  lambda c: c.startswith("sw_left_"),
         "sw_right": lambda c: c.startswith("sw_right_"),
         "console":  lambda c: c.startswith("console_"),
         "raven":    lambda c: c.startswith("raven_"),
         "pedals":   lambda c: c.startswith("Pedal "),
+        "handkp":   lambda c: c.startswith("hand_"),
     }
 
     # map selection token -> filename suffix for features
     IMAGE_FEAT_SUFFIX: Dict[str, str] = {
         "resnet": "resnet",
-        "i3d":    "i3d",
+        "resnet_deskpt": "resnet_deskpt",
+        "resnet_deskpt_v2": "resnet_deskpt_v2",
+        "resnet_raven": "resnet_raven",
+        "i3d_flow":    "flow",
+        "i3d_rgb":     "rgb"
         # add more here later
     }
 
@@ -301,6 +399,10 @@ class MultimodalGestureDataset(Dataset):
         modality_selections: Optional[Dict[str, Sequence[str]]] = None,
         modality_exclude: Optional[Dict[str, Sequence[str]]] = None,
 
+        selected_indices: Optional[Sequence[int]] = None,
+
+        drop_neg1: bool = True,
+
         # Misc
         seed: int = 0,
         windowing: str = "fixed",
@@ -319,6 +421,8 @@ class MultimodalGestureDataset(Dataset):
         self.ignore_clutch = bool(ignore_clutch)
         self.clutch_column = clutch_column
         self.clutch_pressed_value = clutch_pressed_value
+
+        self.samples: List[Dict] = []
 
         # collect CSVs
         collected_paths: list[str] = []
@@ -340,6 +444,7 @@ class MultimodalGestureDataset(Dataset):
                     ignore_clutch=self.ignore_clutch,
                     clutch_column=self.clutch_column,
                     clutch_pressed_value=self.clutch_pressed_value,
+                    drop_neg1=drop_neg1,
                 ) for p in collected_paths
             ]
         else:
@@ -351,6 +456,7 @@ class MultimodalGestureDataset(Dataset):
                     ignore_clutch=self.ignore_clutch,
                     clutch_column=self.clutch_column,
                     clutch_pressed_value=self.clutch_pressed_value,
+                    drop_neg1=drop_neg1,
                 ) for p in collected_paths
             ]
 
@@ -429,7 +535,7 @@ class MultimodalGestureDataset(Dataset):
         self.images_want_rgb = ("rgb" in imgs_sel)
         # which feature sets are requested for images
         self.images_feat_kinds: List[str] = [k for k in imgs_sel if k in self.IMAGE_FEAT_SUFFIX]
-
+        print(f"Dataset will load image features: {self.images_feat_kinds}")
         # windowing
         self.clip_len = int(clip_len)
         self.step = int(step)
@@ -438,6 +544,11 @@ class MultimodalGestureDataset(Dataset):
         self.windowing = windowing
         self.samples: List[Dict] = []
         self._make_windows()
+
+        # NEW: keep only a chosen subset of windows if provided
+        if selected_indices is not None:
+            sel = set(int(i) for i in selected_indices)
+            self.samples = [self.samples[i] for i in range(len(self.samples)) if i in sel]
 
         # normalization
         self.normalize = normalize
@@ -553,6 +664,7 @@ class MultimodalGestureDataset(Dataset):
         feats_list = []
         for kind in self.images_feat_kinds:
             feat_path = self._build_feat_path(video_path, kind)
+            # print(f"Loading image features from: {feat_path}")
             if not Path(feat_path).exists():
                 # silently skip missing feature file (or raise, if you prefer)
                 continue
@@ -744,6 +856,11 @@ def print_batch_stats(batch):
         if isinstance(v, torch.Tensor):
             print(f"{k}: dtype={v.dtype}, shape={tuple(v.shape)}, "
                   f"min={v.min().item():.3f}, max={v.max().item():.3f}")
+                # print min/max per dimension
+            Fdim = v.shape[-1]
+            # for f in range(Fdim):
+            #     vf = v[..., f]
+            #     print(f"  {k} dim {f}: min={vf.min().item():.3f}, max={vf.max().item():.3f}")
         elif isinstance(v, list):
             print(f"{k}: list of {len(v)} items, head: {v[:3]}")
         else:
@@ -922,22 +1039,29 @@ if __name__ == "__main__":
 
     dataset = MultimodalGestureDataset(
         csv_paths=csvs,
-        clip_len=10,              # or -1 for full gesture
+        clip_len=-1,              # or -1 for full gesture
         step=1,
         sample_rate=10,           # 30Hz -> 10Hz sampling
         ignore_clutch=True,
         clutch_pressed_value=0,
 
         # include "images" as a normal modality now
-        include_modalities=["images"],
+        include_modalities=["trakstar"],
         modality_selections={
-            # "trakstar": [
-            #     "trakstar_sensor_0_*x", "trakstar_sensor_0_*y", "trakstar_sensor_0_azimuth",
-            #     "trakstar_sensor_2_*x", "trakstar_sensor_2_*y", "trakstar_sensor_2_azimuth",
-            # ],
+            "trakstar": [
+                "trakstar_sensor_0_*x", "trakstar_sensor_0_*y", "trakstar_sensor_0_azimuth",
+                "trakstar_sensor_2_*x", "trakstar_sensor_2_*y", "trakstar_sensor_2_azimuth",
+            ],
             # "sw_left": ["sw_left_x", "sw_left_y"],
             # "console": ["console_pos*"],
-            "images": ["resnet"]  # optional / ignored
+            # # "images": ["resnet"]  # optional / ignored
+            # "images": [ "i3d_flow", "i3d_rgb"],
+            # "raven": [
+            #     "raven_field.pos0","raven_field.pos1","raven_field.pos2","raven_field.pos3","raven_field.pos4","raven_field.pos5",
+            #     "raven_field.ori0","raven_field.ori1","raven_field.ori2","raven_field.ori3","raven_field.ori4","raven_field.ori5",
+            #     "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
+            #     "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
+            #     ]
         },
         # modality_exclude={
         #     "trakstar": ["*elevation*", "*roll*"],
@@ -959,4 +1083,4 @@ if __name__ == "__main__":
     print(f"\nDataset has {len(dataset)} samples, {dataset.num_classes} classes: {dataset.classes}")
 
     # quick visual check
-    visualize_dataset_sample(batch, batch_idx=0, save_dir="./viz_refactor")
+    # visualize_dataset_sample(batch, batch_idx=0, save_dir="./viz_refactor")

@@ -19,13 +19,15 @@ def combine_csvs(annotation_csv, data_csv):
 
 
 if __name__ == "__main__":
-    trial_name = "bt5"
+    trial_name = "t1"
+
+    # /standard/UVA-DSA/MIDAS/Organized/final_data/t1/synched_data
 
     base_dir = Path(r"/standard/UVA-DSA/MIDAS/Organized/final_data") / trial_name / "synched_data"
 
     annotation_csv_path = base_dir / f"peg_{trial_name}_final_annotation_frames.csv"
-    data_csv_path = base_dir / f"synched_all_{trial_name}.csv"
-    output_csv_path = base_dir / f"final_annotation_{trial_name}.csv"
+    data_csv_path = base_dir / f"test_synced_all_{trial_name}.csv"
+    output_csv_path = base_dir / f"test_final_annotation_{trial_name}.csv"
 
     # Load CSVs
     annotation_csv = pd.read_csv(annotation_csv_path)
@@ -40,8 +42,7 @@ if __name__ == "__main__":
     # Save without scientific notation
     combined_csv.to_csv(
         output_csv_path,
-        index=False,
-        float_format="%.0f"   # force plain integer/decimal formatting
+        index=False
     )
 
     print(f"✅ Combined CSV saved to: {output_csv_path}")

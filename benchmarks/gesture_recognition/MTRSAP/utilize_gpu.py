@@ -47,6 +47,6 @@ def main(seconds=45):
     print(f"GPU memory: allocated={mem_alloc:.1f} MiB, reserved={mem_reserved:.1f} MiB")
 
 if __name__ == "__main__":
-    time_hr = 3
+    time_hr = 12
     seconds = time_hr * 3600
     main(seconds=seconds)

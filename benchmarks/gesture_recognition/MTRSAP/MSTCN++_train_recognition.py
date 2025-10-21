@@ -141,8 +141,9 @@ if __name__ == "__main__":
     print(cfg)
 
     # base job id (stable across folds)
-    if cmd_args.job_id is None:
+    if cmd_args.job_id is None or cmd_args.job_id == "0":
         cmd_args.job_id = str(int(time.time()))
+
     base_job_id = "MSTCN++_" + cmd_args.job_id
 
     # build folds *from file config* (for printing)
@@ -177,7 +178,13 @@ if __name__ == "__main__":
     for fi in fold_indices:
         print(f"\n=== Running Fold {fi}: {folds[fi]['name']} ===")
         args = DefaultArgsNamespace(cfg, fold_index=fi)
+
+        modalitys = args.dataloader_params['modalities']
+        modality_string = '_'.join(modalitys)
+        
+        args.dataloader_params['experiment_name'] = f"{modality_string}_{args.dataloader_params['sample_rate']}hz"
         experiment_name = args.dataloader_params['experiment_name']
+
 
         # per-fold folders (unique)
         fold_results_dir = os.path.join(run_root, experiment_name)
@@ -225,7 +232,6 @@ if __name__ == "__main__":
         feature_dim = get_feature_dim(train_loader, args, None, device)
         print(f"Feature dimension: {feature_dim}")
   
-        model,optimizer,criterion = initialize_tcn_model(args,feature_dim,device,out_classes)
 
         # initialize mstcn++ model
         model, optimizer, loss_fns = initialize_mstcn_model(args, feature_dim, device, out_classes)
@@ -236,28 +242,37 @@ if __name__ == "__main__":
         best_val_path = os.path.join(fold_ckpt_dir, 'val_best_model.pt')
         min_val_loss = float('inf')
 
+        best_model = None
         # Train loop
         for epoch in range(1, args.learning_params["epochs"] + 1):
             print("*"*10, "="*10, "*"*10)
             print(f"[{experiment_name}] Epoch: {epoch}")
 
             train_loss = train_mstcn_one_epoch(model, train_loader, loss_fns, optimizer, device, wandb_logger, args)
+            # train_loss = train_mstcn_seqclf_one_epoch(model, train_loader, optimizer, device, wandb_logger, args)
 
             wandb_logger.log({"avg_train_loss": train_loss, "epoch": epoch})
             print(f"Epoch: {epoch}, Train Loss: {train_loss}")
 
             val_loss = validate_mstcn(model, val_loader, loss_fns, device, wandb_logger, args)
+            # val_loss = validate_mstcn_seqclf(model, val_loader, device, wandb_logger, args)
             print(f"Epoch: {epoch}, Val Loss: {val_loss}")
 
             if val_loss["loss"] < min_val_loss:
                 min_val_loss = val_loss["loss"]
+                best_model = model
                 # torch.save(model.state_dict(), best_val_path)  # uncomment if you want real best-ckpt saving
 
             scheduler.step()
 
             epoch_dir = os.path.join(fold_results_dir, "epochs")
             os.makedirs(epoch_dir, exist_ok=True)
-            _ = test_MSTCN_model(model, test_loader, loss_fns, device, wandb_logger, epoch, epoch_dir, args)
+            # _ = test_MSTCN_model(model, test_loader, loss_fns, device, wandb_logger, epoch, epoch_dir, args)
+            if best_model is not None:
+                print(f"Testing best model at epoch {epoch}...")
+                # _ = test_mstcn_seqclf(best_model, test_loader, device, wandb_logger, epoch, epoch_dir, args)
+                _ = test_MSTCN_model(best_model, test_loader, loss_fns, device, wandb_logger, epoch, epoch_dir, args)
+
 
             print("*"*10, "="*10, "*"*10)
 
@@ -267,8 +282,11 @@ if __name__ == "__main__":
             print(f"Loaded best val checkpoint from: {best_val_path}")
 
         final_results = test_MSTCN_model(
-            model, test_loader, loss_fns, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args
+            best_model, test_loader, loss_fns, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args
         )
+        # final_results = test_mstcn_seqclf(
+        #     best_model, test_loader, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args
+        # )
         print(f"[{experiment_name}] Final Test Results: {final_results}")
 
         fold_numeric = flatten_numeric(final_results)

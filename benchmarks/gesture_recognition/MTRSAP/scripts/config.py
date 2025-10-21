@@ -49,6 +49,20 @@ class ModelCfg:
     modality_dropout_p: float = 0.0
     modalities: Dict[str, ModalityCfg] = field(default_factory=dict)  # derived {mod: ModalityCfg}
 
+@dataclass
+class MultiMTRSAPModelCfg:
+    modalities: List[str] = field(default_factory=list)       # derived
+    in_dims: List[int] = field(default_factory=list)          # derived
+    num_classes: int = 8
+    tcn_channels: List[int] = field(default_factory=lambda: [128, 128, 256])
+    d_model: int = 256
+    nhead: int = 8
+    num_layers: int = 4
+    dim_feedforward: int = 1024
+    dropout: float = 0.1
+    seq_to_one: bool = False
+    causal_tcn: bool = True
+ 
 # ------------------ Dataloader (single source of truth) ------------------
 dataloader_params: Dict = {
     "experiment_name": "hamid_console_DS_NOCLUTCH_only",
@@ -181,11 +195,41 @@ def _chunks(lst: List[str], k: int) -> List[List[str]]:
         start += size
     return chunks
 
+import random
+from typing import Dict, List, Tuple
+
+def _split_train_val(remaining: List[str], val_ratio: float, seed: int) -> Tuple[List[str], List[str]]:
+    rnd = random.Random(seed)
+    rem = list(remaining)
+    rnd.shuffle(rem)
+    if len(rem) <= 1:
+        return rem, []
+    val_n = max(1, int(round(len(rem) * val_ratio)))
+    val_trials = rem[:val_n]
+    train_trials = rem[val_n:]
+    if not train_trials and len(rem) > 0:
+        train_trials = rem[-1:]
+        val_trials = rem[:-1]
+    return train_trials, val_trials
+
+def _chunks(lst: List[str], k: int) -> List[List[str]]:
+    n = len(lst)
+    base = n // k
+    extra = n % k
+    out = []
+    s = 0
+    for i in range(k):
+        sz = base + (1 if i < extra else 0)
+        out.append(lst[s:s+sz])
+        s += sz
+    return out
+
 def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
     """
-    Build trial-level CV folds based on dataloader_cfg["cv"] and ["all_trials"].
-    If cv['val_same_as_test'] is True, the validation set will be identical to the test set
-    (useful when data is very limited).
+    Trial-level CV with an optional gesture-level flat split (no validation).
+    - scheme: "leave_one_out" | "group_k_fold" | "gesture_flat"
+    - gesture_flat: returns a single fold with ALL trials in train/test lists
+      (dataset loads all trials once; downstream will stratify *windows*).
     """
     cv = dataloader_cfg.get("cv", {})
     scheme = cv.get("scheme", "leave_one_out")
@@ -193,11 +237,13 @@ def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
     val_ratio = float(cv.get("val_ratio", 0.2))
     seed = int(cv.get("seed", 0))
     shuffle = bool(cv.get("shuffle", True))
-    val_same_as_test = bool(cv.get("val_same_as_test", False))
+    val_same_as_test = bool(cv.get("val_same_as_test", False))  # ignored for gesture_flat
+    flat_test_ratio = float(cv.get("test_ratio", 0.2))
+    flat_seed = seed
 
     trials = list(dataloader_cfg.get("all_trials", []))
     if not trials:
-        raise ValueError("Please set dataloader_params['all_trials'] to the list of all trial IDs.")
+        raise ValueError("Please set dataloader_params['all_trials'].")
 
     trials_sorted = list(trials)
     if shuffle:
@@ -209,7 +255,6 @@ def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
     folds: List[Dict[str, List[str]]] = []
 
     if scheme == "leave_one_out":
-        # Each trial becomes test once
         for i, test_trial in enumerate(trials_sorted, start=1):
             remaining = [t for t in trials_sorted if t != test_trial]
             if val_same_as_test:
@@ -217,7 +262,6 @@ def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
                 val_trials = [test_trial]
             else:
                 train_trials, val_trials = _split_train_val(remaining, val_ratio, seed + i)
-
             folds.append({
                 "name": f"loo_{test_trial}" + ("_valEqTest" if val_same_as_test else ""),
                 "train_trials": train_trials,
@@ -228,29 +272,41 @@ def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
     elif scheme == "group_k_fold":
         if k < 2:
             raise ValueError("group_k_fold requires k >= 2")
-        test_chunks = _chunks(trials_sorted, k)
-        for i, test_trials in enumerate(test_chunks, start=1):
+        for i, test_trials in enumerate(_chunks(trials_sorted, k), start=1):
             remaining = [t for t in trials_sorted if t not in test_trials]
             if val_same_as_test:
                 train_trials = remaining
                 val_trials = list(test_trials)
             else:
                 train_trials, val_trials = _split_train_val(remaining, val_ratio, seed + i)
-
             folds.append({
                 "name": f"kfold_{i:02d}_of_{k}" + ("_valEqTest" if val_same_as_test else ""),
                 "train_trials": train_trials,
                 "val_trials": val_trials,
-                "test_trials": test_trials,
+                "test_trials": list(test_trials),
             })
+
+    elif scheme == "gesture_flat":
+        # NO validation: val_trials is empty; downstream will ignore val loader.
+        folds.append({
+            "name": "gesture_flat",
+            "train_trials": list(trials_sorted),
+            "val_trials":   [],                     # <- no validation
+            "test_trials":  list(trials_sorted),
+            "use_gesture_flat": True,
+            "flat_test_ratio":  flat_test_ratio,
+            "flat_seed":        flat_seed,
+        })
+
     else:
         raise ValueError(f"Unknown CV scheme: {scheme}")
 
-    # Sanity: ensure non-empty train/test
     cleaned = []
     for f in folds:
-        tr, va, te = f["train_trials"], f["val_trials"], f["test_trials"]
-        if len(te) == 0 or len(tr) == 0:
+        if f.get("use_gesture_flat"):
+            cleaned.append(f)
+            continue
+        if len(f["test_trials"]) == 0 or len(f["train_trials"]) == 0:
             continue
         cleaned.append(f)
     return cleaned
@@ -284,7 +340,10 @@ def build_model_cfg_from_dataloader(
             problems.append(m)
             continue
 
-        modalities_dict[m] = ModalityCfg(name=m, in_dim=len(cols))
+        if m == "console":
+            modalities_dict[m] = ModalityCfg(name=m, in_dim=len(cols)-1)
+        else:
+            modalities_dict[m] = ModalityCfg(name=m, in_dim=len(cols))
 
     if problems:
         raise ValueError(
@@ -306,6 +365,64 @@ def build_model_cfg_from_dataloader(
         modality_dropout_p=modality_dropout_p,
         modalities=modalities_dict,
     )
+
+# ------------------ Model config derivation ------------------
+def build_multimtrsap_model_cfg_from_dataloader(
+    dataloader_cfg: Dict,
+    *,
+    d_model: int = 256,
+    nhead: int = 4,
+    num_layers: int = 4,
+    dropout: float = 0.1,
+    num_classes: int = 8,
+    seq_to_one: bool = False,
+    dim_feedforward: int = 1024,
+    causal_tcn: bool = True,
+    tcn_channels: List[int] = [128, 128, 256],
+) -> MultiMTRSAPModelCfg:
+    """Derive ModelCfg.modalities and include list from dataloader selections."""
+    mods = dataloader_cfg.get("modalities", [])
+    sel  = dataloader_cfg.get("selections", {})
+
+    problems = []
+    modalities_dict: Dict[str, ModalityCfg] = {}
+    for m in mods:
+        cols = sel.get(m, [])
+        if m == "images":
+            modalities_dict[m] = ModalityCfg(name=m, in_dim=2048)  # set placeholder feature dim (ResNet output etc.)
+            continue
+
+        if not isinstance(cols, list) or len(cols) == 0:
+            problems.append(m)
+            continue
+
+        if m == "console":
+            modalities_dict[m] = ModalityCfg(name=m, in_dim=len(cols)-1)
+        else:
+            modalities_dict[m] = ModalityCfg(name=m, in_dim=len(cols))
+
+    if problems:
+        raise ValueError(
+            f"Missing or empty selections for modalities: {problems}. "
+            f"Add column selections in dataloader_params['selections']."
+        )
+
+    # derive num_classes from keysteps map
+    num_classes = len(dataloader_cfg.get("keysteps", {})) or num_classes
+
+    return MultiMTRSAPModelCfg(
+        modalities=list(modalities_dict.keys()),
+        in_dims=[modalities_dict[m].in_dim for m in modalities_dict],
+        num_classes=num_classes,
+        tcn_channels=[128, 128, 256],
+        d_model=d_model,
+        nhead=nhead,
+        num_layers=num_layers,
+        dim_feedforward=1024,
+        dropout=dropout,
+        seq_to_one= seq_to_one,
+        causal_tcn=True)
+
 
 # ------------------ Unified args namespace ------------------
 RECORD_RESULTS = True

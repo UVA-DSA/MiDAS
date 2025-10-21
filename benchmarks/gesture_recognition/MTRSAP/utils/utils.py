@@ -2,7 +2,10 @@
 from models.mmtransformer import ModularMultimodalTransformer
 from models.transtcn import TransformerModel, MultimodalFusion
 from models.tcn import TCNClassifier, MultiBranchTCNClassifier
+from models.colintcn import EncoderDecoderNet
 from models.mstcn import MS_TCN2
+from models.multitranstcn import MultiTransTCN, build_default_multitranstcn
+from models.simple_mlp import create_model
 import torch
 from datautils.ems import *
 import torch.nn as nn
@@ -12,7 +15,75 @@ from functools import partial
 import torch.nn.functional as F
 
 from datautils.midas import MultimodalGestureDataset
+import torchvision.transforms as tfs
+import numpy as np
+import os
+from typing import List, Tuple
+from sklearn.model_selection import StratifiedShuffleSplit
 
+from torch.utils.data import DataLoader, Subset
+
+import random
+
+import torch
+import csv
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import (
+    precision_score, recall_score, f1_score, 
+    confusion_matrix, classification_report,
+    balanced_accuracy_score, cohen_kappa_score,
+    roc_auc_score, top_k_accuracy_score
+)
+import json
+from pathlib import Path
+import traceback
+
+def seed_everything(seed: int = 42):
+    """
+    Ensure reproducible training across Python, NumPy, and PyTorch.
+    Sets seeds and some deterministic flags.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    # For deterministic behavior in PyTorch
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    print(f"[INFO] Global seed set to {seed}")
+
+def _labels_for_dataset_windows(ds) -> np.ndarray:
+    """Build integer labels per window from ds.samples and ds.class_map (no __getitem__)."""
+    return np.asarray([ds.class_map[s["gesture_code"]] for s in ds.samples], dtype=np.int64)
+
+def stratified_gesture_train_test(
+    y: np.ndarray,
+    test_ratio: float,
+    seed: int = 0,
+) -> Tuple[List[int], List[int]]:
+    """Return stratified (train_idx, test_idx)."""
+    try:
+        X = np.arange(len(y))
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=test_ratio, random_state=seed)
+        train_idx, test_idx = next(sss.split(X, y))
+        return train_idx.tolist(), test_idx.tolist()
+    except Exception:
+        # Fallback: manual per-class split
+        rng = np.random.default_rng(seed)
+        tr, te = [], []
+        for c in np.unique(y):
+            idx = np.where(y == c)[0]
+            rng.shuffle(idx)
+            n = len(idx)
+            n_te = max(1, int(round(n * test_ratio))) if n > 1 else 0
+            te.extend(idx[:n_te].tolist())
+            tr.extend(idx[n_te:].tolist())
+        return tr, te
 
 
 fusion = MultimodalFusion()
@@ -57,10 +128,10 @@ def init_model(args, device):
     print("Class counts: ", class_counts, len(class_counts))
            
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_params["lr"], weight_decay=args.learning_params["weight_decay"])
-    # criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     
     # Class balanced loss
-    criterion = ClassBalancedLoss(beta=0.99, num_classes=num_classes, class_counts=class_counts)
+    # criterion = ClassBalancedLoss(beta=0.99, num_classes=num_classes, class_counts=class_counts)
         
     return model, optimizer, criterion
 
@@ -339,32 +410,55 @@ def validate(model, val_loader, criterion, device, logger, modality, task='class
             
     return total_loss / len(val_loader)
 
+import torch
+import csv
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import (
+    precision_score, recall_score, f1_score, 
+    confusion_matrix, classification_report,
+    balanced_accuracy_score, cohen_kappa_score
+)
+import json
+from pathlib import Path
 
-# test the model
-def test_model(model, test_loader, criterion, device, logger, epoch, results_dir, modality, task='classification'):
+def test_model(model, test_loader, criterion, device, logger, epoch, results_dir, modality, task='classification', class_names=None):
+    """
+    Enhanced model testing with comprehensive metrics for ML papers.
+    
+    Args:
+        model: The model to evaluate
+        test_loader: DataLoader for test data
+        criterion: Loss function
+        device: Device to run on
+        logger: Logger (e.g., wandb)
+        epoch: Current epoch number
+        results_dir: Directory to save results
+        modality: Data modality
+        task: Task type ('classification' or 'segmentation')
+        class_names: List of class names for better visualization (optional)
+    """
     model.eval()
     total_loss = 0
-
-
-    accuracy = 0.0
     gt = []
     preds = []
-    
     preds_detail = []
+    all_outputs = []  # Store all raw outputs for additional analysis
 
     with torch.no_grad():
         for i, batch in enumerate(test_loader):
             try:
-                input,feature_size, label = preprocess(batch, modality, model, device, task=task)
+                input, feature_size, label = preprocess(batch, modality, model, device, task=task)
                 print("=" * 10, "-" * 10, "=" * 10)
                 print(f"[TEST] Batch: {i}")
 
-                # check if the time-dimension is zero, skip this batch
+                # Check if the time-dimension is zero, skip this batch
                 if input.size(1) == 0:
                     print(f"Skipping batch {i}: empty feature sequence : {input.shape}")
                     continue
 
-                # get more info about input
+                # Get more info about input
                 keystep_label = batch['keystep_label'] if task == 'segmentation' else batch['keystep_label'][0]
                 keystep_id = batch['keystep_id'] if task == 'segmentation' else batch['keystep_id'][0]
                 start_frame = batch['start_frame'] if task == 'segmentation' else batch['start_frame'][0]
@@ -393,6 +487,7 @@ def test_model(model, test_loader, criterion, device, logger, epoch, results_dir
 
                 gt.append(label.item())
                 preds.append(pred.item())
+                all_outputs.append(output.cpu().numpy())
 
                 preds_detail.append({
                     "keystep_label": keystep_label,
@@ -406,6 +501,7 @@ def test_model(model, test_loader, criterion, device, logger, epoch, results_dir
                     "subject_id": subject_id[0],
                     "trial_id": trial_id[0],
                     "pred_keystep_id": pred.item(),
+                    "true_keystep_id": label.item(),
                     "all_preds": output.tolist()
                 })
 
@@ -414,42 +510,210 @@ def test_model(model, test_loader, criterion, device, logger, epoch, results_dir
                 print(f"Batch data: {batch}")
                 continue
 
-            # break
-            
-    # Calculate metrics
+    # Calculate comprehensive metrics
     accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)
-    precision = precision_score(gt, preds, average='macro')
-    recall = recall_score(gt, preds, average='macro')
-    f1 = f1_score(gt, preds, average='macro')
-
+    
+    # Macro and weighted metrics
+    precision_macro = precision_score(gt, preds, average='macro', zero_division=0)
+    recall_macro = recall_score(gt, preds, average='macro', zero_division=0)
+    f1_macro = f1_score(gt, preds, average='macro', zero_division=0)
+    
+    precision_weighted = precision_score(gt, preds, average='weighted', zero_division=0)
+    recall_weighted = recall_score(gt, preds, average='weighted', zero_division=0)
+    f1_weighted = f1_score(gt, preds, average='weighted', zero_division=0)
+    
+    # Per-class metrics
+    precision_per_class = precision_score(gt, preds, average=None, zero_division=0)
+    recall_per_class = recall_score(gt, preds, average=None, zero_division=0)
+    f1_per_class = f1_score(gt, preds, average=None, zero_division=0)
+    
+    # Additional metrics
+    balanced_acc = balanced_accuracy_score(gt, preds)
+    kappa = cohen_kappa_score(gt, preds)
+    
+    # Confusion matrix
+    cm = confusion_matrix(gt, preds)
+    
+    # Calculate per-class accuracy from confusion matrix
+    class_accuracy = cm.diagonal() / cm.sum(axis=1)
+    
+    # Get unique classes
+    unique_classes = sorted(list(set(gt + preds)))
+    n_classes = len(unique_classes)
+    
+    # Generate class names if not provided
+    if class_names is None:
+        class_names = [f"Class {i}" for i in unique_classes]
+    
+    # Classification report
+    class_report = classification_report(gt, preds, target_names=class_names, 
+                                        labels=unique_classes, zero_division=0, 
+                                        output_dict=True)
+    
+    # Prepare results dictionary
     results = {
+        "epoch": epoch,
         "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "epoch": epoch
+        "balanced_accuracy": balanced_acc,
+        "cohen_kappa": kappa,
+        "precision_macro": precision_macro,
+        "recall_macro": recall_macro,
+        "f1_macro": f1_macro,
+        "precision_weighted": precision_weighted,
+        "recall_weighted": recall_weighted,
+        "f1_weighted": f1_weighted,
     }
+    
+    # Add per-class metrics to results
+    for i, class_idx in enumerate(unique_classes):
+        results[f"class_{class_idx}_accuracy"] = class_accuracy[i]
+        results[f"class_{class_idx}_precision"] = precision_per_class[i]
+        results[f"class_{class_idx}_recall"] = recall_per_class[i]
+        results[f"class_{class_idx}_f1"] = f1_per_class[i]
+    
     # Log metrics to wandb
     logger.log(results)
     
-    # Save metrics to CSV
-    metrics_path = f'{results_dir}/metrics.csv'
-    with open(metrics_path, mode='a', newline='') as file:
+    # Create results directory if it doesn't exist
+    Path(results_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Save overall metrics to CSV
+    metrics_path = f'{results_dir}/metrics_epoch_{epoch}.csv'
+    with open(metrics_path, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["epoch",  "precision", "recall", "f1", "accuracy"])
-        writer.writerow([epoch,  precision, recall, f1, accuracy])
-
+        writer.writerow(["Metric", "Value"])
+        writer.writerow(["Epoch", epoch])
+        writer.writerow(["Accuracy", accuracy])
+        writer.writerow(["Balanced Accuracy", balanced_acc])
+        writer.writerow(["Cohen's Kappa", kappa])
+        writer.writerow(["Precision (Macro)", precision_macro])
+        writer.writerow(["Recall (Macro)", recall_macro])
+        writer.writerow(["F1 Score (Macro)", f1_macro])
+        writer.writerow(["Precision (Weighted)", precision_weighted])
+        writer.writerow(["Recall (Weighted)", recall_weighted])
+        writer.writerow(["F1 Score (Weighted)", f1_weighted])
+    
+    # Save per-class metrics to CSV
+    class_metrics_path = f'{results_dir}/class_metrics_epoch_{epoch}.csv'
+    with open(class_metrics_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Class", "Class_Name", "Accuracy", "Precision", "Recall", "F1-Score", "Support"])
+        for i, class_idx in enumerate(unique_classes):
+            support = cm[i].sum()
+            writer.writerow([
+                class_idx, 
+                class_names[i],
+                class_accuracy[i],
+                precision_per_class[i],
+                recall_per_class[i],
+                f1_per_class[i],
+                support
+            ])
+    
+    # Save confusion matrix as CSV
+    cm_path = f'{results_dir}/confusion_matrix_epoch_{epoch}.csv'
+    np.savetxt(cm_path, cm, delimiter=',', fmt='%d')
+    
+    # Save confusion matrix with labels
+    cm_labeled_path = f'{results_dir}/confusion_matrix_labeled_epoch_{epoch}.csv'
+    with open(cm_labeled_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([''] + class_names)
+        for i, row in enumerate(cm):
+            writer.writerow([class_names[i]] + row.tolist())
+    
+    # Visualize and save confusion matrix
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Count'})
+    plt.title(f'Confusion Matrix - Epoch {epoch}')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/confusion_matrix_epoch_{epoch}.png', dpi=300)
+    plt.close()
+    
+    # Visualize normalized confusion matrix (by row)
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Proportion'})
+    plt.title(f'Normalized Confusion Matrix - Epoch {epoch}')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/confusion_matrix_normalized_epoch_{epoch}.png', dpi=300)
+    plt.close()
+    
+    # Save classification report
+    report_path = f'{results_dir}/classification_report_epoch_{epoch}.json'
+    with open(report_path, 'w') as f:
+        json.dump(class_report, f, indent=4)
+    
+    # Save classification report as text
+    report_text_path = f'{results_dir}/classification_report_epoch_{epoch}.txt'
+    with open(report_text_path, 'w') as f:
+        f.write(classification_report(gt, preds, target_names=class_names, 
+                                     labels=unique_classes, zero_division=0))
+    
     # Save detailed predictions to CSV
-    preds_path = f'{results_dir}/preds.csv'
+    preds_path = f'{results_dir}/predictions_epoch_{epoch}.csv'
     print("Saving predictions to: ", preds_path)
-    with open(preds_path, mode='a', newline='') as file:
+    with open(preds_path, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["keystep_label", "keystep_id", "start_frame", "end_frame", "start_t", "end_t","window_start_frame","window_end_frame", "subject_id", "trial_id", "pred_keystep_id","all_preds"])
+        writer.writerow([
+            "keystep_label", "keystep_id", "start_frame", "end_frame", 
+            "start_t", "end_t", "window_start_frame", "window_end_frame", 
+            "subject_id", "trial_id", "true_keystep_id", "pred_keystep_id", 
+            "correct", "all_preds"
+        ])
         for pred in preds_detail:
-            writer.writerow([pred["keystep_label"], pred["keystep_id"], pred["start_frame"], pred["end_frame"], pred["start_t"], pred["end_t"], pred["window_start_frame"],pred["window_end_frame"], pred["subject_id"], pred["trial_id"], pred["pred_keystep_id"], pred["all_preds"]])
+            correct = pred["true_keystep_id"] == pred["pred_keystep_id"]
+            writer.writerow([
+                pred["keystep_label"], pred["keystep_id"], pred["start_frame"], 
+                pred["end_frame"], pred["start_t"], pred["end_t"], 
+                pred["window_start_frame"], pred["window_end_frame"], 
+                pred["subject_id"], pred["trial_id"], pred["true_keystep_id"],
+                pred["pred_keystep_id"], correct, pred["all_preds"]
+            ])
+    
+    # Create summary statistics
+    summary_path = f'{results_dir}/summary_epoch_{epoch}.txt'
+    with open(summary_path, 'w') as f:
+        f.write(f"Model Evaluation Summary - Epoch {epoch}\n")
+        f.write("=" * 50 + "\n\n")
+        f.write(f"Overall Metrics:\n")
+        f.write(f"  Accuracy: {accuracy:.4f}\n")
+        f.write(f"  Balanced Accuracy: {balanced_acc:.4f}\n")
+        f.write(f"  Cohen's Kappa: {kappa:.4f}\n")
+        f.write(f"\nMacro-averaged Metrics:\n")
+        f.write(f"  Precision: {precision_macro:.4f}\n")
+        f.write(f"  Recall: {recall_macro:.4f}\n")
+        f.write(f"  F1-Score: {f1_macro:.4f}\n")
+        f.write(f"\nWeighted-averaged Metrics:\n")
+        f.write(f"  Precision: {precision_weighted:.4f}\n")
+        f.write(f"  Recall: {recall_weighted:.4f}\n")
+        f.write(f"  F1-Score: {f1_weighted:.4f}\n")
+        f.write(f"\nPer-class Metrics:\n")
+        for i, class_idx in enumerate(unique_classes):
+            f.write(f"\n  {class_names[i]} (Class {class_idx}):\n")
+            f.write(f"    Accuracy: {class_accuracy[i]:.4f}\n")
+            f.write(f"    Precision: {precision_per_class[i]:.4f}\n")
+            f.write(f"    Recall: {recall_per_class[i]:.4f}\n")
+            f.write(f"    F1-Score: {f1_per_class[i]:.4f}\n")
+            f.write(f"    Support: {cm[i].sum()}\n")
+    
+    print(f"\n{'='*50}")
+    print(f"Evaluation Complete - Epoch {epoch}")
+    print(f"Overall Accuracy: {accuracy:.4f}")
+    print(f"Balanced Accuracy: {balanced_acc:.4f}")
+    print(f"F1-Score (Macro): {f1_macro:.4f}")
+    print(f"Results saved to: {results_dir}")
+    print(f"{'='*50}\n")
+    
     return results
-
-
 
 # return train,val,test dataloaders using the VideoDataset class
 def get_dataloaders(args):
@@ -714,74 +978,329 @@ def MIDAS_get_dataloaders(args):
     print("*" * 10, "=" * 10, "*" * 10)
     print("Loading dataloader for Classification task")
 
-    train_dataset = MultimodalGestureDataset(
-        base_path=args.dataloader_params["base_path"],
-        csv_paths=args.dataloader_params["train_trials"],
-        clip_len=args.dataloader_params["observation_window"],
-        step=args.dataloader_params["step"],
-        include_modalities=args.dataloader_params["modalities"],
-        sample_rate=args.dataloader_params["sample_rate"],
+    fold = args.fold  # your chosen fold dict
+    dp = args.dataloader_params
 
-        # Allowlist patterns (fnmatch)
-        modality_selections= args.dataloader_params['selections'],
+    # ---- Trial-based path (unchanged) ----
+    if not fold.get("use_gesture_flat", False):
 
-        # modality_exclude={
-        #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
-        # },
+        train_dataset = MultimodalGestureDataset(
+            base_path=args.dataloader_params["base_path"],
+            csv_paths=args.dataloader_params["train_trials"],
+            clip_len=args.dataloader_params["observation_window"],
+            step=args.dataloader_params["step"],
+            include_modalities=args.dataloader_params["modalities"],
+            sample_rate=args.dataloader_params["sample_rate"],
+            drop_neg1=args.dataloader_params.get("drop_neg1", True),
+            # Allowlist patterns (fnmatch)
+            modality_selections= args.dataloader_params['selections'],
 
-        normalize=True,
-    )
+            # modality_exclude={
+            #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
+            # },
 
-    val_dataset = MultimodalGestureDataset(
-        base_path=args.dataloader_params["base_path"],
-        csv_paths=args.dataloader_params["val_trials"],
-        clip_len=args.dataloader_params["observation_window"],
-        step=args.dataloader_params["step"],
-        include_modalities=args.dataloader_params["modalities"],
-        sample_rate=args.dataloader_params["sample_rate"],
+            normalize=True,
+        )
+
+        val_dataset = MultimodalGestureDataset(
+            base_path=args.dataloader_params["base_path"],
+            csv_paths=args.dataloader_params["val_trials"],
+            clip_len=args.dataloader_params["observation_window"],
+            step=args.dataloader_params["step"],
+            include_modalities=args.dataloader_params["modalities"],
+            sample_rate=args.dataloader_params["sample_rate"],
+            drop_neg1=args.dataloader_params.get("drop_neg1", True),
 
 
-        modality_selections= args.dataloader_params['selections'],
+            modality_selections= args.dataloader_params['selections'],
 
-        # modality_exclude={
-        #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
-        # },
-        normalize=True,
-    )
+            # modality_exclude={
+            #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
+            # },
+            normalize=True,
+        )
 
-    test_dataset = MultimodalGestureDataset(
-        base_path=args.dataloader_params["base_path"],
-        csv_paths=args.dataloader_params["test_trials"],
-        clip_len=args.dataloader_params["observation_window"],
-        step=args.dataloader_params["step"],
-        include_modalities=args.dataloader_params["modalities"],
-        sample_rate=args.dataloader_params["sample_rate"],
+        test_dataset = MultimodalGestureDataset(
+            base_path=args.dataloader_params["base_path"],
+            csv_paths=args.dataloader_params["test_trials"],
+            clip_len=args.dataloader_params["observation_window"],
+            step=args.dataloader_params["step"],
+            include_modalities=args.dataloader_params["modalities"],
+            sample_rate=args.dataloader_params["sample_rate"],
 
-        modality_selections= args.dataloader_params['selections'],
+            drop_neg1=args.dataloader_params.get("drop_neg1", True),
 
-        # modality_exclude={
-        #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
-        # },
-        normalize=True,
-    )
+            modality_selections= args.dataloader_params['selections'],
 
-    train_class_stats = train_dataset._get_class_stats()
-    print("Train class stats: ", train_class_stats)
+            # modality_exclude={
+            #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
+            # },
+            normalize=True,
+        )
 
-    val_class_stats = val_dataset._get_class_stats()
-    print("Val class stats: ", val_class_stats)
+        train_class_stats = train_dataset._get_class_stats()
+        print("Train class stats: ", train_class_stats)
 
-    test_class_stats = test_dataset._get_class_stats()
-    print("Test class stats: ", test_class_stats)
+        val_class_stats = val_dataset._get_class_stats()
+        print("Val class stats: ", val_class_stats)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=True,
-                        collate_fn=MultimodalGestureDataset.collate_fn)
-    val_loader = DataLoader(val_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False,
-                        collate_fn=MultimodalGestureDataset.collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False,
-                        collate_fn=MultimodalGestureDataset.collate_fn)
-    
-    return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+        test_class_stats = test_dataset._get_class_stats()
+        print("Test class stats: ", test_class_stats)
+
+        train_loader = DataLoader(train_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=True,
+                            collate_fn=MultimodalGestureDataset.collate_fn)
+        val_loader = DataLoader(val_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False,
+                            collate_fn=MultimodalGestureDataset.collate_fn)
+        test_loader = DataLoader(test_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False,
+                            collate_fn=MultimodalGestureDataset.collate_fn)
+        
+        return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+
+    # else: # simple train/test split
+
+    #     # 1) Build a TEMP dataset over all trials just to enumerate windows
+    #     ds_all_temp = MultimodalGestureDataset(
+    #         base_path=dp.get("base_path", None),
+    #         csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+    #         clip_len=dp["observation_window"],
+    #         step=dp["step"],
+    #         sample_rate=dp["sample_rate"],
+    #         ignore_clutch=dp.get("ignore_clutch", False),
+    #         clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+    #         drop_neg1=dp.get("drop_neg1", True),
+    #         include_modalities=dp["modalities"],
+    #         modality_selections=dp.get("selections", {}),
+    #         normalize=False,  # IMPORTANT: don't compute stats here
+    #         video_root=dp.get("video_root", None),
+    #         video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+    #         video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+    #     )
+
+    #     # 2) Stratified split over WINDOWS from ds_all_temp
+    #     y_all = _labels_for_dataset_windows(ds_all_temp)  # returns a list/np.array of class ids per window
+    #     tr_idx, te_idx = stratified_gesture_train_test(
+    #         y_all, test_ratio=fold["flat_test_ratio"], seed=fold["flat_seed"]
+    #     )
+
+    #     # 3) Build an actual TRAIN dataset limited to tr_idx; compute normalization on train only
+    #     ds_tr = MultimodalGestureDataset(
+    #         base_path=dp.get("base_path", None),
+    #         csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+    #         clip_len=dp["observation_window"],
+    #         step=dp["step"],
+    #         sample_rate=dp["sample_rate"],
+    #         ignore_clutch=dp.get("ignore_clutch", False),
+    #         clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+    #         drop_neg1=dp.get("drop_neg1", True),
+    #         include_modalities=dp["modalities"],
+    #         modality_selections=dp.get("selections", {}),
+    #         normalize=True,                     # <- compute stats here
+    #         video_root=dp.get("video_root", None),
+    #         video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+    #         video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+    #         selected_indices=tr_idx,            # <- only these windows exist in this instance
+    #     )
+
+    #     # 4) Build TEST dataset limited to te_idx, but REUSE train stats to avoid leakage
+    #     ds_te = MultimodalGestureDataset(
+    #         base_path=dp.get("base_path", None),
+    #         csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+    #         clip_len=dp["observation_window"],
+    #         step=dp["step"],
+    #         sample_rate=dp["sample_rate"],
+    #         ignore_clutch=dp.get("ignore_clutch", False),
+    #         clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+    #         drop_neg1=dp.get("drop_neg1", True),
+    #         include_modalities=dp["modalities"],
+    #         modality_selections=dp.get("selections", {}),
+    #         normalize=True,
+    #         normalization_stats=ds_tr.norm_stats,  # <- reuse TRAIN mean/std
+    #         video_root=dp.get("video_root", None),
+    #         video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+    #         video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+    #         selected_indices=te_idx,
+    #     )
+
+    #     # 5) (Optional) sanity: class stats by window
+    #     train_class_stats = ds_tr._get_class_stats()
+    #     test_class_stats  = ds_te._get_class_stats()
+    #     print("Train class stats (windows):", train_class_stats)
+    #     print("Test  class stats (windows):", test_class_stats)
+
+    #     # 6) Build loaders
+    #     train_loader = DataLoader(
+    #         ds_tr, batch_size=dp["batch_size"], shuffle=True,
+    #         num_workers=dp.get("num_workers", 4),
+    #         collate_fn=MultimodalGestureDataset.collate_fn, drop_last=False
+    #     )
+    #     test_loader = DataLoader(
+    #         ds_te, batch_size=dp["batch_size"], shuffle=False,
+    #         num_workers=dp.get("num_workers", 4),
+    #         collate_fn=MultimodalGestureDataset.collate_fn, drop_last=False
+    #     )
+    #     val_loader = test_loader  # <- dummy
+
+
+    #     val_class_stats = test_class_stats  # <- dummy
+    #     return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+
+    else: # simple train/val/test split
+        # 1) Build a TEMP dataset over all trials just to enumerate windows
+        ds_all_temp = MultimodalGestureDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            ignore_clutch=dp.get("ignore_clutch", False),
+            clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+            drop_neg1=dp.get("drop_neg1", True),
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=False,  # IMPORTANT: don't compute stats here
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+        )
+
+        # 2) Two-stage stratified split: Train/Val/Test
+        y_all = _labels_for_dataset_windows(ds_all_temp)  # returns a list/np.array of class ids per window
+
+        # Configure split ratios (adjust these as needed)
+        test_ratio = fold.get("test_ratio", 0.20)  # 20% for test
+        val_ratio = fold.get("val_ratio", 0.20)    # 20% of remaining (16% of total) for validation
+
+        # First split: separate out test set
+        tr_val_idx, te_idx = stratified_gesture_train_test(
+            y_all, 
+            test_ratio=test_ratio, 
+            seed=fold["flat_seed"]
+        )
+
+        # Second split: separate train and validation from the remaining data
+        y_tr_val = y_all[tr_val_idx]  # labels for train+val subset only
+        tr_idx_local, val_idx_local = stratified_gesture_train_test(
+            y_tr_val, 
+            test_ratio=val_ratio,  # this is ratio of (train+val), not total
+            seed=fold["flat_seed"] + 1  # use different seed for reproducibility
+        )
+
+        # Convert to numpy arrays for fancy indexing
+        tr_val_idx = np.array(tr_val_idx)
+        tr_idx_local = np.array(tr_idx_local)
+        val_idx_local = np.array(val_idx_local)
+
+        # Map local indices back to global window indices
+        tr_idx = tr_val_idx[tr_idx_local]
+        val_idx = tr_val_idx[val_idx_local]
+
+        print(f"Data split sizes - Train: {len(tr_idx)}, Val: {len(val_idx)}, Test: {len(te_idx)}")
+        print(f"Data split ratios - Train: {len(tr_idx)/len(y_all):.1%}, Val: {len(val_idx)/len(y_all):.1%}, Test: {len(te_idx)/len(y_all):.1%}")
+
+        # 3) Build TRAIN dataset - compute normalization stats on training data only
+        ds_tr = MultimodalGestureDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            ignore_clutch=dp.get("ignore_clutch", False),
+            clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+            drop_neg1=dp.get("drop_neg1", True),
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,  # compute stats here
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=tr_idx,  # only training windows
+        )
+
+        # 4) Build VALIDATION dataset - reuse train normalization stats
+        ds_val = MultimodalGestureDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            ignore_clutch=dp.get("ignore_clutch", False),
+            clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+            drop_neg1=dp.get("drop_neg1", True),
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,
+            normalization_stats=ds_tr.norm_stats,  # reuse TRAIN mean/std
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=val_idx,  # only validation windows
+        )
+
+        # 5) Build TEST dataset - reuse train normalization stats
+        ds_te = MultimodalGestureDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            ignore_clutch=dp.get("ignore_clutch", False),
+            clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+            drop_neg1=dp.get("drop_neg1", True),
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,
+            normalization_stats=ds_tr.norm_stats,  # reuse TRAIN mean/std
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=te_idx,  # only test windows
+        )
+
+        # 6) Print class distribution stats for each split
+        train_class_stats = ds_tr._get_class_stats()
+        val_class_stats = ds_val._get_class_stats()
+        test_class_stats = ds_te._get_class_stats()
+
+        print("*" * 10, "=" * 10, "*" * 10)
+        print("\nClass distribution by split:")
+        print("Train class stats (windows):", train_class_stats)
+        print("Val   class stats (windows):", val_class_stats)
+        print("Test  class stats (windows):", test_class_stats)
+        print("*" * 10, "=" * 10, "*" * 10)
+
+        # 7) Build DataLoaders
+        train_loader = DataLoader(
+            ds_tr, 
+            batch_size=dp["batch_size"], 
+            shuffle=True,  # shuffle training data
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=MultimodalGestureDataset.collate_fn, 
+            drop_last=False
+        )
+
+        val_loader = DataLoader(
+            ds_val, 
+            batch_size=dp["batch_size"], 
+            shuffle=False,  # no shuffle for validation
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=MultimodalGestureDataset.collate_fn, 
+            drop_last=False
+        )
+
+        test_loader = DataLoader(
+            ds_te, 
+            batch_size=dp["batch_size"], 
+            shuffle=False,  # no shuffle for test
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=MultimodalGestureDataset.collate_fn, 
+            drop_last=False
+        )
+
+        # Return all loaders and stats
+        return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+
+
+
 
 def print_one_batch(loader):
     batch = next(iter(loader))
@@ -799,6 +1318,164 @@ def print_one_batch(loader):
         else:
             print(f"{k}: type={type(v)}, value={v}")
 
+
+def initialize_multiMTRSAP_model(args, device):
+    print("Initializing Multi MTRSAP model...")
+    print("MultiMTRSAP Config: ", args.multiMTRSAPcfg)
+
+    model = build_default_multitranstcn(args.multiMTRSAPcfg)
+    model = model.to(device)
+    print(model)
+
+    # optimizer 
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_params['lr'], weight_decay=args.learning_params['weight_decay'])
+
+    # scheduler
+    criterion = nn.CrossEntropyLoss()
+
+    return model, optimizer, criterion
+
+def train_multiMTRSAP_one_epoch(model, train_loader, criterion, optimizer, device, logger, args):
+    model.train()
+    total_loss = 0
+    for i, batch in enumerate(train_loader):
+
+        try:
+            # print(f" Batch key: {list(batch.keys())}")
+            inputs = build_inputs(batch, args.dataloader_params["modalities"])
+
+            # print shape of each input tensor
+            # for k, v in inputs.items():
+            #     print(f"  {k}: {v.shape}")
+            inputs = {k: v.to(device) for k,v in inputs.items()}
+
+            logits = model(inputs)
+            # print(f"Logits shape: {logits.shape}")
+            # print(f"Batch label: {batch['label']}")
+
+
+            loss = criterion(logits, batch['label'].to(device))
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            total_loss += loss.item()
+
+            if i % 10 == 0:
+                print(f"Batch {i}, Loss: {loss.item()}")
+
+
+
+        except Exception as e:
+            print(f"Error in batch {i}: {e}")
+            # print stack trace
+            import traceback
+            traceback.print_exc()
+            continue
+
+    return total_loss / len(train_loader)
+
+def validate_multiMTRSAP(model, val_loader, criterion, device, logger, args):
+    model.eval()
+    total_loss = 0
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            try:
+                inputs = build_inputs(batch, args.dataloader_params["modalities"])
+                inputs = {k: v.to(device) for k,v in inputs.items()}
+
+                logits = model(inputs)
+
+                loss = criterion(logits, batch['label'].to(device))
+                total_loss += loss.item()
+                if i % 10 == 0:
+                    logger.log({"val_loss": loss.item()})
+
+            except Exception as e:
+                print(f"Error in batch {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+
+    return total_loss / len(val_loader)
+
+def test_multiMTRSAP_model(model, test_loader, criterion, device, logger, epoch, results_dir, args):
+    model.eval()
+    total_loss = 0
+
+
+    accuracy = 0.0
+    gt = []
+    preds = []
+    
+    preds_detail = []
+
+    with torch.no_grad():
+        for i, batch in enumerate(test_loader):
+            try:
+                # forward
+                inputs = build_inputs(batch, args.dataloader_params["modalities"])
+                inputs = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}
+
+                logits = model(inputs)                            # [B, C]
+                labels = batch["label"].to(device, non_blocking=True)  # [B]
+                loss = criterion(logits, labels)
+                total_loss += loss.item()
+
+                # predictions
+                pred = torch.argmax(logits, dim=1)               # [B]
+
+                # accumulate scalar lists
+                gt.extend(batch["label"].cpu().tolist())         # extend with B items
+                preds.extend(pred.cpu().tolist())                # extend with B items
+
+                # optional: probs if you need them
+                probs = torch.softmax(logits, dim=1).detach().cpu().tolist()
+
+                # detailed per-sample records
+                B = pred.shape[0]
+                trial_ids      = batch.get("trial_id",      [None]*B)   # might be list[str] or tensor
+                subject_ids    = batch.get("subject_id",    [None]*B)
+                gesture_codes  = batch.get("gesture_code",  [None]*B)   # usually list[str]
+
+                for i in range(B):
+                    preds_detail.append({
+                        "trial_id":      trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item(),
+                        "subject_id":    subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item(),
+                        "gesture_code":  gesture_codes[i] if isinstance(gesture_codes, list) else gesture_codes[i],
+                        "pred_label":    int(pred[i].cpu().item()),
+                        "logits":        logits[i].detach().cpu().tolist(),
+                        "probs":         probs[i],
+                    })
+
+            except Exception as e:
+                print(f"Error in batch {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                # print(f"Batch data: {batch}")
+                continue
+
+            # break
+            
+    # Calculate metrics
+    accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)
+    precision = precision_score(gt, preds, average='macro')
+    recall = recall_score(gt, preds, average='macro')
+    f1 = f1_score(gt, preds, average='macro')
+    results = {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "epoch": epoch
+    }
+    # Log metrics to wandb
+    logger.log(results)
+    # Save metrics to CSV
+    metrics_path = f'{results_dir}/metrics.csv'
+    with open(metrics_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["epoch",  "precision", "recall", "f1", "accuracy"])
+        writer.writerow([epoch,  precision, recall, f1, accuracy])  
 
 
 # MMT Model initialization
@@ -819,6 +1496,10 @@ def initialize_mmt_model(args, device):
     return model, optimizer, criterion
 
 def build_inputs(batch, active_modalities):
+    # if images in active modalities, m is 'images_feat'
+    if "images" in active_modalities:
+        active_modalities.remove("images")
+        active_modalities.append("images_feat")  # use pre-extracted features
     return {m: batch[m] for m in active_modalities if m in batch}
 
 
@@ -829,10 +1510,16 @@ def train_mmt_one_epoch(model, train_loader, criterion, optimizer, device, logge
 
         try:
 
+            
             inputs = build_inputs(batch, args.dataloader_params["modalities"])
+
+            # print shape of each input tensor
+            for k, v in inputs.items():
+                print(f"  {k}: {v.shape}")
             inputs = {k: v.to(device) for k,v in inputs.items()}
 
             logits = model(inputs)
+            print(f"MMT logits shape: {logits.shape}, Batch label: {batch['label']}")
 
             loss = criterion(logits, batch['label'].to(device))
             loss.backward()
@@ -985,6 +1672,9 @@ def mmt_preprocess(batch, args, backbone, device):
         raise ValueError("args.dataloader_params['modalities'] not found.")
 
     wanted_mods = list(args.dataloader_params["modalities"])
+    # print("Wanted modalities for MMT input:", wanted_mods)
+
+    # print("Batch keys:", list(batch.keys()))
 
     # Expand the effective list with image logic:
     # Prefer precomputed features if requested/present; otherwise fall back to frames->backbone.
@@ -1039,6 +1729,7 @@ def mmt_preprocess(batch, args, backbone, device):
             else:
                 x = x.to(device, non_blocking=True)
 
+            # print(f"Projected image features shape: {x.shape}")
             mod_tensors.append((m, x))
             T_max = max(T_max, T)
             continue
@@ -1129,8 +1820,8 @@ def train_transtcn_one_epoch(model, train_loader, criterion, optimizer, device, 
         try:
 
             preprocessed_inputs = mmt_preprocess(batch, args, model, device)  # [B, T, F_total]
+            # print(f" Preprocessed input shape: {preprocessed_inputs.shape}")
             logits = model(preprocessed_inputs)
-
             loss = criterion(logits, batch['label'].to(device))
             loss.backward()
             optimizer.step()
@@ -1174,101 +1865,466 @@ def validate_transtcn(model, val_loader, criterion, device, logger, args):
 
     return total_loss / len(val_loader)
 
-def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, results_dir, args):
+
+def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, results_dir, args, class_names=None):
+    """
+    Enhanced TransTCN model testing with comprehensive metrics for ML papers.
+    
+    Args:
+        model: The TransTCN model to evaluate
+        test_loader: DataLoader for test data
+        criterion: Loss function
+        device: Device to run on
+        logger: Logger (e.g., wandb)
+        epoch: Current epoch number
+        results_dir: Directory to save results
+        args: Arguments object containing model configuration
+        class_names: List of class names for better visualization (optional)
+    """
     model.eval()
     total_loss = 0
-
-
-    accuracy = 0.0
     gt = []
     preds = []
-    
     preds_detail = []
+    all_logits = []
+    all_probs = []
 
     with torch.no_grad():
-        for i, batch in enumerate(test_loader):
+        for batch_idx, batch in enumerate(test_loader):
             try:
-                # forward
+                # Forward pass
                 preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
-                logits = model(preprocessed_inputs)                            # [B, C]
-                labels = batch["label"].to(device, non_blocking=True)  # [B]
+                logits = model(preprocessed_inputs)                              # [B, C]
+                labels = batch["label"].to(device, non_blocking=True)            # [B]
                 loss = criterion(logits, labels)
                 total_loss += loss.item()
 
-                # predictions
-                pred = torch.argmax(logits, dim=1)               # [B]
+                # Predictions
+                pred = torch.argmax(logits, dim=1)  # [B]
+                probs = torch.softmax(logits, dim=1)  # [B, C]
 
-                # accumulate scalar lists
-                gt.extend(batch["label"].cpu().tolist())         # extend with B items
-                preds.extend(pred.cpu().tolist())                # extend with B items
+                # Accumulate for metrics
+                gt.extend(labels.cpu().tolist())
+                preds.extend(pred.cpu().tolist())
+                all_logits.extend(logits.detach().cpu().tolist())
+                all_probs.extend(probs.detach().cpu().tolist())
 
-                # optional: probs if you need them
-                probs = torch.softmax(logits, dim=1).detach().cpu().tolist()
-
-                # detailed per-sample records
+                # Extract batch metadata
                 B = pred.shape[0]
-                trial_ids      = batch.get("trial_id",      [None]*B)   # might be list[str] or tensor
-                subject_ids    = batch.get("subject_id",    [None]*B)
-                gesture_codes  = batch.get("gesture_code",  [None]*B)   # usually list[str]
+                trial_ids = batch.get("trial_id", [None]*B)
+                subject_ids = batch.get("subject_id", [None]*B)
+                gesture_codes = batch.get("gesture_code", [None]*B)
 
+                # Store detailed per-sample records
                 for i in range(B):
+                    true_label = int(labels[i].cpu().item())
+                    pred_label = int(pred[i].cpu().item())
+                    
                     preds_detail.append({
-                        "trial_id":      trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item(),
-                        "subject_id":    subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item(),
-                        "gesture_code":  gesture_codes[i] if isinstance(gesture_codes, list) else gesture_codes[i],
-                        "pred_label":    int(pred[i].cpu().item()),
-                        "logits":        logits[i].detach().cpu().tolist(),
-                        "probs":         probs[i],
+                        "trial_id": trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item(),
+                        "subject_id": subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item(),
+                        "gesture_code": gesture_codes[i] if isinstance(gesture_codes, list) else gesture_codes[i],
+                        "true_label": true_label,
+                        "pred_label": pred_label,
+                        "correct": true_label == pred_label,
+                        "logits": logits[i].detach().cpu().tolist(),
+                        "probs": probs[i].detach().cpu().tolist(),
+                        "confidence": float(probs[i, pred_label].cpu().item()),
+                        "true_class_prob": float(probs[i, true_label].cpu().item()),
                     })
 
             except Exception as e:
-                print(f"Error in batch {i}: {e}")
-                import traceback
+                print(f"Error in batch {batch_idx}: {e}")
                 traceback.print_exc()
-                # print(f"Batch data: {batch}")
                 continue
 
-            # break
-            
-    # Calculate metrics
-    accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)
-    precision = precision_score(gt, preds, average='macro')
-    recall = recall_score(gt, preds, average='macro')
-    f1 = f1_score(gt, preds, average='macro')
-    results = {
-        "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "epoch": epoch
+    # Calculate average loss
+    avg_loss = total_loss / len(test_loader) if len(test_loader) > 0 else 0
+
+    # Calculate comprehensive metrics
+    accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt) if len(gt) > 0 else 0
+    
+    # Macro and weighted metrics
+    precision_macro = precision_score(gt, preds, average='macro', zero_division=0)
+    recall_macro = recall_score(gt, preds, average='macro', zero_division=0)
+    f1_macro = f1_score(gt, preds, average='macro', zero_division=0)
+    
+    precision_weighted = precision_score(gt, preds, average='weighted', zero_division=0)
+    recall_weighted = recall_score(gt, preds, average='weighted', zero_division=0)
+    f1_weighted = f1_score(gt, preds, average='weighted', zero_division=0)
+    
+    # Per-class metrics
+    precision_per_class = precision_score(gt, preds, average=None, zero_division=0)
+    recall_per_class = recall_score(gt, preds, average=None, zero_division=0)
+    f1_per_class = f1_score(gt, preds, average=None, zero_division=0)
+    
+    # Additional metrics
+    balanced_acc = balanced_accuracy_score(gt, preds)
+    kappa = cohen_kappa_score(gt, preds)
+    
+    # Top-k accuracy (if more than 5 classes)
+    unique_classes = sorted(list(set(gt + preds)))
+    n_classes = len(unique_classes)
+    
+    top_k_acc = {}
+    if n_classes >= 3:
+        for k in [3, 5]:
+            if k < n_classes:
+                try:
+                    top_k_acc[f"top_{k}_accuracy"] = top_k_accuracy_score(
+                        gt, np.array(all_probs), k=k, labels=unique_classes
+                    )
+                except:
+                    top_k_acc[f"top_{k}_accuracy"] = None
+    
+    # ROC-AUC (if binary or can be computed)
+    try:
+        if n_classes == 2:
+            roc_auc = roc_auc_score(gt, np.array(all_probs)[:, 1])
+        else:
+            roc_auc = roc_auc_score(gt, np.array(all_probs), multi_class='ovr', average='macro')
+    except:
+        roc_auc = None
+    
+    # Confusion matrix
+    cm = confusion_matrix(gt, preds, labels=unique_classes)
+    
+    # Calculate per-class accuracy from confusion matrix
+    class_accuracy = cm.diagonal() / cm.sum(axis=1)
+    
+    # Generate class names if not provided
+    if class_names is None:
+        class_names = [f"Class {i}" for i in unique_classes]
+    elif len(class_names) < n_classes:
+        # Extend class names if needed
+        class_names = class_names + [f"Class {i}" for i in range(len(class_names), n_classes)]
+    
+    # Classification report
+    class_report = classification_report(
+        gt, preds, target_names=class_names, 
+        labels=unique_classes, zero_division=0, 
+        output_dict=True
+    )
+    
+    # Calculate confidence statistics
+    confidences = [p["confidence"] for p in preds_detail]
+    correct_confidences = [p["confidence"] for p in preds_detail if p["correct"]]
+    incorrect_confidences = [p["confidence"] for p in preds_detail if not p["correct"]]
+    
+    confidence_stats = {
+        "mean_confidence": np.mean(confidences),
+        "std_confidence": np.std(confidences),
+        "mean_confidence_correct": np.mean(correct_confidences) if correct_confidences else 0,
+        "mean_confidence_incorrect": np.mean(incorrect_confidences) if incorrect_confidences else 0,
     }
+    
+    # Prepare results dictionary
+    results = {
+        "epoch": epoch,
+        "loss": avg_loss,
+        "accuracy": accuracy,
+        "balanced_accuracy": balanced_acc,
+        "cohen_kappa": kappa,
+        "precision_macro": precision_macro,
+        "recall_macro": recall_macro,
+        "f1_macro": f1_macro,
+        "precision_weighted": precision_weighted,
+        "recall_weighted": recall_weighted,
+        "f1_weighted": f1_weighted,
+    }
+    
+    # Add ROC-AUC if available
+    if roc_auc is not None:
+        results["roc_auc"] = roc_auc
+    
+    # Add top-k accuracy if available
+    results.update(top_k_acc)
+    
+    # Add confidence statistics
+    results.update(confidence_stats)
+    
+    # Add per-class metrics to results
+    for i, class_idx in enumerate(unique_classes):
+        results[f"class_{class_idx}_accuracy"] = float(class_accuracy[i])
+        results[f"class_{class_idx}_precision"] = float(precision_per_class[i])
+        results[f"class_{class_idx}_recall"] = float(recall_per_class[i])
+        results[f"class_{class_idx}_f1"] = float(f1_per_class[i])
+    
     # Log metrics to wandb
     logger.log(results)
-
-    # Save metrics to CSV
-    metrics_path = f'{results_dir}/metrics.csv'
-    with open(metrics_path, mode='a', newline='') as file:
+    
+    # Create results directory if it doesn't exist
+    Path(results_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Save overall metrics to CSV
+    metrics_path = f'{results_dir}/metrics_epoch_{epoch}.csv'
+    with open(metrics_path, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["epoch",  "precision", "recall", "f1", "accuracy"])
-        writer.writerow([epoch,  precision, recall, f1, accuracy])  
-
-        # Save detailed predictions to CSV
-    preds_path = f'{results_dir}/preds.csv'
-    print("Saving predictions to: ", preds_path)
-    with open(preds_path, mode='a', newline='') as file:
+        writer.writerow(["Metric", "Value"])
+        writer.writerow(["Epoch", epoch])
+        writer.writerow(["Loss", avg_loss])
+        writer.writerow(["Accuracy", accuracy])
+        writer.writerow(["Balanced Accuracy", balanced_acc])
+        writer.writerow(["Cohen's Kappa", kappa])
+        if roc_auc is not None:
+            writer.writerow(["ROC-AUC", roc_auc])
+        for k, v in top_k_acc.items():
+            if v is not None:
+                writer.writerow([k.replace('_', ' ').title(), v])
+        writer.writerow(["Precision (Macro)", precision_macro])
+        writer.writerow(["Recall (Macro)", recall_macro])
+        writer.writerow(["F1 Score (Macro)", f1_macro])
+        writer.writerow(["Precision (Weighted)", precision_weighted])
+        writer.writerow(["Recall (Weighted)", recall_weighted])
+        writer.writerow(["F1 Score (Weighted)", f1_weighted])
+        writer.writerow(["Mean Confidence", confidence_stats["mean_confidence"]])
+        writer.writerow(["Mean Confidence (Correct)", confidence_stats["mean_confidence_correct"]])
+        writer.writerow(["Mean Confidence (Incorrect)", confidence_stats["mean_confidence_incorrect"]])
+    
+    # Save per-class metrics to CSV
+    class_metrics_path = f'{results_dir}/class_metrics_epoch_{epoch}.csv'
+    with open(class_metrics_path, mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["trial_id", "subject_id", "gesture_code", "pred_label","probs"])
+        writer.writerow(["Class_ID", "Class_Name", "Accuracy", "Precision", "Recall", "F1-Score", "Support"])
+        for i, class_idx in enumerate(unique_classes):
+            support = int(cm[i].sum())
+            writer.writerow([
+                class_idx, 
+                class_names[i],
+                f"{class_accuracy[i]:.4f}",
+                f"{precision_per_class[i]:.4f}",
+                f"{recall_per_class[i]:.4f}",
+                f"{f1_per_class[i]:.4f}",
+                support
+            ])
+    
+    # Save confusion matrix as CSV (raw counts)
+    cm_path = f'{results_dir}/confusion_matrix_epoch_{epoch}.csv'
+    np.savetxt(cm_path, cm, delimiter=',', fmt='%d')
+    
+    # Save confusion matrix with labels
+    cm_labeled_path = f'{results_dir}/confusion_matrix_labeled_epoch_{epoch}.csv'
+    with open(cm_labeled_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['True\\Predicted'] + class_names)
+        for i, row in enumerate(cm):
+            writer.writerow([class_names[i]] + row.tolist())
+    
+    # Visualize and save confusion matrix
+    plt.figure(figsize=(max(10, n_classes), max(8, n_classes * 0.8)))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Count'})
+    plt.title(f'Confusion Matrix - Epoch {epoch}', fontsize=14, fontweight='bold')
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/confusion_matrix_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Visualize normalized confusion matrix (by row - recall)
+    cm_normalized = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
+    plt.figure(figsize=(max(10, n_classes), max(8, n_classes * 0.8)))
+    sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
+    plt.title(f'Normalized Confusion Matrix (Recall) - Epoch {epoch}', fontsize=14, fontweight='bold')
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/confusion_matrix_normalized_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Visualize per-class metrics
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    metrics_to_plot = [
+        (class_accuracy, 'Accuracy', axes[0, 0]),
+        (precision_per_class, 'Precision', axes[0, 1]),
+        (recall_per_class, 'Recall', axes[1, 0]),
+        (f1_per_class, 'F1-Score', axes[1, 1])
+    ]
+    
+    for metric_values, metric_name, ax in metrics_to_plot:
+        bars = ax.bar(range(len(class_names)), metric_values, color='skyblue', edgecolor='navy', alpha=0.7)
+        ax.set_xlabel('Class', fontsize=11)
+        ax.set_ylabel(metric_name, fontsize=11)
+        ax.set_title(f'Per-Class {metric_name}', fontsize=12, fontweight='bold')
+        ax.set_xticks(range(len(class_names)))
+        ax.set_xticklabels(class_names, rotation=45, ha='right')
+        ax.set_ylim([0, 1.1])
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Add value labels on bars
+        for i, (bar, val) in enumerate(zip(bars, metric_values)):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                   f'{val:.3f}', ha='center', va='bottom', fontsize=9)
+    
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/per_class_metrics_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Confidence histogram
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # Overall confidence distribution
+    axes[0].hist(confidences, bins=20, color='skyblue', edgecolor='black', alpha=0.7)
+    axes[0].axvline(np.mean(confidences), color='red', linestyle='--', 
+                    label=f'Mean: {np.mean(confidences):.3f}')
+    axes[0].set_xlabel('Prediction Confidence', fontsize=11)
+    axes[0].set_ylabel('Frequency', fontsize=11)
+    axes[0].set_title('Distribution of Prediction Confidence', fontsize=12, fontweight='bold')
+    axes[0].legend()
+    axes[0].grid(alpha=0.3)
+    
+    # Confidence by correctness
+    if correct_confidences and incorrect_confidences:
+        axes[1].hist([correct_confidences, incorrect_confidences], bins=20, 
+                    label=['Correct', 'Incorrect'], color=['green', 'red'], 
+                    alpha=0.6, edgecolor='black')
+        axes[1].set_xlabel('Prediction Confidence', fontsize=11)
+        axes[1].set_ylabel('Frequency', fontsize=11)
+        axes[1].set_title('Confidence by Prediction Correctness', fontsize=12, fontweight='bold')
+        axes[1].legend()
+        axes[1].grid(alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/confidence_distribution_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Save classification report
+    report_path = f'{results_dir}/classification_report_epoch_{epoch}.json'
+    with open(report_path, 'w') as f:
+        json.dump(class_report, f, indent=4)
+    
+    # Save classification report as text
+    report_text_path = f'{results_dir}/classification_report_epoch_{epoch}.txt'
+    with open(report_text_path, 'w') as f:
+        f.write(classification_report(gt, preds, target_names=class_names, 
+                                     labels=unique_classes, zero_division=0))
+    
+    # Save detailed predictions to CSV
+    preds_path = f'{results_dir}/predictions_epoch_{epoch}.csv'
+    print("Saving predictions to:", preds_path)
+    with open(preds_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            "trial_id", "subject_id", "gesture_code", "true_label", 
+            "pred_label", "correct", "confidence", "true_class_prob", 
+            "logits", "probs"
+        ])
         for pred in preds_detail:
-            writer.writerow([pred["trial_id"], pred["subject_id"], pred["gesture_code"], pred["pred_label"], pred["probs"]])
-    return results
+            writer.writerow([
+                pred["trial_id"], 
+                pred["subject_id"], 
+                pred["gesture_code"], 
+                pred["true_label"],
+                pred["pred_label"], 
+                pred["correct"],
+                f"{pred['confidence']:.4f}",
+                f"{pred['true_class_prob']:.4f}",
+                pred["logits"],
+                pred["probs"]
+            ])
+    
+    # Save misclassified samples separately
+    misclassified = [p for p in preds_detail if not p["correct"]]
+    if misclassified:
+        misclass_path = f'{results_dir}/misclassified_epoch_{epoch}.csv'
+        with open(misclass_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([
+                "trial_id", "subject_id", "gesture_code", "true_label", 
+                "pred_label", "confidence", "true_class_prob"
+            ])
+            for pred in misclassified:
+                writer.writerow([
+                    pred["trial_id"], pred["subject_id"], pred["gesture_code"],
+                    pred["true_label"], pred["pred_label"],
+                    f"{pred['confidence']:.4f}", f"{pred['true_class_prob']:.4f}"
+                ])
+    
+    # Create comprehensive summary
+    summary_path = f'{results_dir}/summary_epoch_{epoch}.txt'
+    with open(summary_path, 'w') as f:
+        f.write(f"TransTCN Model Evaluation Summary - Epoch {epoch}\n")
+        f.write("=" * 70 + "\n\n")
+        
+        f.write(f"Overall Metrics:\n")
+        f.write(f"  Accuracy: {accuracy:.4f}\n")
+        f.write(f"\nMacro-averaged Metrics:\n")
+        f.write(f"  Precision: {precision_macro:.4f}\n")
+        f.write(f"  Recall: {recall_macro:.4f}\n")
+        f.write(f"  F1-Score: {f1_macro:.4f}\n")
+        
+        f.write(f"  Loss: {avg_loss:.4f}\n")
+        f.write(f"  Balanced Accuracy: {balanced_acc:.4f}\n")
+        f.write(f"  Cohen's Kappa: {kappa:.4f}\n")
+        if roc_auc is not None:
+            f.write(f"  ROC-AUC: {roc_auc:.4f}\n")
+        
+        if top_k_acc:
+            f.write(f"\nTop-K Accuracy:\n")
+            for k, v in top_k_acc.items():
+                if v is not None:
+                    f.write(f"  {k.replace('_', '-').title()}: {v:.4f}\n")
+        
 
+        f.write(f"\nWeighted-averaged Metrics:\n")
+        f.write(f"  Precision: {precision_weighted:.4f}\n")
+        f.write(f"  Recall: {recall_weighted:.4f}\n")
+        f.write(f"  F1-Score: {f1_weighted:.4f}\n")
+        
+        f.write(f"\nConfidence Statistics:\n")
+        f.write(f"  Mean Confidence: {confidence_stats['mean_confidence']:.4f}\n")
+        f.write(f"  Std Confidence: {confidence_stats['std_confidence']:.4f}\n")
+        f.write(f"  Mean Confidence (Correct): {confidence_stats['mean_confidence_correct']:.4f}\n")
+        f.write(f"  Mean Confidence (Incorrect): {confidence_stats['mean_confidence_incorrect']:.4f}\n")
+        
+        f.write(f"\nPer-Class Metrics:\n")
+        for i, class_idx in enumerate(unique_classes):
+            f.write(f"\n  {class_names[i]} (Class {class_idx}):\n")
+            f.write(f"    Accuracy: {class_accuracy[i]:.4f}\n")
+            f.write(f"    Precision: {precision_per_class[i]:.4f}\n")
+            f.write(f"    Recall: {recall_per_class[i]:.4f}\n")
+            f.write(f"    F1-Score: {f1_per_class[i]:.4f}\n")
+            f.write(f"    Support: {int(cm[i].sum())}\n")
+        
+        f.write(f"\n" + "=" * 70 + "\n")
+        f.write(f"Total Samples: {len(gt)}\n")
+        f.write(f"Correct Predictions: {sum(1 for x, y in zip(preds, gt) if x == y)}\n")
+        f.write(f"Incorrect Predictions: {len(misclassified)}\n")
+        f.write(f"Number of Classes: {n_classes}\n")
+    
+    print(f"\n{'='*70}")
+    print(f"TransTCN Evaluation Complete - Epoch {epoch}")
+    print(f"Loss: {avg_loss:.4f} | Accuracy: {accuracy:.4f} | F1 (Macro): {f1_macro:.4f}")
+    print(f"Balanced Accuracy: {balanced_acc:.4f} | Kappa: {kappa:.4f}")
+    print(f"Results saved to: {results_dir}")
+    print(f"{'='*70}\n")
+    
+    return results
 
 
 def initialize_tcn_model(args, input_dim, device, num_classes):
     print("Initializing TCN model...")
     print("TCN Config: input_dim=", input_dim, ", num_classes=", num_classes)
 
-    model = TCNClassifier(input_dim=input_dim, num_classes=num_classes)
+    args.tcn_model_params['input_dim'] = input_dim
+    args.tcn_model_params['encoder_params']['input_size'] = input_dim    
+    
+    model_params = {
+        "class_num": num_classes,
+        "decoder_params": args.tcn_model_params['decoder_params'],
+        "encoder_params": args.tcn_model_params['encoder_params'],
+        "fc_size": 32,
+        "mid_lstm_params": {
+            "hidden_size": 64,
+            "input_size": 128,
+            "layer_num": 1
+        }
+    }
+    model = EncoderDecoderNet(**model_params)
     model = model.to(device)
     print(model)
 
@@ -1276,7 +2332,7 @@ def initialize_tcn_model(args, input_dim, device, num_classes):
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_params['lr'], weight_decay=args.learning_params['weight_decay'])
 
     # scheduler
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(ignore_index=-1)
 
     return model, optimizer, criterion
 
@@ -1307,7 +2363,12 @@ def train_TCN_one_epoch(model, train_loader, criterion, optimizer, device, logge
         try:
 
             preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+            # skip batch if sequence length is less than 10
+            if preprocessed_inputs.shape[1] < 10:
+                continue
+
             logits = model(preprocessed_inputs)
+
 
             loss = criterion(logits, batch['label'].to(device))
             loss.backward()
@@ -1337,6 +2398,9 @@ def validate_TCN(model, val_loader, criterion, device, logger, args):
         for i, batch in enumerate(val_loader):
             try:
                 preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+                            # skip batch if sequence length is less than 10
+                if preprocessed_inputs.shape[1] < 10:
+                    continue
                 logits = model(preprocessed_inputs)
 
                 loss = criterion(logits, batch['label'].to(device))
@@ -1368,6 +2432,9 @@ def test_TCN_model(model, test_loader, criterion, device, logger, epoch, results
             try:
                 # forward
                 preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
+                            # skip batch if sequence length is less than 10
+                if preprocessed_inputs.shape[1] < 10:
+                    continue
                 logits = model(preprocessed_inputs)                            # [B, C]
                 labels = batch["label"].to(device, non_blocking=True)  # [B]
                 loss = criterion(logits, labels)
@@ -1468,7 +2535,7 @@ def initialize_mstcn_model(args, input_dim, device, num_classes):
 
     # Loss fns + weights
     loss_fns = {
-        "ce": nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX),
+        "ce": nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX, label_smoothing=0.1),
         "mse": nn.MSELoss(reduction="none"),
         # args.learning_params is a dict in your code – use .get(...)
         "lambda_smooth": args.learning_params.get("lambda_smooth", 0.15),
@@ -1532,6 +2599,537 @@ def mstcn_compute_loss(predictions, target_BT, mask_B1T, loss_fns):
             total_loss += lam * smoothed
 
     return total_loss
+
+
+# mstcn seq to one codes
+# =========================
+# MS-TCN++ — Sequence Classification (Fix B)
+# =========================
+import os, csv, json, traceback
+from pathlib import Path
+from collections import defaultdict
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+
+from sklearn.metrics import (
+    precision_score, recall_score, f1_score, 
+    confusion_matrix, classification_report,
+    balanced_accuracy_score, cohen_kappa_score,
+    accuracy_score
+)
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# -------------------------
+# Helpers
+# -------------------------
+def _as_stage_list(preds):
+    """
+    Normalize model output into a list of tensors (B, C, T) per stage.
+    Accepts:
+      - list/tuple of (B, C, T)
+      - tensor of shape (S, B, C, T)
+      - single tensor (B, C, T)
+    """
+    if isinstance(preds, (list, tuple)):
+        return preds
+    if torch.is_tensor(preds):
+        if preds.dim() == 4:   # (S, B, C, T)
+            return [preds[s] for s in range(preds.size(0))]
+        elif preds.dim() == 3: # (B, C, T)
+            return [preds]
+    raise ValueError(f"Unexpected preds type/shape: {type(preds)}, {getattr(preds, 'shape', None)}")
+
+def _masked_seq_mean(final_logits_BCT, mask_B1T=None):
+    """
+    final_logits_BCT: (B, C, T)
+    mask_B1T: (B, 1, T) with {0,1} or None
+    Returns seq_logits (B, C) via (masked) mean over T.
+    """
+    if mask_B1T is None:
+        return final_logits_BCT.mean(dim=-1)
+    w = mask_B1T.float()                      # (B,1,T)
+    num = (final_logits_BCT * w).sum(dim=-1)  # (B,C)
+    den = w.sum(dim=-1).clamp_min(1.0)        # (B,1)
+    return num / den
+
+def _get_mask_from_batch_or_default(batch, T, device):
+    """
+    Prefer explicit mask if present, else all-ones.
+    Note: In clip-label mode we don't have framewise labels to derive a mask from.
+    """
+    if 'mask' in batch:
+        mask = batch['mask'].to(device)
+        if mask.dim() == 2: 
+            mask = mask.unsqueeze(1)          # (B,1,T)
+        if mask.size(-1) != T:
+            raise ValueError(f"Mask time length {mask.size(-1)} != T {T}")
+        return mask
+    return torch.ones((batch['label'].shape[0], 1, T), device=device, dtype=torch.float32)
+
+def _save_confusion_and_plots(cm, class_names, results_dir, epoch, title_prefix=""):
+    fig_size = max(10, len(class_names) * 0.8)
+    # Raw counts
+    plt.figure(figsize=(fig_size, fig_size * 0.9))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Count'})
+    plt.title(f'{title_prefix} Confusion Matrix - Epoch {epoch}', fontsize=14, fontweight='bold')
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, f"{title_prefix.lower().replace(' ','_')}_confusion_matrix_epoch_{epoch}.png"),
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # Normalized by true (recall)
+    cm_norm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
+    plt.figure(figsize=(fig_size, fig_size * 0.9))
+    sns.heatmap(cm_norm, annot=True, fmt='.2%', cmap='Blues',
+                xticklabels=class_names, yticklabels=class_names,
+                cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
+    plt.title(f'{title_prefix} Confusion Matrix (Recall-Normalized) - Epoch {epoch}', fontsize=14, fontweight='bold')
+    plt.ylabel('True Label', fontsize=12)
+    plt.xlabel('Predicted Label', fontsize=12)
+    plt.tight_layout()
+    plt.savefig(os.path.join(results_dir, f"{title_prefix.lower().replace(' ','_')}_confusion_matrix_normalized_epoch_{epoch}.png"),
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+# -------------------------
+# TRAIN (sequence classification)
+# -------------------------
+def train_mstcn_seqclf_one_epoch(model, train_loader, optimizer, device, logger, args):
+    """
+    MS-TCN++ sequence classification:
+      - Inputs: (B, T, F_total) -> (B, C=F_total, T)
+      - Model: produces stages; use the final stage (B, C_classes, T)
+      - Pool over time (masked mean if available) -> (B, C_classes)
+      - Loss: CE(seq_logits, labels_B)
+    """
+    model.train()
+    running_loss = 0.0
+    running_acc  = 0.0
+    n_batches = 0
+
+    ce_loss = torch.nn.CrossEntropyLoss()
+
+    for i, batch in enumerate(train_loader):
+        try:
+            # Inputs
+            x_BTF = mmt_preprocess(batch, args, None, device)  # must return (B, T, F)
+            if x_BTF.dim() != 3:
+                raise ValueError(f"mmt_preprocess must return (B,T,F), got {tuple(x_BTF.shape)}")
+            x_BCT = x_BTF.permute(0, 2, 1).contiguous()        # (B, C_in, T)
+            B, C, T = x_BCT.shape
+
+            # Labels: (B,) clip labels only
+            labels_B = batch['label'].to(device)
+            if labels_B.dim() != 1 or labels_B.size(0) != B:
+                raise ValueError(f"Expect clip labels of shape (B,), got {tuple(labels_B.shape)}")
+
+            # Optional: skip super-short clips (your original behavior)
+            if T < 30:
+                continue
+
+            # Mask (optional)
+            mask = _get_mask_from_batch_or_default(batch, T, device)  # (B,1,T)
+
+            # Forward
+            optimizer.zero_grad()
+            preds = model(x_BCT)                       # list[(B,C_out,T)] or (S,B,C_out,T)
+            stages = _as_stage_list(preds)
+            final_logits_BCT = stages[-1]              # (B, C_classes, T)
+
+            # Sequence logits via masked mean over time
+            seq_logits_BC = _masked_seq_mean(final_logits_BCT, mask)  # (B, C_classes)
+
+            # Loss & step
+            loss = ce_loss(seq_logits_BC, labels_B)   # (B,)
+            loss.backward()
+            optimizer.step()
+
+            # Accuracy (sequence level)
+            seq_pred = seq_logits_BC.argmax(dim=1)    # (B,)
+            acc = (seq_pred == labels_B).float().mean().item()
+
+            running_loss += float(loss.item())
+            running_acc  += float(acc)
+            n_batches += 1
+
+            if i % 10 == 0:
+                print(f"[TRAIN-SEQ] Batch {i}: loss={loss.item():.4f}, acc={acc:.4f}")
+
+        except Exception as e:
+            print(f"[TRAIN-SEQ] Error in batch {i}: {e}")
+            traceback.print_exc()
+            continue
+
+    if n_batches == 0:
+        return 0.0, 0.0
+
+    epoch_loss = running_loss / n_batches
+    epoch_acc  = running_acc  / n_batches
+    if logger is not None:
+        try:
+            logger.info(f"[TRAIN-SEQ] loss={epoch_loss:.4f}, acc={epoch_acc:.4f}")
+        except Exception:
+            pass
+    return epoch_loss, epoch_acc
+
+# -------------------------
+# VALIDATE (sequence classification)
+# -------------------------
+def validate_mstcn_seqclf(model, val_loader, device, logger, args):
+    model.eval()
+    running_loss = 0.0
+    running_acc  = 0.0
+    n_batches    = 0
+
+    ce_loss = torch.nn.CrossEntropyLoss()
+
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            try:
+                x_BTF = mmt_preprocess(batch, args, None, device)  # (B, T, F)
+                if x_BTF.dim() != 3:
+                    raise ValueError(f"mmt_preprocess must return (B,T,F), got {tuple(x_BTF.shape)}")
+                x_BCT = x_BTF.permute(0, 2, 1).contiguous()
+                B, C, T = x_BCT.shape
+
+                labels_B = batch['label'].to(device)   # (B,)
+                if labels_B.dim() != 1 or labels_B.size(0) != B:
+                    raise ValueError(f"Expect clip labels of shape (B,), got {tuple(labels_B.shape)}")
+
+                if T < 30:
+                    continue
+
+                mask = _get_mask_from_batch_or_default(batch, T, device)
+
+                preds = model(x_BCT)
+                stages = _as_stage_list(preds)
+                final_logits_BCT = stages[-1]              # (B, C_classes, T)
+
+                seq_logits_BC = _masked_seq_mean(final_logits_BCT, mask)
+                loss  = ce_loss(seq_logits_BC, labels_B)
+
+                seq_pred = seq_logits_BC.argmax(dim=1)
+                acc = (seq_pred == labels_B).float().mean().item()
+
+                running_loss += float(loss.item())
+                running_acc  += float(acc)
+                n_batches    += 1
+
+                if i % 10 == 0:
+                    print(f"[VAL-SEQ] Batch {i}: loss={loss.item():.4f}, acc={acc:.4f}")
+
+            except Exception as e:
+                print(f"[VAL-SEQ] Error in batch {i}: {e}")
+                traceback.print_exc()
+                continue
+
+    if n_batches == 0:
+        if logger is not None:
+            try:
+                logger.warning("[VAL-SEQ] Zero successful batches.")
+            except Exception:
+                pass
+        return {"loss": 0.0, "acc": 0.0}
+
+    val_loss = running_loss / n_batches
+    val_acc  = running_acc  / n_batches
+
+    if logger is not None:
+        try:
+            logger.info(f"[VAL-SEQ] loss={val_loss:.4f}, acc={val_acc:.4f}")
+        except Exception:
+            pass
+
+    return {"loss": val_loss, "acc": val_acc}
+
+# -------------------------
+# TEST (sequence classification + rich reporting)
+# -------------------------
+def test_mstcn_seqclf(model, test_loader, device, logger, epoch, results_dir, args, class_names=None):
+    """
+    Sequence classification evaluation:
+      - Pools final stage logits over time for (B,C)
+      - Computes clip-level metrics (accuracy, macro/weighted P/R/F1, kappa, balanced acc)
+      - Saves confusion matrices, per-class metrics, and per-sample artifacts
+      - Also saves framewise predictions/probs for inspection (even though training is seq-level)
+    """
+    os.makedirs(results_dir, exist_ok=True)
+    model.eval()
+
+    save_figs = False
+
+    ce_loss = torch.nn.CrossEntropyLoss()
+    running_loss = 0.0
+    n_batches = 0
+
+    # Aggregates for metrics (sequence-level)
+    all_gt_seq, all_pred_seq = [], []
+
+    # Optional per-sample artifacts
+    per_sample_records = []
+    per_sample_detailed = []
+
+    with torch.no_grad():
+        for i, batch in enumerate(test_loader):
+            try:
+                x_BTF = mmt_preprocess(batch, args, None, device)  # (B,T,F)
+                if x_BTF.dim() != 3:
+                    raise ValueError(f"mmt_preprocess must return (B,T,F), got {tuple(x_BTF.shape)}")
+                x_BCT = x_BTF.permute(0, 2, 1).contiguous()
+                B, C, T = x_BCT.shape
+
+                labels_B = batch['label'].to(device)  # (B,)
+                if labels_B.dim() != 1 or labels_B.size(0) != B:
+                    raise ValueError(f"Expect clip labels of shape (B,), got {tuple(labels_B.shape)}")
+
+                # if T < 30:
+                #     print(f"[TEST-SEQ] Skipping batch {i}: T={T} < 30")
+                #     continue
+
+                mask = _get_mask_from_batch_or_default(batch, T, device)
+
+                preds = model(x_BCT)
+                stages = _as_stage_list(preds)
+                final_logits_BCT = stages[-1]                  # (B, C_classes, T)
+                seq_logits_BC    = _masked_seq_mean(final_logits_BCT, mask)
+
+                loss  = ce_loss(seq_logits_BC, labels_B)
+                running_loss += float(loss.item())
+                n_batches    += 1
+
+                # Predictions (sequence-level)
+                seq_pred_B = seq_logits_BC.argmax(dim=1)       # (B,)
+                all_gt_seq.append(labels_B.detach().cpu().numpy())
+                all_pred_seq.append(seq_pred_B.detach().cpu().numpy())
+
+                # Save per-sample artifacts (also framewise stuff for inspection)
+                probs_BCT = torch.softmax(final_logits_BCT, dim=1).detach().cpu().numpy()  # (B,C,T)
+                pred_BT   = final_logits_BCT.argmax(dim=1).detach().cpu().numpy()          # (B,T)
+
+                trial_ids     = batch.get("trial_id",    [None]*B)
+                subject_ids   = batch.get("subject_id",  [None]*B)
+                gesture_codes = batch.get("gesture_code",[None]*B)
+                if torch.is_tensor(trial_ids):     trial_ids     = trial_ids.cpu().tolist()
+                if torch.is_tensor(subject_ids):   subject_ids   = subject_ids.cpu().tolist()
+                if torch.is_tensor(gesture_codes): gesture_codes = gesture_codes.cpu().tolist()
+
+                pred_save_path = os.path.join(results_dir, "predictions")
+                os.makedirs(pred_save_path, exist_ok=True)
+
+                for b in range(B):
+                    stem = str(trial_ids[b]) if trial_ids[b] is not None else f"sample_{i}_{b}"
+                    # Framewise predictions (optional, for debugging/plots)
+                    np.save(os.path.join(pred_save_path, f"{stem}_frame_pred.npy"), pred_BT[b])      # (T,)
+                    if getattr(args, "save_probs", False):
+                        np.save(os.path.join(pred_save_path, f"{stem}_frame_probs.npy"), probs_BCT[b]) # (C,T)
+                    # Sequence prediction
+                    np.save(os.path.join(pred_save_path, f"{stem}_seq_pred.npy"), seq_pred_B[b].cpu().numpy())
+                    np.save(os.path.join(pred_save_path, f"{stem}_seq_gt.npy"),   labels_B[b].cpu().numpy())
+
+                    per_sample_records.append({
+                        "trial_id": trial_ids[b],
+                        "subject_id": subject_ids[b],
+                        "gesture_code": gesture_codes[b],
+                        "T": int(T),
+                        "seq_pred": int(seq_pred_B[b].item()),
+                        "seq_gt":   int(labels_B[b].item()),
+                    })
+
+                    per_sample_detailed.append({
+                        "trial_id": trial_ids[b],
+                        "subject_id": subject_ids[b],
+                        "gesture_code": gesture_codes[b],
+                        "T": int(T),
+                        "seq_pred": int(seq_pred_B[b].item()),
+                        "seq_gt":   int(labels_B[b].item()),
+                        "frame_pred": pred_BT[b].tolist()
+                    })
+
+                if i % 10 == 0:
+                    logger.log({"test_seq_batch_loss": loss.item(), "batch": i})
+
+            except Exception as e:
+                print(f"[TEST-SEQ] Error in batch {i}: {e}")
+                traceback.print_exc()
+                continue
+
+    # ---------- Aggregate & Report ----------
+    if n_batches == 0:
+        print("[TEST-SEQ] Warning: No valid batches processed")
+        results = {
+            "epoch": epoch, "loss": 0.0,
+            "accuracy": 0.0, "balanced_accuracy": 0.0, "cohen_kappa": 0.0,
+            "precision_macro": 0.0, "recall_macro": 0.0, "f1_macro": 0.0,
+            "precision_weighted": 0.0, "recall_weighted": 0.0, "f1_weighted": 0.0,
+            "total_samples": 0
+        }
+        logger.log(results)
+        return results
+
+    avg_loss = running_loss / n_batches
+
+    gt_all   = np.concatenate(all_gt_seq,  axis=0)
+    pred_all = np.concatenate(all_pred_seq, axis=0)
+
+    accuracy = float(accuracy_score(gt_all, pred_all))
+    precision_macro  = float(precision_score(gt_all, pred_all, average='macro',   zero_division=0))
+    recall_macro     = float(recall_score(gt_all,    pred_all, average='macro',   zero_division=0))
+    f1_macro         = float(f1_score(gt_all,        pred_all, average='macro',   zero_division=0))
+    precision_weight = float(precision_score(gt_all, pred_all, average='weighted',zero_division=0))
+    recall_weight    = float(recall_score(gt_all,    pred_all, average='weighted',zero_division=0))
+    f1_weight        = float(f1_score(gt_all,        pred_all, average='weighted',zero_division=0))
+    balanced_acc     = float(balanced_accuracy_score(gt_all, pred_all))
+    kappa            = float(cohen_kappa_score(gt_all, pred_all))
+
+    unique_classes = sorted(list(set(gt_all.tolist())))
+    n_classes = len(unique_classes)
+
+    # Class names
+    if class_names is None:
+        class_names = [f"Class_{c}" for c in unique_classes]
+    elif len(class_names) < n_classes:
+        class_names = class_names + [f"Class_{c}" for c in range(len(class_names), n_classes)]
+
+    # Per-class metrics
+    precision_per_class = precision_score(gt_all, pred_all, average=None, zero_division=0, labels=unique_classes)
+    recall_per_class    = recall_score(gt_all,    pred_all, average=None, zero_division=0, labels=unique_classes)
+    f1_per_class        = f1_score(gt_all,        pred_all, average=None, zero_division=0, labels=unique_classes)
+
+    # Confusion matrix
+    cm = confusion_matrix(gt_all, pred_all, labels=unique_classes)
+    class_support = cm.sum(axis=1)
+
+    # Results dict
+    results = {
+        "epoch": epoch,
+        "loss": avg_loss,
+        "accuracy": accuracy,
+        "balanced_accuracy": balanced_acc,
+        "cohen_kappa": kappa,
+        "precision_macro": precision_macro,
+        "recall_macro": recall_macro,
+        "f1_macro": f1_macro,
+        "precision_weighted": precision_weight,
+        "recall_weighted": recall_weight,
+        "f1_weighted": f1_weight,
+        "total_samples": int(gt_all.shape[0]),
+    }
+    for i, cls in enumerate(unique_classes):
+        results[f"class_{cls}_precision"] = float(precision_per_class[i])
+        results[f"class_{cls}_recall"]    = float(recall_per_class[i])
+        results[f"class_{cls}_f1"]        = float(f1_per_class[i])
+        results[f"class_{cls}_support"]   = int(class_support[i])
+
+    # Log to logger (e.g., wandb)
+    logger.log(results)
+
+    # ----- Save overall metrics -----
+    os.makedirs(results_dir, exist_ok=True)
+    metrics_path = os.path.join(results_dir, f"seq_metrics_epoch_{epoch}.csv")
+    with open(metrics_path, mode='w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(["Metric", "Value"])
+        w.writerow(["Epoch", epoch])
+        w.writerow(["Loss", avg_loss])
+        w.writerow(["Accuracy", accuracy])
+        w.writerow(["Balanced Accuracy", balanced_acc])
+        w.writerow(["Cohen's Kappa", kappa])
+        w.writerow(["Precision (Macro)", precision_macro])
+        w.writerow(["Recall (Macro)", recall_macro])
+        w.writerow(["F1 (Macro)", f1_macro])
+        w.writerow(["Precision (Weighted)", precision_weight])
+        w.writerow(["Recall (Weighted)", recall_weight])
+        w.writerow(["F1 (Weighted)", f1_weight])
+        w.writerow(["Total Samples", results["total_samples"]])
+
+    # ----- Save per-class metrics -----
+    if n_classes > 0:
+        class_metrics_path = os.path.join(results_dir, f"seq_class_metrics_epoch_{epoch}.csv")
+        with open(class_metrics_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Class_ID", "Class_Name", "Precision", "Recall", "F1", "Support"])
+            for i, cls in enumerate(unique_classes):
+                writer.writerow([
+                    cls, class_names[i],
+                    f"{precision_per_class[i]:.4f}",
+                    f"{recall_per_class[i]:.4f}",
+                    f"{f1_per_class[i]:.4f}",
+                    int(class_support[i])
+                ])
+
+        # Save CM CSVs & plots
+        cm_path = os.path.join(results_dir, f"seq_confusion_matrix_epoch_{epoch}.csv")
+        np.savetxt(cm_path, cm, delimiter=',', fmt='%d')
+
+        cm_labeled_path = os.path.join(results_dir, f"seq_confusion_matrix_labeled_epoch_{epoch}.csv")
+        with open(cm_labeled_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['True\\Predicted'] + class_names)
+            for i, row in enumerate(cm):
+                writer.writerow([class_names[i]] + row.tolist())
+
+        if save_figs:
+            _save_confusion_and_plots(cm, class_names, results_dir, epoch, title_prefix="Seq")
+
+        # Classification report
+        report_path = os.path.join(results_dir, f"seq_classification_report_epoch_{epoch}.json")
+        with open(report_path, 'w') as f:
+            json.dump(classification_report(gt_all, pred_all, target_names=class_names,
+                                            labels=unique_classes, zero_division=0, output_dict=True), f, indent=4)
+
+        report_txt = os.path.join(results_dir, f"seq_classification_report_epoch_{epoch}.txt")
+        with open(report_txt, 'w') as f:
+            f.write(classification_report(gt_all, pred_all, target_names=class_names,
+                                          labels=unique_classes, zero_division=0))
+
+    # ----- Save per-sample summaries -----
+    samples_path = os.path.join(results_dir, f"seq_samples_epoch_{epoch}.csv")
+    with open(samples_path, mode='w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=["trial_id","subject_id","gesture_code","T","seq_pred","seq_gt"])
+        writer.writeheader()
+        for rec in per_sample_records:
+            writer.writerow(rec)
+
+    detailed_path = os.path.join(results_dir, f"seq_samples_detailed_epoch_{epoch}.json")
+    with open(detailed_path, 'w') as f:
+        json.dump(per_sample_detailed, f, indent=2)
+
+    # ----- Summary text -----
+    summary_path = os.path.join(results_dir, f"seq_summary_epoch_{epoch}.txt")
+    with open(summary_path, 'w') as f:
+        f.write(f"MS-TCN++ Sequence Classification Summary - Epoch {epoch}\n")
+        f.write("="*70 + "\n\n")
+        f.write(f"Loss: {avg_loss:.4f}\n")
+        f.write(f"Accuracy: {accuracy:.4f}\n")
+        f.write(f"Balanced Accuracy: {balanced_acc:.4f}\n")
+        f.write(f"Cohen's Kappa: {kappa:.4f}\n")
+        f.write(f"\nMacro:\n  P={precision_macro:.4f}  R={recall_macro:.4f}  F1={f1_macro:.4f}\n")
+        f.write(f"Weighted:\n  P={precision_weight:.4f}  R={recall_weight:.4f}  F1={f1_weight:.4f}\n")
+        if n_classes > 0:
+            f.write("\nPer-Class:\n")
+            for i, cls in enumerate(unique_classes):
+                f.write(f"  {class_names[i]} (ID {cls}): "
+                        f"P={precision_per_class[i]:.4f}, R={recall_per_class[i]:.4f}, "
+                        f"F1={f1_per_class[i]:.4f}, Support={int(class_support[i])}\n")
+        f.write("\n" + "="*70 + "\n")
+        f.write(f"Total Samples: {results['total_samples']}\n")
+        f.write(f"Number of Classes: {n_classes}\n")
+
+    print(f"\n{'='*70}")
+    print(f"[TEST-SEQ] Complete - Epoch {epoch}")
+    print(f"Loss: {avg_loss:.4f} | Acc: {accuracy:.4f} | F1(macro): {f1_macro:.4f}")
+    print(f"Balanced Acc: {balanced_acc:.4f} | Kappa: {kappa:.4f}")
+    print(f"Results saved to: {results_dir}")
+    print(f"{'='*70}\n")
+
+    return results
 
 
 def train_mstcn_one_epoch(model, train_loader, loss_fns, optimizer, device, logger, args):
@@ -1619,6 +3217,8 @@ def train_mstcn_one_epoch(model, train_loader, loss_fns, optimizer, device, logg
         except Exception:
             pass
     return epoch_loss
+
+
 def validate_mstcn(model, val_loader, loss_fns, device, logger, args):
     model.eval()
     running_loss = 0.0
@@ -1701,20 +3301,44 @@ def validate_mstcn(model, val_loader, loss_fns, device, logger, args):
     return {"loss": val_loss, "acc": val_acc}
 
 
-
-import os
+import torch
 import csv
 import numpy as np
-from sklearn.metrics import precision_score, recall_score, f1_score
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import (
+    precision_score, recall_score, f1_score, 
+    confusion_matrix, classification_report,
+    balanced_accuracy_score, cohen_kappa_score,
+    jaccard_score
+)
+import json
+import os
+from pathlib import Path
+import traceback
+from collections import defaultdict
 
-def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, results_dir, args):
+def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, results_dir, args, class_names=None):
     """
-    Frame-wise test loop for MS-TCN++.
+    Enhanced frame-wise test loop for MS-TCN++ with comprehensive metrics for ML papers.
+    
     - Computes average loss over batches using mstcn_compute_loss
     - Aggregates frame-level predictions vs. labels (mask + IGNORE_INDEX respected)
-    - Reports macro precision/recall/F1 on valid frames
-    - Saves metrics.csv (appends) and per-sample predictions as npy files
-
+    - Reports comprehensive metrics: accuracy, balanced accuracy, per-class metrics, confusion matrix
+    - Computes temporal metrics: frame accuracy, edit distance, segmental metrics
+    - Saves detailed metrics, visualizations, and per-sample predictions
+    
+    Args:
+        model: MS-TCN++ model to evaluate
+        test_loader: DataLoader for test data
+        loss_fns: Loss functions for MS-TCN++
+        device: Device to run on
+        logger: Logger (e.g., wandb)
+        epoch: Current epoch number
+        results_dir: Directory to save results
+        args: Arguments object containing model configuration
+        class_names: List of class names for better visualization (optional)
+    
     Expects each batch to contain:
       - 'label': (B,) or (B,T) long (if (B,), we expand to (B,T))
       - optional 'mask': (B,1,T) float in {0,1}; if absent, uses all-ones
@@ -1724,14 +3348,19 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
 
     model.eval()
     running_loss = 0.0
-    n_batches    = 0
+    n_batches = 0
 
-    # For global metrics (flatten after masking)
-    all_gt_frames   = []
+    # For global frame-level metrics
+    all_gt_frames = []
     all_pred_frames = []
-
-    # Optional: keep a compact per-sample artifact (npy) rather than huge CSV rows
-    per_sample_records = []  # a small summary per sample
+    
+    # Per-sample temporal metrics
+    per_sample_records = []
+    per_sample_detailed = []
+    
+    # Per-class frame counts
+    class_frame_counts = defaultdict(int)
+    class_correct_counts = defaultdict(int)
 
     with torch.no_grad():
         for i, batch in enumerate(test_loader):
@@ -1743,8 +3372,9 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
                 x_BCT = x_BTF.permute(0, 2, 1).contiguous()        # (B,C=F,T)
                 B, C, T = x_BCT.shape
 
-                # skip batches with time length < 30
+                # Skip batches with time length < 30
                 if T < 30:
+                    print(f"Skipping batch {i}: T={T} < 30")
                     continue
 
                 # ----- Targets -----
@@ -1768,9 +3398,9 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
 
                 # ----- Forward & Loss -----
                 preds = model(x_BCT)                                # list[(B,C,T)] or (S,B,C,T)
-                loss  = mstcn_compute_loss(preds, labels, mask, loss_fns)
+                loss = mstcn_compute_loss(preds, labels, mask, loss_fns)
                 running_loss += float(loss.item())
-                n_batches    += 1
+                n_batches += 1
 
                 # ----- Final-stage logits → predictions -----
                 stages = _as_stage_list(preds)
@@ -1778,56 +3408,110 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
                 pred_BT = final_logits.argmax(dim=1)               # (B,T)
 
                 # ----- Collect masked frames for global metrics -----
-                # valid = mask & label != IGNORE_INDEX
                 valid = (mask.squeeze(1) > 0.5) & (labels != IGNORE_INDEX)
-                gt_flat   = labels[valid].detach().cpu().numpy()
+                gt_flat = labels[valid].detach().cpu().numpy()
                 pred_flat = pred_BT[valid].detach().cpu().numpy()
+                
                 if gt_flat.size > 0:
                     all_gt_frames.append(gt_flat)
                     all_pred_frames.append(pred_flat)
+                    
+                    # Count per-class frames and correct predictions
+                    for gt_class, pred_class in zip(gt_flat, pred_flat):
+                        class_frame_counts[gt_class] += 1
+                        if gt_class == pred_class:
+                            class_correct_counts[gt_class] += 1
 
-                # ----- Optional: save per-sample predictions/probs -----
-                # (safer to store per-sample npy files than giant CSV rows)
+                # ----- Per-sample metrics and saving -----
                 probs_BCT = torch.softmax(final_logits, dim=1).detach().cpu().numpy()  # (B,C,T)
-                trial_ids     = batch.get("trial_id",    [None]*B)
-                subject_ids   = batch.get("subject_id",  [None]*B)
-                gesture_codes = batch.get("gesture_code",[None]*B)
+                trial_ids = batch.get("trial_id", [None]*B)
+                subject_ids = batch.get("subject_id", [None]*B)
+                gesture_codes = batch.get("gesture_code", [None]*B)
 
                 # Make iterables uniform
-                if torch.is_tensor(trial_ids):     trial_ids     = trial_ids.cpu().tolist()
-                if torch.is_tensor(subject_ids):   subject_ids   = subject_ids.cpu().tolist()
-                if torch.is_tensor(gesture_codes): gesture_codes = gesture_codes.cpu().tolist()
+                if torch.is_tensor(trial_ids):
+                    trial_ids = trial_ids.cpu().tolist()
+                if torch.is_tensor(subject_ids):
+                    subject_ids = subject_ids.cpu().tolist()
+                if torch.is_tensor(gesture_codes):
+                    gesture_codes = gesture_codes.cpu().tolist()
 
                 for b in range(B):
-                    # derive a filename stem
+                    # Get valid frames for this sample
+                    valid_b = valid[b].cpu().numpy()
+                    gt_b = labels[b].detach().cpu().numpy()
+                    pred_b = pred_BT[b].detach().cpu().numpy()
+                    
+                    # Calculate per-sample metrics
+                    valid_frames = int(valid_b.sum())
+                    if valid_frames > 0:
+                        gt_valid = gt_b[valid_b]
+                        pred_valid = pred_b[valid_b]
+                        sample_accuracy = float((gt_valid == pred_valid).mean())
+                        
+                        # Calculate edit distance (Levenshtein distance)
+                        edit_dist = compute_edit_distance(gt_valid, pred_valid)
+                        
+                        # Calculate F1@k scores (overlap at different thresholds)
+                        f1_scores = compute_f1_at_k(gt_valid, pred_valid, k_list=[10, 25, 50])
+                    else:
+                        sample_accuracy = 0.0
+                        edit_dist = 0
+                        f1_scores = {10: 0.0, 25: 0.0, 50: 0.0}
+                    
+                    # Derive filename stem
                     stem = str(trial_ids[b]) if trial_ids[b] is not None else f"sample_{i}_{b}"
-                    # save predictions and (optionally) probabilities
-                    np.save(os.path.join(results_dir, f"{stem}_pred.npy"),
-                            pred_BT[b].detach().cpu().numpy())
-                    # probs can be large; save only if you want them
+                    
+                    # Save predictions and (optionally) probabilities
+                    pred_save_path = os.path.join(results_dir, "predictions")
+                    os.makedirs(pred_save_path, exist_ok=True)
+                    
+                    np.save(os.path.join(pred_save_path, f"{stem}_pred.npy"), pred_b)
+                    np.save(os.path.join(pred_save_path, f"{stem}_gt.npy"), gt_b)
+                    np.save(os.path.join(pred_save_path, f"{stem}_mask.npy"), valid_b)
+                    
+                    # Save probs if requested
                     if getattr(args, "save_probs", False):
-                        np.save(os.path.join(results_dir, f"{stem}_probs.npy"),
-                                probs_BCT[b])
+                        np.save(os.path.join(pred_save_path, f"{stem}_probs.npy"), probs_BCT[b])
 
-                    # short summary for CSV
+                    # Compact summary for CSV
                     per_sample_records.append({
-                        "trial_id":     trial_ids[b],
-                        "subject_id":   subject_ids[b],
+                        "trial_id": trial_ids[b],
+                        "subject_id": subject_ids[b],
                         "gesture_code": gesture_codes[b],
-                        "T":            int(T),
-                        "valid_frames": int(valid[b].sum().item()),
+                        "T": int(T),
+                        "valid_frames": valid_frames,
+                        "accuracy": sample_accuracy,
+                        "edit_distance": edit_dist,
+                        "f1@10": f1_scores[10],
+                        "f1@25": f1_scores[25],
+                        "f1@50": f1_scores[50],
+                    })
+                    
+                    # Detailed record with predictions
+                    per_sample_detailed.append({
+                        "trial_id": trial_ids[b],
+                        "subject_id": subject_ids[b],
+                        "gesture_code": gesture_codes[b],
+                        "T": int(T),
+                        "valid_frames": valid_frames,
+                        "accuracy": sample_accuracy,
+                        "predictions": pred_b.tolist(),
+                        "ground_truth": gt_b.tolist(),
+                        "valid_mask": valid_b.tolist(),
                     })
 
                 if i % 10 == 0:
-                    logger.log({"test_batch_loss": loss.item()})
+                    logger.log({"test_batch_loss": loss.item(), "batch": i})
 
             except Exception as e:
                 print(f"[TEST] Error in batch {i}: {e}")
-                import traceback; traceback.print_exc()
+                traceback.print_exc()
                 continue
 
     # ----- Aggregate metrics -----
     if n_batches == 0:
+        print("Warning: No valid batches processed")
         results = {"loss": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0, "accuracy": 0.0, "epoch": epoch}
         logger.log(results)
         return results
@@ -1835,44 +3519,639 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
     avg_loss = running_loss / n_batches
 
     if len(all_gt_frames) == 0:
-        # No valid frames collected
-        accuracy = precision = recall = f1 = 0.0
+        print("Warning: No valid frames collected")
+        accuracy = precision_macro = recall_macro = f1_macro = 0.0
+        precision_weighted = recall_weighted = f1_weighted = 0.0
+        balanced_acc = kappa = 0.0
+        precision_per_class = recall_per_class = f1_per_class = np.array([])
+        unique_classes = []
+        cm = np.array([[]])
     else:
-        gt_all   = np.concatenate(all_gt_frames, axis=0)
+        gt_all = np.concatenate(all_gt_frames, axis=0)
         pred_all = np.concatenate(all_pred_frames, axis=0)
-        accuracy  = float((gt_all == pred_all).mean())
-        precision = float(precision_score(gt_all, pred_all, average='macro', zero_division=0))
-        recall    = float(recall_score(gt_all, pred_all, average='macro', zero_division=0))
-        f1        = float(f1_score(gt_all, pred_all, average='macro', zero_division=0))
+        
+        # Overall metrics
+        accuracy = float((gt_all == pred_all).mean())
+        
+        # Macro and weighted metrics
+        precision_macro = float(precision_score(gt_all, pred_all, average='macro', zero_division=0))
+        recall_macro = float(recall_score(gt_all, pred_all, average='macro', zero_division=0))
+        f1_macro = float(f1_score(gt_all, pred_all, average='macro', zero_division=0))
+        
+        precision_weighted = float(precision_score(gt_all, pred_all, average='weighted', zero_division=0))
+        recall_weighted = float(recall_score(gt_all, pred_all, average='weighted', zero_division=0))
+        f1_weighted = float(f1_score(gt_all, pred_all, average='weighted', zero_division=0))
+        
+        # Per-class metrics
+        unique_classes = sorted(list(set(gt_all.tolist())))
+        precision_per_class = precision_score(gt_all, pred_all, average=None, zero_division=0, labels=unique_classes)
+        recall_per_class = recall_score(gt_all, pred_all, average=None, zero_division=0, labels=unique_classes)
+        f1_per_class = f1_score(gt_all, pred_all, average=None, zero_division=0, labels=unique_classes)
+        
+        # Additional metrics
+        balanced_acc = float(balanced_accuracy_score(gt_all, pred_all))
+        kappa = float(cohen_kappa_score(gt_all, pred_all))
+        
+        # Jaccard score (IoU)
+        jaccard_macro = float(jaccard_score(gt_all, pred_all, average='macro', zero_division=0))
+        jaccard_weighted = float(jaccard_score(gt_all, pred_all, average='weighted', zero_division=0))
+        
+        # Confusion matrix
+        cm = confusion_matrix(gt_all, pred_all, labels=unique_classes)
+        
+        # Per-class accuracy from confusion matrix
+        class_accuracy = cm.diagonal() / (cm.sum(axis=1) + 1e-10)
 
+    # Generate class names if not provided
+    n_classes = len(unique_classes)
+    if class_names is None:
+        class_names = [f"Class_{c}" for c in unique_classes]
+    elif len(class_names) < n_classes:
+        class_names = class_names + [f"Class_{c}" for c in range(len(class_names), n_classes)]
+
+    # Calculate average temporal metrics
+    avg_edit_distance = np.mean([rec["edit_distance"] for rec in per_sample_records])
+    avg_f1_10 = np.mean([rec["f1@10"] for rec in per_sample_records])
+    avg_f1_25 = np.mean([rec["f1@25"] for rec in per_sample_records])
+    avg_f1_50 = np.mean([rec["f1@50"] for rec in per_sample_records])
+
+    # Prepare results dictionary
     results = {
-        "epoch":     epoch,
-        "loss":      avg_loss,
-        "precision": precision,
-        "recall":    recall,
-        "f1":        f1,
-        "accuracy":  accuracy,
+        "epoch": epoch,
+        "loss": avg_loss,
+        "accuracy": accuracy,
+        "balanced_accuracy": balanced_acc,
+        "cohen_kappa": kappa,
+        "precision_macro": precision_macro,
+        "recall_macro": recall_macro,
+        "f1_macro": f1_macro,
+        "precision_weighted": precision_weighted,
+        "recall_weighted": recall_weighted,
+        "f1_weighted": f1_weighted,
+        "jaccard_macro": jaccard_macro,
+        "jaccard_weighted": jaccard_weighted,
+        "avg_edit_distance": avg_edit_distance,
+        "avg_f1@10": avg_f1_10,
+        "avg_f1@25": avg_f1_25,
+        "avg_f1@50": avg_f1_50,
+        "total_frames": len(gt_all) if len(all_gt_frames) > 0 else 0,
+        "total_samples": len(per_sample_records),
     }
+
+    # Add per-class metrics to results
+    for i, class_idx in enumerate(unique_classes):
+        results[f"class_{class_idx}_accuracy"] = float(class_accuracy[i])
+        results[f"class_{class_idx}_precision"] = float(precision_per_class[i])
+        results[f"class_{class_idx}_recall"] = float(recall_per_class[i])
+        results[f"class_{class_idx}_f1"] = float(f1_per_class[i])
+        results[f"class_{class_idx}_frames"] = int(class_frame_counts[class_idx])
+
+    # Log metrics to wandb
     logger.log(results)
 
-    # ----- Save metrics to CSV (append) -----
-    metrics_path = os.path.join(results_dir, "metrics.csv")
-    fresh_file = not os.path.exists(metrics_path)
-    with open(metrics_path, mode='a', newline='') as f:
-        w = csv.writer(f)
-        if fresh_file:
-            w.writerow(["epoch", "loss", "precision", "recall", "f1", "accuracy"])
-        w.writerow([epoch, avg_loss, precision, recall, f1, accuracy])
+    # ----- Save overall metrics to CSV -----
+    metrics_path = os.path.join(results_dir, f"metrics_epoch_{epoch}.csv")
+    with open(metrics_path, mode='w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(["Metric", "Value"])
+        writer.writerow(["Epoch", epoch])
+        writer.writerow(["Loss", avg_loss])
+        writer.writerow(["Accuracy", accuracy])
+        writer.writerow(["Balanced Accuracy", balanced_acc])
+        writer.writerow(["Cohen's Kappa", kappa])
+        writer.writerow(["Precision (Macro)", precision_macro])
+        writer.writerow(["Recall (Macro)", recall_macro])
+        writer.writerow(["F1 Score (Macro)", f1_macro])
+        writer.writerow(["Precision (Weighted)", precision_weighted])
+        writer.writerow(["Recall (Weighted)", recall_weighted])
+        writer.writerow(["F1 Score (Weighted)", f1_weighted])
+        writer.writerow(["Jaccard (Macro)", jaccard_macro])
+        writer.writerow(["Jaccard (Weighted)", jaccard_weighted])
+        writer.writerow(["Avg Edit Distance", avg_edit_distance])
+        writer.writerow(["Avg F1@10", avg_f1_10])
+        writer.writerow(["Avg F1@25", avg_f1_25])
+        writer.writerow(["Avg F1@50", avg_f1_50])
+        writer.writerow(["Total Frames", results["total_frames"]])
+        writer.writerow(["Total Samples", results["total_samples"]])
 
-    # ----- Save a compact per-sample summary CSV -----
-    # (detailed framewise preds are saved as .npy per sample above)
-    samples_path = os.path.join(results_dir, "samples.csv")
-    fresh_file = not os.path.exists(samples_path)
-    with open(samples_path, mode='a', newline='') as f:
-        w = csv.DictWriter(f, fieldnames=["trial_id", "subject_id", "gesture_code", "T", "valid_frames"])
-        if fresh_file:
-            w.writeheader()
+    # ----- Save per-class metrics to CSV -----
+    if n_classes > 0:
+        class_metrics_path = os.path.join(results_dir, f"class_metrics_epoch_{epoch}.csv")
+        with open(class_metrics_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Class_ID", "Class_Name", "Accuracy", "Precision", "Recall", "F1-Score", "Frame_Count"])
+            for i, class_idx in enumerate(unique_classes):
+                writer.writerow([
+                    class_idx,
+                    class_names[i],
+                    f"{class_accuracy[i]:.4f}",
+                    f"{precision_per_class[i]:.4f}",
+                    f"{recall_per_class[i]:.4f}",
+                    f"{f1_per_class[i]:.4f}",
+                    class_frame_counts[class_idx]
+                ])
+
+        # ----- Save confusion matrix -----
+        cm_path = os.path.join(results_dir, f"confusion_matrix_epoch_{epoch}.csv")
+        np.savetxt(cm_path, cm, delimiter=',', fmt='%d')
+
+        # Save confusion matrix with labels
+        cm_labeled_path = os.path.join(results_dir, f"confusion_matrix_labeled_epoch_{epoch}.csv")
+        with open(cm_labeled_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['True\\Predicted'] + class_names)
+            for i, row in enumerate(cm):
+                writer.writerow([class_names[i]] + row.tolist())
+
+        # ----- Visualize confusion matrix -----
+        fig_size = max(10, n_classes * 0.8)
+        plt.figure(figsize=(fig_size, fig_size * 0.9))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                    xticklabels=class_names, yticklabels=class_names,
+                    cbar_kws={'label': 'Frame Count'})
+        plt.title(f'Confusion Matrix (Frame-level) - Epoch {epoch}', fontsize=14, fontweight='bold')
+        plt.ylabel('True Label', fontsize=12)
+        plt.xlabel('Predicted Label', fontsize=12)
+        plt.tight_layout()
+        plt.savefig(os.path.join(results_dir, f"confusion_matrix_epoch_{epoch}.png"), dpi=300, bbox_inches='tight')
+        plt.close()
+
+        # Normalized confusion matrix
+        cm_normalized = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
+        plt.figure(figsize=(fig_size, fig_size * 0.9))
+        sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',
+                    xticklabels=class_names, yticklabels=class_names,
+                    cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
+        plt.title(f'Normalized Confusion Matrix (Recall) - Epoch {epoch}', fontsize=14, fontweight='bold')
+        plt.ylabel('True Label', fontsize=12)
+        plt.xlabel('Predicted Label', fontsize=12)
+        plt.tight_layout()
+        plt.savefig(os.path.join(results_dir, f"confusion_matrix_normalized_epoch_{epoch}.png"), dpi=300, bbox_inches='tight')
+        plt.close()
+
+        # ----- Visualize per-class metrics -----
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        metrics_to_plot = [
+            (class_accuracy, 'Accuracy', axes[0, 0]),
+            (precision_per_class, 'Precision', axes[0, 1]),
+            (recall_per_class, 'Recall', axes[1, 0]),
+            (f1_per_class, 'F1-Score', axes[1, 1])
+        ]
+
+        for metric_values, metric_name, ax in metrics_to_plot:
+            bars = ax.bar(range(len(class_names)), metric_values, color='skyblue', edgecolor='navy', alpha=0.7)
+            ax.set_xlabel('Class', fontsize=11)
+            ax.set_ylabel(metric_name, fontsize=11)
+            ax.set_title(f'Per-Class {metric_name} (Frame-level)', fontsize=12, fontweight='bold')
+            ax.set_xticks(range(len(class_names)))
+            ax.set_xticklabels(class_names, rotation=45, ha='right')
+            ax.set_ylim([0, 1.1])
+            ax.grid(axis='y', alpha=0.3)
+
+            for bar, val in zip(bars, metric_values):
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                       f'{val:.3f}', ha='center', va='bottom', fontsize=9)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(results_dir, f"per_class_metrics_epoch_{epoch}.png"), dpi=300, bbox_inches='tight')
+        plt.close()
+
+        # ----- Visualize frame distribution per class -----
+        plt.figure(figsize=(12, 6))
+        frame_counts = [class_frame_counts[c] for c in unique_classes]
+        bars = plt.bar(range(len(class_names)), frame_counts, color='coral', edgecolor='darkred', alpha=0.7)
+        plt.xlabel('Class', fontsize=12)
+        plt.ylabel('Frame Count', fontsize=12)
+        plt.title('Frame Distribution by Class', fontsize=14, fontweight='bold')
+        plt.xticks(range(len(class_names)), class_names, rotation=45, ha='right')
+        plt.grid(axis='y', alpha=0.3)
+
+        for bar, count in zip(bars, frame_counts):
+            height = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2., height + max(frame_counts)*0.01,
+                    f'{count}', ha='center', va='bottom', fontsize=10)
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(results_dir, f"frame_distribution_epoch_{epoch}.png"), dpi=300, bbox_inches='tight')
+        plt.close()
+
+        # ----- Classification report -----
+        if len(gt_all) > 0:
+            class_report = classification_report(gt_all, pred_all, target_names=class_names,
+                                                labels=unique_classes, zero_division=0, output_dict=True)
+            
+            report_path = os.path.join(results_dir, f"classification_report_epoch_{epoch}.json")
+            with open(report_path, 'w') as f:
+                json.dump(class_report, f, indent=4)
+
+            report_text_path = os.path.join(results_dir, f"classification_report_epoch_{epoch}.txt")
+            with open(report_text_path, 'w') as f:
+                f.write(classification_report(gt_all, pred_all, target_names=class_names,
+                                            labels=unique_classes, zero_division=0))
+
+    # ----- Save per-sample summary CSV -----
+    samples_path = os.path.join(results_dir, f"samples_epoch_{epoch}.csv")
+    with open(samples_path, mode='w', newline='') as f:
+        fieldnames = ["trial_id", "subject_id", "gesture_code", "T", "valid_frames",
+                     "accuracy", "edit_distance", "f1@10", "f1@25", "f1@50"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
         for rec in per_sample_records:
-            w.writerow(rec)
+            writer.writerow(rec)
+
+    # ----- Save detailed per-sample predictions -----
+    detailed_path = os.path.join(results_dir, f"samples_detailed_epoch_{epoch}.json")
+    with open(detailed_path, 'w') as f:
+        json.dump(per_sample_detailed, f, indent=2)
+
+    # ----- Create comprehensive summary -----
+    summary_path = os.path.join(results_dir, f"summary_epoch_{epoch}.txt")
+    with open(summary_path, 'w') as f:
+        f.write(f"MS-TCN++ Model Evaluation Summary - Epoch {epoch}\n")
+        f.write("=" * 70 + "\n\n")
+        
+        f.write(f"Overall Metrics:\n")
+        f.write(f"  Loss: {avg_loss:.4f}\n")
+        f.write(f"  Frame Accuracy: {accuracy:.4f}\n")
+        f.write(f"  Balanced Accuracy: {balanced_acc:.4f}\n")
+        f.write(f"  Cohen's Kappa: {kappa:.4f}\n")
+        
+        f.write(f"\nMacro-averaged Metrics:\n")
+        f.write(f"  Precision: {precision_macro:.4f}\n")
+        f.write(f"  Recall: {recall_macro:.4f}\n")
+        f.write(f"  F1-Score: {f1_macro:.4f}\n")
+        f.write(f"  Jaccard (IoU): {jaccard_macro:.4f}\n")
+        
+        f.write(f"\nWeighted-averaged Metrics:\n")
+        f.write(f"  Precision: {precision_weighted:.4f}\n")
+        f.write(f"  Recall: {recall_weighted:.4f}\n")
+        f.write(f"  F1-Score: {f1_weighted:.4f}\n")
+        f.write(f"  Jaccard (IoU): {jaccard_weighted:.4f}\n")
+        
+        f.write(f"\nTemporal Metrics:\n")
+        f.write(f"  Average Edit Distance: {avg_edit_distance:.2f}\n")
+        f.write(f"  Average F1@10: {avg_f1_10:.4f}\n")
+        f.write(f"  Average F1@25: {avg_f1_25:.4f}\n")
+        f.write(f"  Average F1@50: {avg_f1_50:.4f}\n")
+        
+        if n_classes > 0:
+            f.write(f"\nPer-Class Metrics:\n")
+            for i, class_idx in enumerate(unique_classes):
+                f.write(f"\n  {class_names[i]} (Class {class_idx}):\n")
+                f.write(f"    Accuracy: {class_accuracy[i]:.4f}\n")
+                f.write(f"    Precision: {precision_per_class[i]:.4f}\n")
+                f.write(f"    Recall: {recall_per_class[i]:.4f}\n")
+                f.write(f"    F1-Score: {f1_per_class[i]:.4f}\n")
+                f.write(f"    Frame Count: {class_frame_counts[class_idx]}\n")
+        
+        f.write(f"\n" + "=" * 70 + "\n")
+        f.write(f"Total Frames: {results['total_frames']}\n")
+        f.write(f"Total Samples: {results['total_samples']}\n")
+        f.write(f"Number of Classes: {n_classes}\n")
+
+    print(f"\n{'='*70}")
+    print(f"MS-TCN++ Evaluation Complete - Epoch {epoch}")
+    print(f"Loss: {avg_loss:.4f} | Frame Accuracy: {accuracy:.4f} | F1 (Macro): {f1_macro:.4f}")
+    print(f"Balanced Accuracy: {balanced_acc:.4f} | Kappa: {kappa:.4f}")
+    print(f"Edit Distance: {avg_edit_distance:.2f} | F1@25: {avg_f1_25:.4f}")
+    print(f"Results saved to: {results_dir}")
+    print(f"{'='*70}\n")
 
     return results
+
+
+def compute_edit_distance(seq1, seq2):
+    """
+    Compute Levenshtein edit distance between two sequences.
+    Normalized by the length of the longer sequence.
+    """
+    n, m = len(seq1), len(seq2)
+    if n == 0:
+        return m
+    if m == 0:
+        return n
+    
+    dp = np.zeros((n + 1, m + 1), dtype=int)
+    
+    for i in range(n + 1):
+        dp[i][0] = i
+    for j in range(m + 1):
+        dp[0][j] = j
+    
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            if seq1[i-1] == seq2[j-1]:
+                dp[i][j] = dp[i-1][j-1]
+            else:
+                dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+    
+    return dp[n][m]
+
+
+def compute_f1_at_k(gt_seq, pred_seq, k_list=[10, 25, 50]):
+    """
+    Compute F1 score at different overlap thresholds (F1@k).
+    This measures segmental overlap - whether predicted segments overlap
+    with ground truth segments by at least k% of frames.
+    
+    Args:
+        gt_seq: Ground truth sequence (1D array)
+        pred_seq: Predicted sequence (1D array)
+        k_list: List of overlap thresholds (percentages)
+    
+    Returns:
+        Dictionary of F1 scores at each threshold
+    """
+    def get_segments(seq):
+        """Convert frame sequence to list of segments (label, start, end)"""
+        if len(seq) == 0:
+            return []
+        
+        segments = []
+        current_label = seq[0]
+        start = 0
+        
+        for i in range(1, len(seq)):
+            if seq[i] != current_label:
+                segments.append((current_label, start, i-1))
+                current_label = seq[i]
+                start = i
+        segments.append((current_label, start, len(seq)-1))
+        
+        return segments
+    
+    def compute_overlap(gt_seg, pred_seg):
+        """Compute overlap ratio between two segments"""
+        gt_label, gt_start, gt_end = gt_seg
+        pred_label, pred_start, pred_end = pred_seg
+        
+        # Only consider segments with same label
+        if gt_label != pred_label:
+            return 0.0
+        
+        overlap_start = max(gt_start, pred_start)
+        overlap_end = min(gt_end, pred_end)
+        
+        if overlap_start > overlap_end:
+            return 0.0
+        
+        overlap_frames = overlap_end - overlap_start + 1
+        gt_frames = gt_end - gt_start + 1
+        
+        return overlap_frames / gt_frames
+    
+    gt_segments = get_segments(gt_seq)
+    pred_segments = get_segments(pred_seq)
+    
+    f1_scores = {}
+    
+    for k in k_list:
+        threshold = k / 100.0
+        
+        # Count true positives
+        tp = 0
+        for gt_seg in gt_segments:
+            for pred_seg in pred_segments:
+                if compute_overlap(gt_seg, pred_seg) >= threshold:
+                    tp += 1
+                    break
+        
+        # False positives and false negatives
+        fp = len(pred_segments) - tp
+        fn = len(gt_segments) - tp
+        
+        # Calculate F1
+        if tp + fp == 0:
+            precision = 0.0
+        else:
+            precision = tp / (tp + fp)
+        
+        if tp + fn == 0:
+            recall = 0.0
+        else:
+            recall = tp / (tp + fn)
+        
+        if precision + recall == 0:
+            f1 = 0.0
+        else:
+            f1 = 2 * (precision * recall) / (precision + recall)
+        
+        f1_scores[k] = f1
+    
+    return f1_scores
+
+
+def _as_stage_list(preds):
+    """
+    Convert MS-TCN output to list of stage predictions.
+    Handles both list and tensor formats.
+    """
+    if isinstance(preds, list):
+        return preds
+    elif isinstance(preds, torch.Tensor):
+        if preds.dim() == 4:  # (S, B, C, T)
+            return [preds[s] for s in range(preds.size(0))]
+        else:
+            return [preds]
+    else:
+        raise ValueError(f"Unexpected preds type: {type(preds)}")
+
+import os
+import csv
+import numpy as np
+from sklearn.metrics import precision_score, recall_score, f1_score
+
+# def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, results_dir, args):
+#     """
+#     Frame-wise test loop for MS-TCN++.
+#     - Computes average loss over batches using mstcn_compute_loss
+#     - Aggregates frame-level predictions vs. labels (mask + IGNORE_INDEX respected)
+#     - Reports macro precision/recall/F1 on valid frames
+#     - Saves metrics.csv (appends) and per-sample predictions as npy files
+
+#     Expects each batch to contain:
+#       - 'label': (B,) or (B,T) long (if (B,), we expand to (B,T))
+#       - optional 'mask': (B,1,T) float in {0,1}; if absent, uses all-ones
+#       - optional metadata: 'trial_id', 'subject_id', 'gesture_code'
+#     """
+#     os.makedirs(results_dir, exist_ok=True)
+
+#     model.eval()
+#     running_loss = 0.0
+#     n_batches    = 0
+
+#     # For global metrics (flatten after masking)
+#     all_gt_frames   = []
+#     all_pred_frames = []
+
+#     # Optional: keep a compact per-sample artifact (npy) rather than huge CSV rows
+#     per_sample_records = []  # a small summary per sample
+
+#     with torch.no_grad():
+#         for i, batch in enumerate(test_loader):
+#             try:
+#                 # ----- Inputs -----
+#                 x_BTF = mmt_preprocess(batch, args, None, device)  # (B,T,F)
+#                 if x_BTF.dim() != 3:
+#                     raise ValueError(f"mmt_preprocess must return (B,T,F), got shape {tuple(x_BTF.shape)}")
+#                 x_BCT = x_BTF.permute(0, 2, 1).contiguous()        # (B,C=F,T)
+#                 B, C, T = x_BCT.shape
+
+#                 # skip batches with time length < 30
+#                 if T < 30:
+#                     continue
+
+#                 # ----- Targets -----
+#                 labels = batch['label'].to(device)                 # (B,) or (B,T)
+#                 if labels.dim() == 1:
+#                     labels = labels.unsqueeze(1).expand(-1, T).contiguous()  # (B,T)
+#                 elif labels.dim() == 2 and labels.size(1) != T:
+#                     raise ValueError(f"Label time length {labels.size(1)} != input T {T}")
+#                 elif labels.dim() != 2:
+#                     raise ValueError(f"'label' must be (B,) or (B,T); got {tuple(labels.shape)}")
+
+#                 # ----- Mask (optional) -----
+#                 if 'mask' in batch:
+#                     mask = batch['mask'].to(device)                # (B,1,T) preferred
+#                     if mask.dim() == 2:
+#                         mask = mask.unsqueeze(1)
+#                     if mask.size(-1) != T:
+#                         raise ValueError(f"Mask time length {mask.size(-1)} != T {T}")
+#                 else:
+#                     mask = torch.ones((B, 1, T), device=device, dtype=torch.float32)
+
+#                 # ----- Forward & Loss -----
+#                 preds = model(x_BCT)                                # list[(B,C,T)] or (S,B,C,T)
+#                 loss  = mstcn_compute_loss(preds, labels, mask, loss_fns)
+#                 running_loss += float(loss.item())
+#                 n_batches    += 1
+
+#                 # ----- Final-stage logits → predictions -----
+#                 stages = _as_stage_list(preds)
+#                 final_logits = stages[-1]                           # (B,C,T)
+#                 pred_BT = final_logits.argmax(dim=1)               # (B,T)
+
+#                 # ----- Collect masked frames for global metrics -----
+#                 # valid = mask & label != IGNORE_INDEX
+#                 valid = (mask.squeeze(1) > 0.5) & (labels != IGNORE_INDEX)
+#                 gt_flat   = labels[valid].detach().cpu().numpy()
+#                 pred_flat = pred_BT[valid].detach().cpu().numpy()
+#                 if gt_flat.size > 0:
+#                     all_gt_frames.append(gt_flat)
+#                     all_pred_frames.append(pred_flat)
+
+#                 # ----- Optional: save per-sample predictions/probs -----
+#                 # (safer to store per-sample npy files than giant CSV rows)
+#                 probs_BCT = torch.softmax(final_logits, dim=1).detach().cpu().numpy()  # (B,C,T)
+#                 trial_ids     = batch.get("trial_id",    [None]*B)
+#                 subject_ids   = batch.get("subject_id",  [None]*B)
+#                 gesture_codes = batch.get("gesture_code",[None]*B)
+
+#                 # Make iterables uniform
+#                 if torch.is_tensor(trial_ids):     trial_ids     = trial_ids.cpu().tolist()
+#                 if torch.is_tensor(subject_ids):   subject_ids   = subject_ids.cpu().tolist()
+#                 if torch.is_tensor(gesture_codes): gesture_codes = gesture_codes.cpu().tolist()
+
+#                 for b in range(B):
+#                     # derive a filename stem
+#                     stem = str(trial_ids[b]) if trial_ids[b] is not None else f"sample_{i}_{b}"
+#                     # save predictions and (optionally) probabilities
+#                     np.save(os.path.join(results_dir, f"{stem}_pred.npy"),
+#                             pred_BT[b].detach().cpu().numpy())
+#                     # probs can be large; save only if you want them
+#                     if getattr(args, "save_probs", False):
+#                         np.save(os.path.join(results_dir, f"{stem}_probs.npy"),
+#                                 probs_BCT[b])
+
+#                     # short summary for CSV
+#                     per_sample_records.append({
+#                         "trial_id":     trial_ids[b],
+#                         "subject_id":   subject_ids[b],
+#                         "gesture_code": gesture_codes[b],
+#                         "T":            int(T),
+#                         "valid_frames": int(valid[b].sum().item()),
+#                     })
+
+#                 if i % 10 == 0:
+#                     logger.log({"test_batch_loss": loss.item()})
+
+#             except Exception as e:
+#                 print(f"[TEST] Error in batch {i}: {e}")
+#                 import traceback; traceback.print_exc()
+#                 continue
+
+#     # ----- Aggregate metrics -----
+#     if n_batches == 0:
+#         results = {"loss": 0.0, "precision": 0.0, "recall": 0.0, "f1": 0.0, "accuracy": 0.0, "epoch": epoch}
+#         logger.log(results)
+#         return results
+
+#     avg_loss = running_loss / n_batches
+
+#     if len(all_gt_frames) == 0:
+#         # No valid frames collected
+#         accuracy = precision = recall = f1 = 0.0
+#     else:
+#         gt_all   = np.concatenate(all_gt_frames, axis=0)
+#         pred_all = np.concatenate(all_pred_frames, axis=0)
+#         accuracy  = float((gt_all == pred_all).mean())
+#         precision = float(precision_score(gt_all, pred_all, average='macro', zero_division=0))
+#         recall    = float(recall_score(gt_all, pred_all, average='macro', zero_division=0))
+#         f1        = float(f1_score(gt_all, pred_all, average='macro', zero_division=0))
+
+#     results = {
+#         "epoch":     epoch,
+#         "loss":      avg_loss,
+#         "precision": precision,
+#         "recall":    recall,
+#         "f1":        f1,
+#         "accuracy":  accuracy,
+#     }
+#     logger.log(results)
+
+#     # ----- Save metrics to CSV (append) -----
+#     metrics_path = os.path.join(results_dir, "metrics.csv")
+#     fresh_file = not os.path.exists(metrics_path)
+#     with open(metrics_path, mode='a', newline='') as f:
+#         w = csv.writer(f)
+#         if fresh_file:
+#             w.writerow(["epoch", "loss", "precision", "recall", "f1", "accuracy"])
+#         w.writerow([epoch, avg_loss, precision, recall, f1, accuracy])
+
+#     # ----- Save a compact per-sample summary CSV -----
+#     # (detailed framewise preds are saved as .npy per sample above)
+#     samples_path = os.path.join(results_dir, "samples.csv")
+#     fresh_file = not os.path.exists(samples_path)
+#     with open(samples_path, mode='a', newline='') as f:
+#         w = csv.DictWriter(f, fieldnames=["trial_id", "subject_id", "gesture_code", "T", "valid_frames"])
+#         if fresh_file:
+#             w.writeheader()
+#         for rec in per_sample_records:
+#             w.writerow(rec)
+
+#     return results
+
+
+def initialize_multimodal_model(args, device):
+    print("Initializing Multi MTRSAP model...")
+    print("MultiMTRSAP Config: ", args.multimodeltransformer_cfg)
+
+    model = build_default_multitransformer(args.multimodeltransformer_cfg)
+    model = model.to(device)
+    print(model)
+
+    # optimizer 
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_params['lr'], weight_decay=args.learning_params['weight_decay'])
+
+    # scheduler
+    criterion = nn.CrossEntropyLoss()
+
+    return model, optimizer, criterion
+
+
+def initialize_simple_model(args, device):
+    model = create_model(model_type="lstm",device=device,args=args)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_params['lr'], weight_decay=args.learning_params['weight_decay'])
+    criterion = nn.CrossEntropyLoss()
+    return model, optimizer, criterion  

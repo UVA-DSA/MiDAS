@@ -3,26 +3,25 @@
 # --- this job will be run on any available node
 # and simply output the node's hostname to
 # my_job.output
-#SBATCH --job-name="MIDAS TCN Benchmark"
-#SBATCH --error="./logs/job-%j-tcn_train_script.err"
-#SBATCH --output="./logs/job-%j-tcn_train_script.output"
-#SBATCH --partition="gpu"
-#SBATCH --gres=gpu:1
+#SBATCH --job-name="Bootcamp Gesture Clip Creation"
+#SBATCH --error="./logs/job-%j-gesture_clip_creation_script.err"
+#SBATCH --output="./logs/job-%j-gesture_clip_creation_script.output"
+#SBATCH --partition="standard"
 #SBATCH --time=3-00:00:00
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=16G
 #SBATCH --ntasks=1
 #SBATCH --account="uva-dsa"
 
-CFG_PATH="./desk_configs/TCN/exp_psm_10hz.yaml"
 
 module purge &&
 module load miniforge  &&
 source /home/cjh9fw/.bashrc  &&
 echo "$HOSTNAME" &&
+conda deactivate &&
 conda activate egoexoems &&
 # python -u train_recognition.py --job_id 5555555  &&
-# python -u TCN_train_recognition.py --job_id "$SLURM_JOB_ID" --config "$CFG_PATH" &&
-python -u TCN_train_recognition.py --job_id 0 --config "$CFG_PATH" &&
+# python -u MTRSAP_train_recognition.py --job_id "$SLURM_JOB_ID" --config "$CFG_PATH" &&
+python -u gesture_clip_creator.py  &&
 echo "Done" &&
 exit

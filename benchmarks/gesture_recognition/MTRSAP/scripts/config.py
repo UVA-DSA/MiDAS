@@ -223,13 +223,50 @@ def _chunks(lst: List[str], k: int) -> List[List[str]]:
         out.append(lst[s:s+sz])
         s += sz
     return out
+import re
+import random
+from typing import Dict, List, Tuple
+
+# --- tiny helpers used below ---
+
+def _infer_subject_trial(trial_name: str) -> Tuple[str, str]:
+    """
+    Parse '..._S01_T06' -> ('S01','T06'). Falls back to ('UNK','TRIAL') if not found.
+    """
+    m = re.search(r"_S(\d+)_T(\d+)", trial_name)
+    if m:
+        return f"S{int(m.group(1)):02d}", f"T{int(m.group(2)):02d}"
+    # tolerant fallback: try 'S\d+' & 'T\d+' anywhere
+    ms = re.search(r"S(\d+)", trial_name)
+    mt = re.search(r"T(\d+)", trial_name)
+    subj = f"S{int(ms.group(1)):02d}" if ms else "UNK"
+    trl  = f"T{int(mt.group(1)):02d}" if mt else "TRIAL"
+    return subj, trl
+
+def _split_train_val(items: List[str], val_ratio: float, seed: int) -> Tuple[List[str], List[str]]:
+    rnd = random.Random(seed)
+    arr = list(items)
+    rnd.shuffle(arr)
+    n = len(arr)
+    n_val = max(1, int(round(n * val_ratio))) if n > 1 else (1 if n == 1 else 0)
+    val = arr[:n_val]
+    train = arr[n_val:]
+    return train, val
+
+def _chunks(lst: List[str], k: int):
+    n = len(lst)
+    size = max(1, n // k)
+    for i in range(0, n, size):
+        yield lst[i:i + size]
+
+# --- NEW: LOUO-aware build_cv_splits ---
 
 def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
     """
-    Trial-level CV with an optional gesture-level flat split (no validation).
-    - scheme: "leave_one_out" | "group_k_fold" | "gesture_flat"
-    - gesture_flat: returns a single fold with ALL trials in train/test lists
-      (dataset loads all trials once; downstream will stratify *windows*).
+    Trial-level CV with options:
+      - scheme: "leave_one_out" | "group_k_fold" | "gesture_flat" | "trial_split" | "leave_one_user_out" (NEW)
+      - val_same_as_test (bool): if True, validation == test set (useful for LOUO sanity checks)
+      - For LOUO when val_same_as_test=False, we split the held-out user's trials into val/test by val_ratio.
     """
     cv = dataloader_cfg.get("cv", {})
     scheme = cv.get("scheme", "leave_one_out")
@@ -245,6 +282,7 @@ def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
     if not trials:
         raise ValueError("Please set dataloader_params['all_trials'].")
 
+    # sort/shuffle trials once for reproducibility
     trials_sorted = list(trials)
     if shuffle:
         rnd = random.Random(seed)
@@ -254,7 +292,35 @@ def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
 
     folds: List[Dict[str, List[str]]] = []
 
-    if scheme == "leave_one_out":
+    # ----------------- NEW: Leave-One-User-Out -----------------
+    if scheme in ("leave_one_user_out", "louo"):
+        by_subject = {}
+        for t in trials_sorted:
+            subj, _ = _infer_subject_trial(t)
+            by_subject.setdefault(subj, []).append(t)
+
+        subjects = sorted(by_subject.keys())
+
+        for i, held_subj in enumerate(subjects, start=1):
+            test_trials = list(by_subject[held_subj])  # held user's trials
+            # Remaining users
+            remaining_subjs = [s for s in subjects if s != held_subj]
+            train_pool = [t for s in remaining_subjs for t in by_subject[s]]
+
+            # ✅ strict LOUO: training and test
+            train_trials = train_pool
+            val_trials = test_trials
+
+            folds.append({
+                "name": f"louo_{held_subj}_strict",
+                "train_trials": train_trials,
+                "val_trials":   val_trials,   # from training users
+                "test_trials":  test_trials,  # from held user
+            })
+
+
+    # ----------------- Existing schemes (unchanged) -----------------
+    elif scheme == "leave_one_out":
         for i, test_trial in enumerate(trials_sorted, start=1):
             remaining = [t for t in trials_sorted if t != test_trial]
             if val_same_as_test:
@@ -287,25 +353,44 @@ def build_cv_splits(dataloader_cfg: Dict) -> List[Dict[str, List[str]]]:
             })
 
     elif scheme == "gesture_flat":
-        # NO validation: val_trials is empty; downstream will ignore val loader.
         folds.append({
             "name": "gesture_flat",
             "train_trials": list(trials_sorted),
-            "val_trials":   [],                     # <- no validation
+            "val_trials":   [],
             "test_trials":  list(trials_sorted),
             "use_gesture_flat": True,
             "flat_test_ratio":  flat_test_ratio,
             "flat_seed":        flat_seed,
         })
 
+    elif scheme == "trial_split":
+        rnd = random.Random(seed)
+        trls = list(trials_sorted)
+        rnd.shuffle(trls)
+        n = len(trls)
+        test_n = max(1, int(round(n * flat_test_ratio)))
+        test_trials = trls[:test_n]
+        remaining = trls[test_n:]
+        train_trials, val_trials = _split_train_val(remaining, val_ratio, seed + 1)
+        folds.append({
+            "name": f"trial_split_{flat_test_ratio:.2f}",
+            "train_trials": train_trials,
+            "val_trials":   val_trials,
+            "test_trials":  test_trials,
+        })
+        print("\n----------------- Trial Split Info ----------------")
+        print(f"Created trial splits with num trials: total={n}, train={len(train_trials)}, val={len(val_trials)}, test={len(test_trials)}")
+        print(f"Trial split fold: train={train_trials}, val={val_trials}, test={test_trials}")
+        print("---------------------------------------------------\n")
+
     else:
         raise ValueError(f"Unknown CV scheme: {scheme}")
 
+    # cleanup (skip degenerate folds unless gesture_flat)
     cleaned = []
     for f in folds:
         if f.get("use_gesture_flat"):
-            cleaned.append(f)
-            continue
+            cleaned.append(f); continue
         if len(f["test_trials"]) == 0 or len(f["train_trials"]) == 0:
             continue
         cleaned.append(f)

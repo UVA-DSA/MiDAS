@@ -1,3 +1,9 @@
 [submodule "benchmarks/gesture_recognition/MS-TCN2"]
 	path = benchmarks/gesture_recognition/MS-TCN2
 	url = https://github.com/sj-li/MS-TCN2.git
+[submodule "benchmarks/COMPASS"]
+	path = benchmarks/gesture_recognition/COMPASS
+	url = https://github.com/UVA-DSA/COMPASS.git
+[submodule "benchmarks/gesture_recognition/SAIS"]
+	path = benchmarks/gesture_recognition/SAIS
+	url = https://github.com/danikiyasseh/SAIS.git

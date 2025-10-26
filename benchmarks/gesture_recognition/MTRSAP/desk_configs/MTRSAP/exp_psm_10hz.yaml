@@ -1,0 +1,140 @@
+record_results: true
+
+dataloader_params:
+  experiment_name: "desk_data"
+  dataset_name: "DESK"
+  base_path: "/standard/UVA-DSA/COMPASS/Datasets/dV/Peg_Transfer/"
+  batch_size: 1
+  sample_rate: 10
+  ignore_clutch: true
+  clutch_pressed_value: 0
+  drop_neg1: true
+  all_trials: [    
+    "Peg_Transfer_S01_T01",
+    "Peg_Transfer_S01_T02",
+    "Peg_Transfer_S01_T03",
+    "Peg_Transfer_S01_T04",
+    "Peg_Transfer_S01_T05",
+    "Peg_Transfer_S01_T06",
+    "Peg_Transfer_S02_T01",
+    "Peg_Transfer_S02_T02",
+    "Peg_Transfer_S02_T03",
+    "Peg_Transfer_S02_T04",
+    "Peg_Transfer_S02_T05",
+    "Peg_Transfer_S02_T06",
+    "Peg_Transfer_S03_T01",
+    "Peg_Transfer_S03_T02",
+    "Peg_Transfer_S03_T03",
+    "Peg_Transfer_S03_T04",
+    "Peg_Transfer_S03_T05",
+    "Peg_Transfer_S03_T06",
+    "Peg_Transfer_S04_T01",
+    "Peg_Transfer_S04_T02",
+    "Peg_Transfer_S04_T03",
+    "Peg_Transfer_S04_T04",
+    "Peg_Transfer_S04_T05",
+    "Peg_Transfer_S04_T06",
+    "Peg_Transfer_S05_T01",
+    "Peg_Transfer_S05_T02",
+    "Peg_Transfer_S05_T03",
+    "Peg_Transfer_S05_T04",
+    "Peg_Transfer_S05_T05",
+    "Peg_Transfer_S05_T06",
+    "Peg_Transfer_S06_T01",
+    "Peg_Transfer_S06_T02",
+    "Peg_Transfer_S06_T03",
+    "Peg_Transfer_S06_T04",
+    "Peg_Transfer_S06_T05",
+    "Peg_Transfer_S06_T06",
+    "Peg_Transfer_S07_T01",
+    "Peg_Transfer_S07_T02",
+    "Peg_Transfer_S07_T03",
+    "Peg_Transfer_S07_T04",
+    "Peg_Transfer_S07_T05",
+    "Peg_Transfer_S07_T06",
+    "Peg_Transfer_S08_T01",
+    "Peg_Transfer_S08_T02",
+    "Peg_Transfer_S08_T03",
+    "Peg_Transfer_S08_T04",
+    "Peg_Transfer_S08_T05",
+    "Peg_Transfer_S08_T06"
+    ]
+
+
+  cv:
+    scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat" or "louo"
+    k: 5
+    val_ratio: 0.2
+    seed: 42
+    shuffle: true
+    val_same_as_test: false
+
+  modalities: ["PSM"]
+
+  selections:
+    # images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    PSM: ["PSML_position_x","PSML_position_y","PSML_position_z","PSML_velocity_x","PSML_velocity_y","PSML_velocity_z","PSML_orientation_x","PSML_orientation_y","PSML_orientation_z","PSML_orientation_w","PSML_gripper_angle","PSMR_position_x","PSMR_position_y","PSMR_position_z","PSMR_velocity_x","PSMR_velocity_y","PSMR_velocity_z","PSMR_orientation_x","PSMR_orientation_y","PSMR_orientation_z","PSMR_orientation_w","PSMR_gripper_angle"]
+
+  observation_window: -1
+  step: 1
+
+  keysteps:
+    S1: "Approach peg"
+    S2: "Align & grasp"
+    S3: "Lift peg"
+    S4: "Transfer peg - Get together"
+    S5: "Transfer peg - Exchange"
+    S6: "Approach pole"
+    S7: "Align & place"
+
+
+learning_params:
+  lr: 1.0e-5
+  epochs: 30
+  weight_decay: 1.0e-5
+  patience: 30
+  lr_drop: 30
+  best_chkpoint: "./checkpoints/job_xxx/val_best_model.pt"
+
+tcn_model_params:
+  encoder_params:
+    in_channels: 128
+    kernel_size: 5
+    out_channels: 64
+  decoder_params:
+    in_channels: 60
+    kernel_size: 31
+    out_channels: 60
+  input_dim: 64
+  num_classes: 8
+
+transformer_params:
+  d_model: 64
+  nhead: 8
+  num_layers: 2
+  dropout: 0.5
+  batch_first: true
+  sample_rate: 48000
+  n_mels: 64
+  hop_length: 512
+  n_fft: 1024
+  resnet_dim: 2048
+  seq_to_one: true
+
+
+# optional overrides for build_model_cfg_from_dataloader
+model_cfg_overrides:
+  d_model: 64
+  nhead: 8
+  num_layers: 2
+  dropout: 0.1
+  fusion: "cross_attend"
+  modality_dropout_p: 0.1
+
+
+mstcn_model_params:
+  features_dim: 2048
+  num_f_maps: 64
+  num_layers_PG: 11
+  num_layers_R: 10
+  num_R: 3

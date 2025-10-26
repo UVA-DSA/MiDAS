@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import glob
 from pathlib import Path
 import re
+from torch.utils.data import DataLoader
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
@@ -54,8 +55,8 @@ def stratified_gesture_train_test(
 
 # --------------- basic helpers ---------------
 def class_coverage(df_train, df_test):
-    tr = set(df_train['gesture_code'].unique().tolist())
-    te = set(df_test['gesture_code'].unique().tolist())
+    tr = set(df_train['Y'].unique().tolist())
+    te = set(df_test['Y'].unique().tolist())
     missing = sorted(te - tr)
     return missing
 
@@ -68,102 +69,83 @@ def _infer_trial_id(path: str) -> str:
     p = Path(path)
     stem = p.stem
 
+
     # Prefer parent folder like S106_T1 when inside synched_data/
     parent = p.parent
     if parent.name.lower() in {"synched_data", "synced_data", "synched", "synced"}:
         grand = parent.parent.name
         if re.match(r"^S\d+_T\d+$", grand, flags=re.IGNORECASE):
             return grand
+    else:
+        return stem
 
-    # Else extract S###_T# from file name if present
-    m = re.search(r"(S\d+_T\d+)", stem, flags=re.IGNORECASE)
-    if m:
-        return m.group(1)
+    # # Else extract S###_T# from file name if present
+    # m = re.search(r"(S\d+_T\d+)", stem, flags=re.IGNORECASE)
+    # if m:
+    #     return m.group(1)
 
-    # Last resort: old behavior, but DO NOT strip to just 't1'
-    m2 = re.search(r"_(t\d+)\b", stem, flags=re.IGNORECASE)
-    if m2:
-        # include a prefix to avoid collisions
-        return m2.group(1)  # <-- just 't1'
+    # # Last resort: old behavior, but DO NOT strip to just 't1'
+    # m2 = re.search(r"_(t\d+)\b", stem, flags=re.IGNORECASE)
+    # if m2:
+    #     # include a prefix to avoid collisions
+    #     return f"{p.parent.name}_{m2.group(1)}"
 
-    # Final fallback: parent dir or full stem
-    return p.parent.name or stem
+    # # Final fallback: parent dir or full stem
+    # return p.parent.name or stem
 
+
+import numpy as np
+import pandas as pd
 
 def _read_and_tag_csv(
     path: str,
     fillna_value: float | None,
     *,
     downsample_stride: int = 1,
-    ignore_clutch: bool = False,
-    clutch_column: str = "console_pedal",
-    clutch_pressed_value: int | float | bool = 1,
-    drop_neg1: bool = True,
-    neg1_exclude_cols: Optional[Sequence[str]] = ("obs_frame_idx","seq","server_time", 'frame_number', 'timestamp', 'trakstar_time_ns','trakstar_delta_ns','sw_left_time_ns', 'sw_left_delta_ns', 'sw_right_time_ns', 'sw_right_delta_ns', 'raven_console_time_ns', 'raven_console_delta_ns',
-    "Pedal 1 Pressure","Pedal 2 Pressure","Pedal 3 Pressure","Pedal 4 Pressure","Pedal 6 Pressure","Pedal 7 Pressure"),
 ) -> pd.DataFrame:
-    df = pd.read_csv(path, low_memory=False)
+    """
+    Read a CSV, tag with 'source_csv' and 'trial_id', optionally downsample by stride.
+    Preserves frame indices (no index reset after dropna/downsamping).
+    """
+    df = pd.read_csv(path)
     df["source_csv"] = str(path)
     df["trial_id"] = _infer_trial_id(path)
 
-    # drop first rows with -1 in any of the columns until first valid row
-    if drop_neg1:
-        # ---- Drop rows with sentinel (-1) ----
-        drop_mode = "leading"  # "leading" -> drop only initial bad run; "all" -> drop every bad row anywhere
-        treat_nan_as_missing = False
-        exclude_cols = set(neg1_exclude_cols or ())
-
-        check_cols = [c for c in df.columns if c not in exclude_cols]
-        if check_cols:
-            vals = df[check_cols].apply(pd.to_numeric, errors="coerce")
-            bad_cell = vals.eq(-1)
-            if treat_nan_as_missing:
-                bad_cell = bad_cell | vals.isna()
-            row_is_bad = bad_cell.any(axis=1)
-
-            if drop_mode == "leading":
-                arr = row_is_bad.to_numpy()
-                if arr.size == 0:
-                    leading_bad = 0
-                elif not arr[0]:
-                    leading_bad = 0
-                else:
-                    idx = np.nonzero(~arr)[0]
-                    leading_bad = int(idx[0]) if idx.size > 0 else len(arr)
-                if leading_bad > 0:
-                    df = df.iloc[leading_bad:].reset_index(drop=True)
-            elif drop_mode == "all":
-                df = df.loc[~row_is_bad].reset_index(drop=True)
-            else:
-                raise ValueError("drop_mode must be 'leading' or 'all'")
+    # Ensure a stable per-row frame identifier exists
+    if "frame_idx" not in df.columns:
+        df["frame_idx"] = np.arange(len(df), dtype=np.int64)
     else:
-        print(f"Not dropping -1 rows for file: {path}")
+        # Try to make sure frame_idx is integer-typed if it is whole-valued
+        if not pd.api.types.is_integer_dtype(df["frame_idx"]):
+            # If values are whole numbers, safely cast to int; otherwise leave as-is
+            if np.all(np.isfinite(df["frame_idx"])) and np.allclose(df["frame_idx"], np.round(df["frame_idx"])):
+                df["frame_idx"] = df["frame_idx"].round().astype(np.int64)
 
-    # downsample (prefer obs_frame_idx modulo)
+    # Optional downsample (prefer modulo on frame_idx); do NOT reset index
     if downsample_stride > 1:
-        if "obs_frame_idx" in df.columns and pd.api.types.is_integer_dtype(df["obs_frame_idx"]):
-            df = df[df["obs_frame_idx"] % downsample_stride == 0].reset_index(drop=True)
+        if "frame_idx" in df.columns and pd.api.types.is_integer_dtype(df["frame_idx"]):
+            df = df[df["frame_idx"] % downsample_stride == 0]
         else:
-            df = df.iloc[::downsample_stride].reset_index(drop=True)
+            # Fallback to positional stride; frame_idx column remains unchanged
+            df = df.iloc[::downsample_stride]
 
-    # optional: drop clutch-pressed
-    if ignore_clutch and clutch_column in df.columns:
-        col = df[clutch_column]
-        if pd.api.types.is_bool_dtype(col):
-            keep_mask = ~col.astype(bool)
-        else:
-            if not pd.api.types.is_numeric_dtype(col):
-                col = pd.to_numeric(col, errors="coerce")
-            keep_mask = ~(col == float(clutch_pressed_value))
-        df = df[keep_mask].reset_index(drop=True)
+    num_rows_before = len(df)
+    # Fill or drop NaNs — keep index as-is to preserve alignment with frame_idx
+    if fillna_value is not None:
+        df = df.fillna(fillna_value)
+    else:
+        df = df.dropna()
 
-    # drop rows with NaN values
-    rows_before = len(df)   
-    df = df.dropna()
-    # print(df.head(3))
-    # print(f"[INFO] Loaded '{path}' before-rows:{rows_before} after-rows={len(df)} stride={downsample_stride} (after dropna).")
+    # Quick sanity/info logs
+    if "frame_idx" in df.columns:
+        fmin = df["frame_idx"].min()
+        fmax = df["frame_idx"].max()
+        nunq = df["frame_idx"].nunique()
+        # print(f"[INFO] frame_idx in '{path}': min={fmin}, max={fmax}, unique={nunq}, rows={len(df)}")
+    # print(f"[INFO] Loaded '{path}' after-rows={len(df)}, before-rows={num_rows_before}, stride={downsample_stride} (no index reset).")
 
     return df
+
 
 def _format_video_pattern(pattern: str, csv_path: str, trial_id: str) -> str:
     """pattern supports {trial_id}, {stem}, {parent}"""
@@ -328,17 +310,11 @@ class _FeatureCache:
 
 # --------------- dataset ---------------
 
-class MultimodalGestureDataset(Dataset):
+class DeskDataset(Dataset):
 
     # CSV-based modality column rules (images handled specially)
     DEFAULT_MODALITY_RULES: Dict[str, Callable[[str], bool]] = {
-        "trakstar": lambda c: c.startswith("trakstar_"),
-        "sw_left":  lambda c: c.startswith("sw_left_"),
-        "sw_right": lambda c: c.startswith("sw_right_"),
-        "console":  lambda c: c.startswith("console_"),
-        "raven":    lambda c: c.startswith("raven_"),
-        "pedals":   lambda c: c.startswith("Pedal "),
-        "handkp":   lambda c: c.startswith("hand_"),
+        "PSM": lambda c: c.startswith("PSM"),
     }
 
     # map selection token -> filename suffix for features
@@ -367,11 +343,6 @@ class MultimodalGestureDataset(Dataset):
         source_hz: int = 30,
         sample_rate: int = 30,
 
-        # Optional: clutch filtering
-        ignore_clutch: bool = False,
-        clutch_column: str = "console_pedal",
-        clutch_pressed_value: int | float | bool = 1,
-
         # Windowing
         clip_len: int = 32,
         step: int = 8,
@@ -396,9 +367,10 @@ class MultimodalGestureDataset(Dataset):
         modality_selections: Optional[Dict[str, Sequence[str]]] = None,
         modality_exclude: Optional[Dict[str, Sequence[str]]] = None,
 
-        selected_indices: Optional[Sequence[int]] = None,
+        class_id_to_name: Dict[int, str] = {},
+        class_name_to_id: Dict[str, int] = {},
 
-        drop_neg1: bool = True,
+        selected_indices: Optional[Sequence[int]] = None,
 
         classes_to_allow: Optional[Sequence[str]] = [],
 
@@ -408,7 +380,7 @@ class MultimodalGestureDataset(Dataset):
     ):
         super().__init__()
 
-        print("\n--- Initializing MultimodalGestureDataset ---\n")
+        print("\n--- Initializing DeskDataset ---\n")
         print("Selected classes to allow:", classes_to_allow)
         # sampling validation
         if sample_rate <= 0 or sample_rate > source_hz:
@@ -418,10 +390,6 @@ class MultimodalGestureDataset(Dataset):
         self.source_hz = int(source_hz)
         self.sample_rate = int(sample_rate)
         self.downsample_stride = self.source_hz // self.sample_rate
-
-        self.ignore_clutch = bool(ignore_clutch)
-        self.clutch_column = clutch_column
-        self.clutch_pressed_value = clutch_pressed_value
 
         self.samples: List[Dict] = []
 
@@ -435,17 +403,13 @@ class MultimodalGestureDataset(Dataset):
         elif csv_path: collected_paths = [csv_path]
         else: raise ValueError("Provide one of: csv_path, dir_path, or csv_paths.")
 
-        # read CSVs
+        # read CSVs (no clutch/neg1 handling)
         if base_path is not None:
             dfs = [
                 _read_and_tag_csv(
-                    base_path + p + "/synched_data/final_annotation_" + p + ".csv",
+                    base_path +"preprocessed/" + p + ".csv",
                     fillna_value=None,
                     downsample_stride=self.downsample_stride,
-                    ignore_clutch=self.ignore_clutch,
-                    clutch_column=self.clutch_column,
-                    clutch_pressed_value=self.clutch_pressed_value,
-                    drop_neg1=drop_neg1,
                 ) for p in collected_paths
             ]
         else:
@@ -454,121 +418,36 @@ class MultimodalGestureDataset(Dataset):
                     p,
                     fillna_value=None,
                     downsample_stride=self.downsample_stride,
-                    ignore_clutch=self.ignore_clutch,
-                    clutch_column=self.clutch_column,
-                    clutch_pressed_value=self.clutch_pressed_value,
-                    drop_neg1=drop_neg1,
                 ) for p in collected_paths
             ]
 
         self.df = pd.concat(dfs, axis=0, ignore_index=True)
-        sort_keys = [k for k in ["trial_id", "obs_frame_idx", "source_csv"] if k in self.df.columns]
+
+
+        # make a copy of column Y as 'gesture_code' if present
+        if "Y" in self.df.columns and "gesture_code" not in self.df.columns:
+            self.df["gesture_code"] = self.df["Y"].astype(str)
+
+        sort_keys = [k for k in ["trial_id", "frame_idx", "source_csv"] if k in self.df.columns]
         self.df = self.df.sort_values(sort_keys, kind="mergesort").reset_index(drop=True)
 
         if fillna_value is not None:
             self.df = self.df.fillna(fillna_value)
 
-        for col in ["obs_frame_idx", "gesture_code"]:
+        for col in ["frame_idx", "gesture_code"]:
             if col not in self.df.columns:
                 raise ValueError(f"CSV(s) missing required column: {col}")
 
         # Always drop Idle if needed
         self.df = self.df[self.df["gesture_code"] != "Idle"].reset_index(drop=True)
 
-        # --- Optional class filtering with robust matching ---
-        if classes_to_allow:
-            keys = list(classes_to_allow.keys())
-            vals = list(classes_to_allow.values())
-
-            print(f"Selected classes to allow: {classes_to_allow}")
-            print("gesture_code dtype before:", self.df["gesture_code"].dtype)
-
-            gc_str = self.df["gesture_code"].astype(str).str.strip()
-            gc_lower = gc_str.str.lower()
-            gc_int = pd.to_numeric(self.df["gesture_code"], errors="coerce").astype("Int64")
-
-            allowed_str = {str(k).strip().lower() for k in keys}
-            allowed_int = set()
-            for k in keys:
-                try:
-                    allowed_int.add(int(str(k).strip()))
-                except ValueError:
-                    pass
-
-            allowed_str |= {str(v).strip().lower() for v in vals}
-
-            before = len(self.df)
-            mask = gc_int.isin(list(allowed_int)) | gc_lower.isin(list(allowed_str))
-            self.df = self.df[mask].reset_index(drop=True)
-            after = len(self.df)
-            print(f"Filtered rows: {before} -> {after}")
-            print("Unique gesture_codes after filtering:",
-                  sorted(self.df['gesture_code'].astype(str).unique().tolist()))
-
-            missing = set(allowed_int) - set(gc_int.dropna().unique().tolist())
-            if missing:
-                print(f"Note: these allowed IDs had no rows present: {sorted(missing)}")
-        else:
-            print("classes_to_allow is empty — keeping all non-Idle gestures.")
-
-        sort_keys = ["trial_id", "obs_frame_idx"] if "trial_id" in self.df.columns else ["obs_frame_idx"]
+        sort_keys = ["trial_id", "frame_idx"] if "trial_id" in self.df.columns else ["frame_idx"]
         self.df = self.df.sort_values(sort_keys).reset_index(drop=True)
 
-        # === NEW/UPDATED: Normalize gesture_code dtype consistently ===
-        # Try to coerce to int; if it fails, keep strings (and we will sort numerically by casting)
-        _gesture_is_numeric = True
-        try:
-            self.df["gesture_code"] = pd.to_numeric(self.df["gesture_code"], errors="raise").astype(int)
-        except Exception:
-            _gesture_is_numeric = False
-            self.df["gesture_code"] = self.df["gesture_code"].astype(str).str.strip()
-        self._gesture_is_numeric = _gesture_is_numeric  # keep for later lookups
-
-        # === NEW/UPDATED: Build a stable class_map ===
-        if class_map is not None:
-            self.class_map = dict(class_map)
-        else:
-            if classes_to_allow:
-                # Respect the order of classes_to_allow, but only include those present
-                if _gesture_is_numeric:
-                    allowed_ids = []
-                    for k in classes_to_allow.keys():
-                        try:
-                            allowed_ids.append(int(str(k).strip()))
-                        except ValueError:
-                            # ignore textual keys when using numeric labels
-                            pass
-                    present = set(int(x) for x in self.df["gesture_code"].unique())
-                    order = [k for k in allowed_ids if k in present]
-                    self.class_map = {k: i for i, k in enumerate(order)}
-                else:
-                    # String labels: normalize to lowercase for matching, keep original token as key
-                    present = set(self.df["gesture_code"].unique())
-                    # Respect provided keys/values order; include whichever is present
-                    ordered = []
-                    for k in classes_to_allow.keys():
-                        ks = str(k).strip()
-                        if ks in present:
-                            ordered.append(ks)
-                    for v in classes_to_allow.values():
-                        vs = str(v).strip()
-                        if vs in present and vs not in ordered:
-                            ordered.append(vs)
-                    self.class_map = {k: i for i, k in enumerate(ordered)}
-            else:
-                # No predefined list: sort naturally
-                if _gesture_is_numeric:
-                    uniq = sorted(int(u) for u in self.df["gesture_code"].dropna().unique().tolist())
-                    self.class_map = {u: i for i, u in enumerate(uniq)}
-                else:
-                    uniq = sorted(self.df["gesture_code"].dropna().unique().tolist(), key=lambda s: int(s) if s.isdigit() else s)
-                    self.class_map = {s: i for i, s in enumerate(uniq)}
-
-        print("\n--- Gesture class mapping ---")
-        print(f"Final class_map (gesture_code -> index): {self.class_map}")
-        print("--- Gesture class mapping ---\n")
-
-        
+        # class map
+        self.class_map = dict(class_map) if class_map else {
+            c: i for i, c in enumerate(sorted(self.df["gesture_code"].dropna().unique().tolist()))
+        }
 
         # modality selection setup
         self.modality_rules = dict(self.DEFAULT_MODALITY_RULES if modality_rules is None else modality_rules)
@@ -601,7 +480,7 @@ class MultimodalGestureDataset(Dataset):
             if numeric:
                 self.modality_cols[m] = numeric
 
-        sort_keys = [k for k in ["trial_id", "source_csv", "obs_frame_idx"] if k in self.df.columns]
+        sort_keys = [k for k in ["trial_id", "source_csv", "frame_idx"] if k in self.df.columns]
         self.df = self.df.sort_values(sort_keys, kind="mergesort").reset_index(drop=True)
 
         # gesture runs
@@ -636,7 +515,7 @@ class MultimodalGestureDataset(Dataset):
         self.samples: List[Dict] = []
         self._make_windows()
 
-        # keep only a chosen subset of windows if provided
+        # NEW: keep only a chosen subset of windows if provided
         if selected_indices is not None:
             sel = set(int(i) for i in selected_indices)
             self.samples = [self.samples[i] for i in range(len(self.samples)) if i in sel]
@@ -661,6 +540,16 @@ class MultimodalGestureDataset(Dataset):
         csv_dir = str(Path(src).parent)
         base_root = self.video_root if self.video_root is not None else csv_dir
         filename = _format_video_pattern(self.video_pattern, src, trial)
+        # replace preprocessed with video in the base_root if present
+        if "preprocessed" in base_root:
+            base_root = base_root.replace("preprocessed", "video")
+        filename = filename.replace(".mp4", "_right.mp4")  # specific to this dataset
+        # if filename does not exist, try without _Right
+        if not Path(base_root, filename).exists():
+            filename = filename.replace("_right.mp4", "_Right.mp4")
+        if not Path(base_root, filename).exists():
+            filename = filename.replace("_Right.mp4", "_Left.mp4")
+        # print(f"Resolved video path for trial_id='{trial}', {str(Path(base_root) / filename)}")
         return str(Path(base_root) / filename)
 
     def _make_windows(self):
@@ -718,7 +607,7 @@ class MultimodalGestureDataset(Dataset):
         video_path = slice_df["_video_path"].iloc[0]
         if not Path(video_path).exists():
             return None
-        obs_idx = slice_df["obs_frame_idx"].to_numpy(dtype=np.int64)
+        obs_idx = slice_df["frame_idx"].to_numpy(dtype=np.int64)
         fps = self._video_cache.get_fps(video_path)
         vid_frames = np.round(obs_idx * (fps / float(self.source_hz))).astype(np.int64)
         vid_frames[vid_frames < 0] = 0
@@ -733,86 +622,156 @@ class MultimodalGestureDataset(Dataset):
         suf = self.IMAGE_FEAT_SUFFIX[kind]  # e.g., 'resnet50'
         p = Path(video_path)
         stem = p.stem  # 't1'
-        return str(p.with_name(f"{stem}_{suf}.npy"))
+        # strip "_right" suffix if present
+        if stem.endswith("_right"):
+            stem = stem[:-6]
+        elif stem.endswith("_Right"):
+            stem = stem[:-6]
+        elif stem.endswith("_Left"):
+            stem = stem[:-5]
+        else:
+            stem = stem
+
+        feature_path = p.with_name(f"{stem}_{suf}.npy")
+        # print(f"Feature path for video '{video_path}', kind '{kind}': {feature_path}")
+
+        return str(feature_path)
 
     def _load_clip_image_features(self, start: int, end: int) -> Optional[torch.Tensor]:
-        """
-        Load and concatenate requested feature sets for this clip:
-        returns [T, F_total] or None if no feature kind requested or files missing.
-        """
+        # print("\n------ LOADING IMAGE FEATURES ------")
+
         if not self.images_feat_kinds:
+            print("[WARN] No image feature kinds specified.")
             return None
         slice_df = self.df.iloc[start:end]
         video_path = slice_df["_video_path"].iloc[0]
         if not Path(video_path).exists():
-            print(f"Video path does not exist for image features: {video_path}")
+            print(f"[WARN] Video path does not exist: {video_path}")
             return None
 
-        obs_idx = slice_df["obs_frame_idx"].to_numpy(dtype=np.int64)
+        obs_idx = slice_df["frame_idx"].to_numpy(dtype=np.int64)
         fps = self._video_cache.get_fps(video_path)
         vid_frames = np.round(obs_idx * (fps / float(self.source_hz))).astype(np.int64)
         vid_frames[vid_frames < 0] = 0
+
+        # print info
+        # print(f"Loading image features for video: {video_path}, frames: {vid_frames}, start-end: {start}-{end}")
+        # expected dims per feature kind (extend if you add more kinds)
+        EXPECTED_F = {
+            "resnet": 2048,
+            "resnet_deskpt": 2048,
+            "resnet_deskpt_v2": 2048,
+            "resnet_raven": 2048,
+            "dinov3": 1024,   # adjust to your dump
+            "i3d_rgb": 1024,  # adjust
+            "i3d_flow": 1024  # adjust
+        }
 
         feats_list = []
         for kind in self.images_feat_kinds:
             feat_path = self._build_feat_path(video_path, kind)
             if not Path(feat_path).exists():
+                print(f"[WARN] Feature path does not exist: {feat_path}")
                 continue
-            arr = self._feat_cache.get(feat_path)
-            # unify to [N, F]
+            # print(f"  Loading feature '{kind}' from: {feat_path} start-end: {start}-{end}")
+
+            arr = self._feat_cache.get(feat_path)  # np.ndarray
+
             if arr.ndim == 2:
-                N0, N1 = arr.shape
-                if N0 < N1:
-                    arr_t = arr.T  # [T, F]
+                Fexp = EXPECTED_F.get(kind, None)
+
+                if Fexp is not None:
+                    # choose orientation by matching the expected feature dimension
+                    if arr.shape[1] == Fexp:
+                        arr_t = arr                # [T, F]
+                    elif arr.shape[0] == Fexp:
+                        arr_t = arr.T              # [T, F]
+                    else:
+                        # fallback: prefer making the LAST dim be the smaller “feature-like” dimension
+                        # but warn so you can catch mis-dumps
+                        # print(f"[WARN] {feat_path} unexpected shape {arr.shape} for kind '{kind}' (expected F={Fexp}).")
+                        arr_t = arr if arr.shape[1] < arr.shape[0] else arr.T
                 else:
-                    arr_t = arr    # [T, F]
+                    # no expected dim known -> prefer [T, F] where F is the larger one being a typical feature size
+                    arr_t = arr if arr.shape[1] >= arr.shape[0] else arr.T
+
             elif arr.ndim == 1:
-                arr_t = arr.reshape(-1, 1)
+                arr_t = arr.reshape(-1, 1)         # [T, 1]
             else:
                 raise ValueError(f"Unexpected feature array shape for {feat_path}: {arr.shape}")
-
-            max_row = arr_t.shape[0] - 1
-            idx = np.clip(vid_frames, 0, max_row)
-            pick = arr_t[idx]  # [T, F_kind]
-            feats_list.append(torch.from_numpy(pick.astype(np.float32)))
+            # print("    Loaded feature array shape:", arr_t.shape)
+            try:
+                # row 0..T-1 must be time; index safely
+                max_row = arr_t.shape[0] - 1
+                idx = np.clip(vid_frames, 0, max_row)
+                # print(f"    Feature array shape: {arr_t.shape}, picking indices: {idx}")
+                pick = arr_t[idx]                      # [T, F]
+                feats_list.append(torch.from_numpy(pick.astype(np.float32)))
+            except Exception as e:
+                print(f"[WARN] Failed to load features from {feat_path} for frames {vid_frames}: {e}")
+                continue
 
         if not feats_list:
+            print(f"[WARN] No image features found for sample with video '{video_path}' with feature path {feat_path} and kinds {self.images_feat_kinds}")
             return None
 
-        feats = torch.cat(feats_list, dim=-1)  # [T, sum(F_kinds)]
+        feats = torch.cat(feats_list, dim=-1)      # [T, sum(F_kinds)]
+        # print(f"  Loaded concatenated image features shape: {feats.shape}")
+        # print("------ DONE LOADING IMAGE FEATURES ------\n")
         return feats
+
+    def _trim_item_to_min_T(self, item: Dict[str, torch.Tensor]) -> None:
+        """
+        In-place: trims all time-like tensors in `item` to a common Tmin.
+        Considers 1D (frame_idx), 2D ([T,F]) and images [T,C,H,W].
+        Excludes 'label'.
+        """
+        # keys to align: all tensors that have a leading T
+        align_keys = []
+        T_candidates = []
+
+        for k, v in item.items():
+            if not isinstance(v, torch.Tensor):
+                continue
+            if k == "label":
+                continue
+            # accept [T], [T,F], [T,C,H,W]
+            if v.dim() == 1 or v.dim() == 2 or (v.dim() == 4 and k == "images"):
+                align_keys.append(k)
+                T_candidates.append(v.shape[0])
+
+        if not T_candidates:
+            return
+
+        Tmin = min(T_candidates)
+        if Tmin <= 0:
+            # You may choose to raise here, or let collate handle empty sequences
+            return
+
+        # slice each to Tmin
+        for k in align_keys:
+            v = item[k]
+            if v.shape[0] != Tmin:
+                item[k] = v[:Tmin].contiguous()
+
 
     def __getitem__(self, i: int):
         s = self.samples[i]
         start, end = s["start"], s["end"]
-        code_raw = self.df.loc[start, "gesture_code"]
+        code = s["gesture_code"]
+        label = self.class_map[code]
 
-        # === NEW/UPDATED: normalize code to match class_map key type ===
-        if len(self.class_map) > 0:
-            first_key = next(iter(self.class_map.keys()))
-            if isinstance(first_key, int):
-                code_key = int(code_raw) if not isinstance(code_raw, int) else code_raw
-            else:
-                code_key = str(code_raw)
-        else:
-            code_key = int(code_raw) if self._gesture_is_numeric else str(code_raw)
-
-        if code_key not in self.class_map:
-            raise KeyError(f"Label '{code_key}' not found in class_map keys {list(self.class_map.keys())}")
-
-        label = self.class_map[code_key]
-
-        item: Dict[str, torch.Tensor | str | int] = {}
+        item: Dict[str, torch.Tensor | str] = {}
 
         # CSV-backed modalities -> [T, F]
         for m in self.modality_cols.keys():
             item[m] = self._get_modality_tensor(start, end, m)
 
         # metadata
-        obs_idx = self.df.loc[start:end - 1, "obs_frame_idx"].to_numpy(dtype=np.int64)
-        item["obs_frame_idx"] = torch.from_numpy(obs_idx)
+        obs_idx = self.df.loc[start:end - 1, "frame_idx"].to_numpy(dtype=np.int64)
+        item["frame_idx"] = torch.from_numpy(obs_idx)
         item["label"] = torch.tensor(label, dtype=torch.long)
-        item["gesture_code"] = code_key  # store normalized form
+        item["gesture_code"] = code
         item["trial_id"] = self.df.loc[start, "trial_id"]
         item["source_csv"] = self.df.loc[start, "source_csv"]
 
@@ -823,8 +782,14 @@ class MultimodalGestureDataset(Dataset):
 
         # images: features (concatenated over selected types)
         im_feats = self._load_clip_image_features(start, end)
+        # print(f"Image features shape: {im_feats.shape if im_feats is not None else 'None'}")
+        if im_feats is None:
+            print(f"[WARN] No image features loaded for sample index {i} with label {code} (trial_id={item['trial_id']})")
         if im_feats is not None:
             item["images_feat"] = im_feats  # [T, F_total]
+
+        # 🔧 NEW: enforce common T across CSV signals, frame_idx, images, and images_feat
+        self._trim_item_to_min_T(item)
 
         return item
 
@@ -888,7 +853,7 @@ class MultimodalGestureDataset(Dataset):
         keys = list(batch[0].keys())
 
         # include all tensor keys except special ones
-        special_exclude = {"label", "obs_frame_idx", "images"}
+        special_exclude = {"label", "frame_idx", "images"}
         tensor_modalities = [k for k in keys if isinstance(batch[0][k], torch.Tensor) and k not in special_exclude]
 
         # detect variable length across any modality
@@ -902,7 +867,7 @@ class MultimodalGestureDataset(Dataset):
             for m in tensor_modalities:
                 out[m] = torch.stack([b[m] for b in batch], dim=0)  # [B, T, F]
             out["label"] = torch.stack([b["label"] for b in batch], dim=0)
-            out["obs_frame_idx"] = torch.stack([b["obs_frame_idx"] for b in batch], dim=0)
+            out["frame_idx"] = torch.stack([b["frame_idx"] for b in batch], dim=0)
             out["gesture_code"] = [b["gesture_code"] for b in batch]
             out["trial_id"] = [b.get("trial_id", "") for b in batch]
             out["source_csv"] = [b.get("source_csv", "") for b in batch]
@@ -915,13 +880,13 @@ class MultimodalGestureDataset(Dataset):
         attention_mask: Dict[str, torch.Tensor] = {}
         for m in tensor_modalities:
             seqs = [b[m] for b in batch]  # list of [T, F]
-            padded, mask = MultimodalGestureDataset._pad_and_stack_2d(seqs, pad_value=0.0)
+            padded, mask = DeskDataset._pad_and_stack_2d(seqs, pad_value=0.0)
             out[m] = padded
             attention_mask[m] = mask
 
-        obs_seqs = [b["obs_frame_idx"] for b in batch]
-        obs_padded, obs_mask = MultimodalGestureDataset._pad_and_stack_1d(obs_seqs, pad_value=0)
-        out["obs_frame_idx"] = obs_padded
+        obs_seqs = [b["frame_idx"] for b in batch]
+        obs_padded, obs_mask = DeskDataset._pad_and_stack_1d(obs_seqs, pad_value=0)
+        out["frame_idx"] = obs_padded
         out["obs_mask"] = obs_mask
 
         out["label"] = torch.stack([b["label"] for b in batch], dim=0)
@@ -958,7 +923,6 @@ def print_batch_stats(batch):
         if isinstance(v, torch.Tensor):
             print(f"{k}: dtype={v.dtype}, shape={tuple(v.shape)}, "
                   f"min={v.min().item():.3f}, max={v.max().item():.3f}")
-            # (optional) per-dim stats could go here
         elif isinstance(v, list):
             print(f"{k}: list of {len(v)} items, head: {v[:3]}")
         else:
@@ -985,7 +949,7 @@ def visualize_dataset_sample(
     # Identify 2D modalities [B,T,F]
     modality_keys = []
     for k, v in batch.items():
-        if isinstance(v, torch.Tensor) and k not in ("label", "obs_frame_idx", "images", "images_mask"):
+        if isinstance(v, torch.Tensor) and k not in ("label", "frame_idx", "images", "images_mask"):
             if v.dim() == 3:
                 modality_keys.append(k)
     obs_mask = batch.get("obs_mask", None)
@@ -1127,108 +1091,110 @@ def visualize_dataset_sample(
 
 # ----------------------- test block -----------------------
 if __name__ == "__main__":
-    from torch.utils.data import DataLoader
 
-    # ROOT_DIR = "/standard/UVA-DSA/MIDAS/Organized/final_data"
-    ROOT_DIR = "/standard/UVA-DSA/MIDAS/Organized/Bootcamp/Suturing/Processed/"
+    ROOT_DIR = "/standard/UVA-DSA/COMPASS/Datasets/dV/Peg_Transfer"
 
     total_samples = 0
 
-    trials =  [    
-    "S105_T1",
-    "S106_T1",
-    "S106_T2",
-    "S112_T1",
-    "S112_T2",
-    "S116_T1",
-    "S116_T2",
-    "S116_T4",
-    "S116_T5",
-    "S118_T1",
-    "S200_T1",
-    "S201_T1",
-    "S201_T2",
-    "S202_T1",
-    "S203_T1",
-    "S204_T1",
-    "S209_T2",
-    "S210_T1",
-    "S214_T1",
-    "S214_T4",
-    "S214_T6",
-    "S215_T3",
-    "S215_T4",
-    "S217_T2",
-    "S217_T3",
-    "S217_T4",
-    "S218_T1",
-    "S219_T1"
+    trials =  [
+    "Peg_Transfer_S01_T01",
+    # "Peg_Transfer_S01_T02",
+    # "Peg_Transfer_S01_T03",
+    # "Peg_Transfer_S01_T04",
+    # "Peg_Transfer_S01_T05",
+    # "Peg_Transfer_S01_T06",
+    # "Peg_Transfer_S02_T01",
+    # "Peg_Transfer_S02_T02",
+    # "Peg_Transfer_S02_T03",
+    # "Peg_Transfer_S02_T04",
+    # "Peg_Transfer_S02_T05",
+    # "Peg_Transfer_S02_T06",
+    # "Peg_Transfer_S03_T01",
+    # "Peg_Transfer_S03_T02",
+    # "Peg_Transfer_S03_T03",
+    # "Peg_Transfer_S03_T04",
+    # "Peg_Transfer_S03_T05",
+    # "Peg_Transfer_S03_T06",
+    # "Peg_Transfer_S04_T01",
+    # "Peg_Transfer_S04_T02",
+    # "Peg_Transfer_S04_T03",
+    # "Peg_Transfer_S04_T04",
+    # "Peg_Transfer_S04_T05",
+    # "Peg_Transfer_S04_T06",
+    # "Peg_Transfer_S05_T01",
+    # "Peg_Transfer_S05_T02",
+    # "Peg_Transfer_S05_T03",
+    # "Peg_Transfer_S05_T04",
+    # "Peg_Transfer_S05_T05",
+    # "Peg_Transfer_S05_T06",
+    # "Peg_Transfer_S06_T01",
+    # "Peg_Transfer_S06_T02",
+    # "Peg_Transfer_S06_T03",
+    # "Peg_Transfer_S06_T04",
+    # "Peg_Transfer_S06_T05",
+    # "Peg_Transfer_S06_T06",
+    # "Peg_Transfer_S07_T01",
+    # "Peg_Transfer_S07_T02",
+    # "Peg_Transfer_S07_T03",
+    # "Peg_Transfer_S07_T04",
+    # "Peg_Transfer_S07_T05",
+    # "Peg_Transfer_S07_T06",
+    # "Peg_Transfer_S08_T01",
+    # "Peg_Transfer_S08_T02",
+    # "Peg_Transfer_S08_T03",
+    # "Peg_Transfer_S08_T04",
+    # "Peg_Transfer_S08_T05",
+    # "Peg_Transfer_S08_T06"
     ]
     csvs = []
 
     for trial_id in trials:
         # gather CSVs
-        csvs.append(f"{ROOT_DIR}/{trial_id}/synched_data/final_annotation_{trial_id}.csv")
+        csvs.append(f"{ROOT_DIR}/preprocessed/{trial_id}.csv")
 
-    dataset = MultimodalGestureDataset(
+    dataset = DeskDataset(
         csv_paths=csvs,
         clip_len=-1,              # or -1 for full gesture
         step=1,
-        sample_rate=30,           # 30Hz
-        ignore_clutch=False,
-        clutch_pressed_value=0,
+        sample_rate=10,           # 30Hz -> 10Hz sampling
 
-        include_modalities=["trakstar"],
+        # include "images" as a normal modality now
+        include_modalities=["images"],
         modality_selections={
-            "trakstar": [
-                "trakstar_sensor_0_*x", "trakstar_sensor_0_*y", "trakstar_sensor_0_azimuth",
-                "trakstar_sensor_2_*x", "trakstar_sensor_2_*y", "trakstar_sensor_2_azimuth",
-            ],
-            # "images": ["resnet"],  # optional
+            # "PSM": [
+            #     "PSML_position_x","PSML_position_y","PSML_position_z","PSML_velocity_x","PSML_velocity_y","PSML_velocity_z","PSML_orientation_x","PSML_orientation_y","PSML_orientation_z","PSML_orientation_w","PSML_gripper_angle","PSMR_position_x","PSMR_position_y","PSMR_position_z","PSMR_velocity_x","PSMR_velocity_y","PSMR_velocity_z","PSMR_orientation_x","PSMR_orientation_y","PSMR_orientation_z","PSMR_orientation_w","PSMR_gripper_angle"
+            # ],
+            "images": ["resnet"]
         },
-        # modality_exclude={"trakstar": ["*elevation*", "*roll*"]},
         normalize=True,
         classes_to_allow={
-            0: "No Gesture",
-            1: "Cinch Loop Down (Barbed Suture)",
-            2: "Cold Cut",
-            3: "Cold Hook",
-            4: "Cut suture",
-            5: "Grasp Long End of Suture",
-            6: "Loop around Free Arm-DoubleLoop",
-            7: "Loop around Free Arm-SingleLoop",
-            8: "One-hand Spread",
-            9: "Orient Needle",
-            10: "Pass Needle Through Loop",
-            11: "Pedicalize",
-            12: "Peel",
-            13: "Pull Needle",
-            14: "Pull Suture into Slip Knot and Cinch",
-            15: "Pull Suture-BothHands",
-            16: "Pull Suture-Fulcrum",
-            17: "Pull Suture-OneHand",
-            18: "Push Needle",
-            19: "Reduce",
-            20: "Square Knot-1: Grasp and Pull Short End Through Loop",
-            21: "Square Knot-2",
-            22: "Target Needle",
-            23: "Two-hand Spread",
+            "S1": "Approach peg",
+            "S2": "Align & grasp",
+            "S3": "Lift peg",
+            "S4": "Transfer peg - Get together",
+            "S5": "Transfer peg - Exchange",
+            "S6": "Approach pole",
+            "S7": "Align & place"
         },
 
-        video_root=None,
-        video_pattern="{trial_id}.mp4",
-        video_output_size=(224, 224),
+        # video options (used only because "images" is included)
+        video_root=None,                # default: same folder as CSV
+        video_pattern="{trial_id}.mp4", # e.g., t1.mp4
+        video_output_size=(224, 224),   # frames returned as 224x224
     )
 
     print("Dataset stats:", dataset._get_class_stats())
 
     loader = DataLoader(dataset, batch_size=1, shuffle=False,
-                        collate_fn=MultimodalGestureDataset.collate_fn)
+                        collate_fn=DeskDataset.collate_fn)
 
     batch = next(iter(loader))
+    print(batch)
     print("\nBatch stats:")
     print_batch_stats(batch)
     print(f"\nDataset has {len(dataset)} samples, {dataset.num_classes} classes: {dataset.classes}")
 
     total_samples += len(dataset)
+
+    # quick visual check
     # visualize_dataset_sample(batch, batch_idx=0, save_dir="./viz_refactor")

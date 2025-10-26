@@ -1,14 +1,43 @@
 record_results: true
 
 dataloader_params:
-  experiment_name: "hamid_DS_NOCLUTCH_NOWINDOW"
-  base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
+  experiment_name: "bootcamp_data"
+  dataset_name: "MIDAS"
+  base_path: "/standard/UVA-DSA/MIDAS/Organized/Bootcamp/SuturingV2/Processed/"
   batch_size: 1
-  sample_rate: 10
+  sample_rate: 30
   ignore_clutch: true
   clutch_pressed_value: 0
   drop_neg1: true
-  all_trials: ["t1","t3","t4","t5","t6","t7"]
+  all_trials: [    
+    "S105_T1",
+    "S106_T1",
+    "S106_T2",
+    "S112_T1",
+    "S112_T2",
+    "S116_T1",
+    "S116_T2",
+    "S116_T4",
+    "S116_T5",
+    "S118_T1",
+    "S200_T1",
+    "S201_T1",
+    "S201_T2",
+    "S202_T1",
+    "S203_T1",
+    "S204_T1",
+    "S209_T2",
+    "S210_T1",
+    "S214_T1",
+    "S214_T4",
+    "S214_T6",
+    "S215_T3",
+    "S215_T4",
+    "S217_T2",
+    "S217_T3",
+    "S217_T4",
+    "S218_T1",
+    "S219_T1"]
 
   cv:
     scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat"
@@ -18,7 +47,7 @@ dataloader_params:
     shuffle: true
     val_same_as_test: true
 
-  modalities: ["trakstar"]
+  modalities: ["handkp"]
 
   selections:
     # console: [
@@ -41,32 +70,36 @@ dataloader_params:
     # "trakstar_sensor_0_y","trakstar_sensor_1_y","trakstar_sensor_2_y","trakstar_sensor_3_y",
     # "trakstar_sensor_0_z","trakstar_sensor_1_z","trakstar_sensor_2_z","trakstar_sensor_3_z"
     # ]
-    trakstar: [ 
-          "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
-    "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
-    "trakstar_sensor_0_roll","trakstar_sensor_1_roll","trakstar_sensor_2_roll","trakstar_sensor_3_roll",
-    "trakstar_sensor_0_x_transformed","trakstar_sensor_0_y_transformed","trakstar_sensor_0_z_transformed",
-      "trakstar_sensor_1_x_transformed","trakstar_sensor_1_y_transformed","trakstar_sensor_1_z_transformed",
-      "trakstar_sensor_2_x_transformed","trakstar_sensor_2_y_transformed","trakstar_sensor_2_z_transformed",
-       "trakstar_sensor_3_x_transformed","trakstar_sensor_3_y_transformed","trakstar_sensor_3_z_transformed"
-      #  ,"trakstar_grasp_d0","trakstar_grasp_d1"
-    ]
+    # trakstar: [ 
+    #       "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
+    # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
+    # "trakstar_sensor_0_roll","trakstar_sensor_1_roll","trakstar_sensor_2_roll","trakstar_sensor_3_roll",
+    # "trakstar_sensor_0_x_transformed","trakstar_sensor_0_y_transformed","trakstar_sensor_0_z_transformed",
+    #   "trakstar_sensor_1_x_transformed","trakstar_sensor_1_y_transformed","trakstar_sensor_1_z_transformed",
+    #   "trakstar_sensor_2_x_transformed","trakstar_sensor_2_y_transformed","trakstar_sensor_2_z_transformed",
+    #    "trakstar_sensor_3_x_transformed","trakstar_sensor_3_y_transformed","trakstar_sensor_3_z_transformed"
+    #   #  ,"trakstar_grasp_d0","trakstar_grasp_d1"
+    # ]
     # sw_left: ["sw_left_x"]
     # sw_right: ["sw_right_x"]
-    # hand_keypoints: ["hand_left X","hand_left Y","hand_left Z","hand_left Yaw","hand_left Pitch","hand_left Roll","hand_right X","hand_right Y","hand_right Z","hand_right Yaw","hand_right Pitch","hand_right Roll","hand_left_index_tip_X","hand_left_index_tip_Y","hand_left_index_tip_Z","hand_right_index_tip_X","hand_right_index_tip_Y","hand_right_index_tip_Z","hand_left_thumb_tip_X","hand_left_thumb_tip_Y","hand_left_thumb_tip_Z","hand_right_thumb_tip_X","hand_right_thumb_tip_Y","hand_right_thumb_tip_Z"]
+    handkp: [
+      # "hand_left X","hand_left Y","hand_left Z","hand_left Yaw","hand_left Pitch","hand_left Roll","hand_right X","hand_right Y","hand_right Z","hand_right Yaw","hand_right Pitch","hand_right Roll",
+    "hand_left_index_tip_X","hand_left_index_tip_Y","hand_left_index_tip_Z","hand_right_index_tip_X","hand_right_index_tip_Y","hand_right_index_tip_Z","hand_left_thumb_tip_X","hand_left_thumb_tip_Y","hand_left_thumb_tip_Z","hand_right_thumb_tip_X","hand_right_thumb_tip_Y","hand_right_thumb_tip_Z"
+    ]
 
 
   observation_window: -1
   step: 1
 
   keysteps:
-    S1: "Approach peg"
-    S2: "Align & grasp"
-    S3: "Lift peg"
-    S4: "Transfer peg - Get together"
-    S5: "Transfer peg - Exchange"
-    S6: "Approach pole"
-    S7: "Align & place"
+    8: "Make C Loop"
+    11: "Orient Needle"
+    16: "Pull Needle out of Tissue"
+    17: "Pull Suture"
+    18: "Push Needle Through Tissue"
+    20: "Reach Suture"
+    22: "Square Knot and Cinch"
+    23: "Target Needle"
 
 learning_params:
   lr: 1.0e-5
@@ -78,9 +111,9 @@ learning_params:
 
 tcn_model_params:
   encoder_params:
-    in_channels: 128
-    kernel_size: 5
-    out_channels: 64
+    in_channels: 512
+    kernel_size: 13
+    out_channels: 256
   decoder_params:
     in_channels: 60
     kernel_size: 31
@@ -89,9 +122,9 @@ tcn_model_params:
   num_classes: 8
 
 transformer_params:
-  d_model: 64
+  d_model: 256
   nhead: 8
-  num_layers: 2
+  num_layers: 4
   dropout: 0.1
   batch_first: true
   sample_rate: 48000
@@ -100,6 +133,7 @@ transformer_params:
   n_fft: 1024
   resnet_dim: 2048
   seq_to_one: true
+
 
 
 # optional overrides for build_model_cfg_from_dataloader

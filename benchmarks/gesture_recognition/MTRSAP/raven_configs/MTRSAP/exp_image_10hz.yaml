@@ -2,12 +2,13 @@ record_results: true
 
 dataloader_params:
   experiment_name: "hamid_resnet_DS_NOCLUTCH_NOWINDOW_30hz"
+  dataset_name: "MIDAS"
   base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
   batch_size: 1
-  sample_rate: 10
+  sample_rate: 30
   ignore_clutch: true
   clutch_pressed_value: 0
-  drop_neg1: false
+  drop_neg1: true
   all_trials: ["t1","t3","t4","t5","t6","t7"]
 
   cv:
@@ -65,11 +66,36 @@ learning_params:
   lr_drop: 30
   best_chkpoint: "./checkpoints/job_xxx/val_best_model.pt"
 
+# tcn_model_params:
+#   encoder_params:
+#     in_channels: 128
+#     kernel_size: 5
+#     out_channels: 64
+#   decoder_params:
+#     in_channels: 60
+#     kernel_size: 31
+#     out_channels: 60
+#   input_dim: 64
+#   num_classes: 8
+
+# transformer_params:
+#   d_model: 64
+#   nhead: 8
+#   num_layers: 2
+#   dropout: 0.1
+#   batch_first: true
+#   sample_rate: 48000
+#   n_mels: 64
+#   hop_length: 512
+#   n_fft: 1024
+#   resnet_dim: 2048
+#   seq_to_one: true
+
 tcn_model_params:
   encoder_params:
-    in_channels: 128
-    kernel_size: 5
-    out_channels: 64
+    in_channels: 512
+    kernel_size: 13
+    out_channels: 256
   decoder_params:
     in_channels: 60
     kernel_size: 31
@@ -78,9 +104,9 @@ tcn_model_params:
   num_classes: 8
 
 transformer_params:
-  d_model: 64
+  d_model: 256
   nhead: 8
-  num_layers: 2
+  num_layers: 4
   dropout: 0.1
   batch_first: true
   sample_rate: 48000

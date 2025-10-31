@@ -84,7 +84,7 @@ dataloader_params:
     # sw_right: ["sw_right_x"]
     handkp: [
       # "hand_left X","hand_left Y","hand_left Z","hand_left Yaw","hand_left Pitch","hand_left Roll","hand_right X","hand_right Y","hand_right Z","hand_right Yaw","hand_right Pitch","hand_right Roll",
-    "hand_left_index_tip_X","hand_left_index_tip_Y","hand_left_index_tip_Z","hand_right_index_tip_X","hand_right_index_tip_Y","hand_right_index_tip_Z","hand_left_thumb_tip_X","hand_left_thumb_tip_Y","hand_left_thumb_tip_Z","hand_right_thumb_tip_X","hand_right_thumb_tip_Y","hand_right_thumb_tip_Z"
+    "left_index_tip_X","left_index_tip_Y","left_index_tip_Z","right_index_tip_X","right_index_tip_Y","right_index_tip_Z","left_thumb_tip_X","left_thumb_tip_Y","left_thumb_tip_Z","right_thumb_tip_X","right_thumb_tip_Y","right_thumb_tip_Z"
     ]
 
 
@@ -152,3 +152,4 @@ mstcn_model_params:
   num_layers_PG: 11
   num_layers_R: 10
   num_R: 3
+

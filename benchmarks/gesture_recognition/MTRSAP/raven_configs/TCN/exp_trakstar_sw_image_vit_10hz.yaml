@@ -1,12 +1,13 @@
 record_results: true
 
 dataloader_params:
-  experiment_name: "hamid_DS_NOCLUTCH_WINDOW_10hz"
+  experiment_name: "hamid_DS_NOCLUTCH_NOWINDOW"
   base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
   batch_size: 1
   sample_rate: 10
   ignore_clutch: true
   clutch_pressed_value: 0
+  drop_neg1: true
   all_trials: ["t1","t3","t4","t5","t6","t7"]
 
   cv:
@@ -17,34 +18,36 @@ dataloader_params:
     shuffle: true
     val_same_as_test: true
 
-  modalities: ["console"]
+  modalities: ["trakstar","sw_left","sw_right","images"]
 
   selections:
-    console: [
-      "console_pos0","console_pos1","console_pos2","console_pos3","console_pos4","console_pos5",
-      "console_rot0","console_rot1","console_rot2","console_rot3","console_rot4","console_rot5",
-      "console_aux0","console_aux1","console_pedal"
-    ]
+    # console: [
+    #   "console_pos0","console_pos1","console_pos2","console_pos3","console_pos4","console_pos5",
+    #   "console_rot0","console_rot1","console_rot2","console_rot3","console_rot4","console_rot5",
+    #   "console_aux0","console_aux1","console_pedal"
+    # ]
     # raven: [
     # "raven_field.pos0","raven_field.pos1","raven_field.pos2","raven_field.pos3","raven_field.pos4","raven_field.pos5",
     # "raven_field.ori0","raven_field.ori1","raven_field.ori2","raven_field.ori3","raven_field.ori4","raven_field.ori5"
     # # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
     # # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
     # ] # left rave: 0, 1 ,2 , right: 3,4,5
-    # images: ["resnet"]    # ✅ required placeholder even if no variables to select
-    # trakstar: [
-    # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
-    # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
-    # "trakstar_sensor_0_roll","trakstar_sensor_1_roll","trakstar_sensor_2_roll","trakstar_sensor_3_roll",
-    # "trakstar_sensor_0_x","trakstar_sensor_1_x","trakstar_sensor_2_x","trakstar_sensor_3_x",
-    # "trakstar_sensor_0_y","trakstar_sensor_1_y","trakstar_sensor_2_y","trakstar_sensor_3_y",
-    # "trakstar_sensor_0_z","trakstar_sensor_1_z","trakstar_sensor_2_z","trakstar_sensor_3_z"
-    # ]
-    # sw_left: ["sw_left_x"]
-    # sw_right: ["sw_right_x"]
+    images: ["timm"]    # ✅ required placeholder even if no variables to select
+    trakstar: [
+    "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
+    "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
+    "trakstar_sensor_0_roll","trakstar_sensor_1_roll","trakstar_sensor_2_roll","trakstar_sensor_3_roll",
+    "trakstar_sensor_0_x_transformed","trakstar_sensor_1_x_transformed","trakstar_sensor_2_x_transformed","trakstar_sensor_3_x_transformed",
+    "trakstar_sensor_0_y_transformed","trakstar_sensor_1_y_transformed","trakstar_sensor_2_y_transformed","trakstar_sensor_3_y_transformed",
+    "trakstar_sensor_0_z_transformed","trakstar_sensor_1_z_transformed","trakstar_sensor_2_z_transformed","trakstar_sensor_3_z_transformed"
+        ,"trakstar_grasp_d0","trakstar_grasp_d1"
+
+    ]
+    sw_left: ["sw_left_x","sw_left_y","sw_left_z"]
+    sw_right: ["sw_right_x","sw_right_y","sw_right_z"]
 
 
-  observation_window: 10
+  observation_window: -1
   step: 1
 
   keysteps:
@@ -57,22 +60,27 @@ dataloader_params:
     S7: "Align & place"
 
 learning_params:
-  lr: 1.0e-5
+  lr: 5.0e-5
   epochs: 30
-  weight_decay: 1.0e-5
+  weight_decay: 5.0e-4
   patience: 30
   lr_drop: 30
   best_chkpoint: "./checkpoints/job_xxx/val_best_model.pt"
 
 tcn_model_params:
   encoder_params:
-    in_channels: 128
-    kernel_size: 13
-    out_channels: 64
+    input_size: 14
+    kernel_size: 23
+    layer_sizes: [64, 96, 128]
+    layer_type: "TempConv"
+    norm_type: "Channel"
   decoder_params:
-    in_channels: 60
-    kernel_size: 31
-    out_channels: 60
+    input_size: 128
+    kernel_size: 23
+    layer_sizes: [96, 64, 64]
+    layer_type: "TempConv"
+    norm_type: "Channel"
+    transposed_conv: true
   input_dim: 64
   num_classes: 8
 

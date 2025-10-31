@@ -1,23 +1,56 @@
 record_results: true
 
 dataloader_params:
-  experiment_name: "hamid_trakstar_sw_img_resnet_10hz"
-  base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
+  experiment_name: "bootcamp_data"
+  dataset_name: "MIDAS"
+  base_path: "/standard/UVA-DSA/MIDAS/Organized/Bootcamp/SuturingV2/Processed/"
   batch_size: 1
-  sample_rate: 10
+  sample_rate: 30
   ignore_clutch: true
   clutch_pressed_value: 0
-  all_trials: ["t1","t3","t4","t5","t6","t7"]
+  drop_neg1: true
+  all_trials: [    
+    "S105_T1",
+    "S106_T1",
+    "S106_T2",
+    "S112_T1",
+    "S112_T2",
+    "S116_T1",
+    "S116_T2",
+    "S116_T4",
+    "S116_T5",
+    "S118_T1",
+    "S200_T1",
+    "S201_T1",
+    "S201_T2",
+    "S202_T1",
+    "S203_T1",
+    "S204_T1",
+    "S209_T2",
+    "S210_T1",
+    "S214_T1",
+    "S214_T4",
+    "S214_T6",
+    "S215_T3",
+    "S215_T4",
+    "S217_T2",
+    "S217_T3",
+    "S217_T4",
+    "S218_T1",
+    "S219_T1"
+    ]
+
 
   cv:
-    scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat"
+    scheme: "gesture_flat" # "gesture_flat" or "group_k_fold" or "gesture_flat" or "trial_split"
     k: 5
-    val_ratio: 0.25
+    val_ratio: 0.2
+    test_ratio: 0.2
     seed: 42
     shuffle: true
-    val_same_as_test: true
+    val_same_as_test: false
 
-  modalities: ["images","trakstar","sw_left","sw_right"]
+  modalities: ["trakstar", "images"]
 
   selections:
     # console: [
@@ -31,7 +64,15 @@ dataloader_params:
     # # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
     # # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
     # ] # left rave: 0, 1 ,2 , right: 3,4,5
-    images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    images: ["resnet_v2"]    # ✅ required placeholder even if no variables to select
+    # trakstar: [
+    # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
+    # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
+    # "trakstar_sensor_0_roll","trakstar_sensor_1_roll","trakstar_sensor_2_roll","trakstar_sensor_3_roll",
+    # "trakstar_sensor_0_x","trakstar_sensor_1_x","trakstar_sensor_2_x","trakstar_sensor_3_x",
+    # "trakstar_sensor_0_y","trakstar_sensor_1_y","trakstar_sensor_2_y","trakstar_sensor_3_y",
+    # "trakstar_sensor_0_z","trakstar_sensor_1_z","trakstar_sensor_2_z","trakstar_sensor_3_z"
+    # ]
     trakstar: [ 
           "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
     "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
@@ -40,27 +81,30 @@ dataloader_params:
       "trakstar_sensor_1_x_transformed","trakstar_sensor_1_y_transformed","trakstar_sensor_1_z_transformed",
       "trakstar_sensor_2_x_transformed","trakstar_sensor_2_y_transformed","trakstar_sensor_2_z_transformed",
        "trakstar_sensor_3_x_transformed","trakstar_sensor_3_y_transformed","trakstar_sensor_3_z_transformed"
-      #  ,"trakstar_grasp_d0","trakstar_grasp_d1"
     ]
-    sw_left: ["sw_left_x","sw_left_y","sw_left_z"]
-    sw_right: ["sw_right_x", "sw_right_y", "sw_right_z"]
+    # sw_left: ["sw_left_x"]
+    # sw_right: ["sw_right_x"]
+    # hand_keypoints: ["hand_left X","hand_left Y","hand_left Z","hand_left Yaw","hand_left Pitch","hand_left Roll","hand_right X","hand_right Y","hand_right Z","hand_right Yaw","hand_right Pitch","hand_right Roll","hand_left_index_tip_X","hand_left_index_tip_Y","hand_left_index_tip_Z","hand_right_index_tip_X","hand_right_index_tip_Y","hand_right_index_tip_Z","hand_left_thumb_tip_X","hand_left_thumb_tip_Y","hand_left_thumb_tip_Z","hand_right_thumb_tip_X","hand_right_thumb_tip_Y","hand_right_thumb_tip_Z"]
 
 
-  observation_window: -1
+  observation_window: -1 # clips
   step: 1
 
   keysteps:
-    S1: "Approach peg"
-    S2: "Align & grasp"
-    S3: "Lift peg"
-    S4: "Transfer peg - Get together"
-    S5: "Transfer peg - Exchange"
-    S6: "Approach pole"
-    S7: "Align & place"
+    8: "Make C Loop"
+    11: "Orient Needle"
+    16: "Pull Needle out of Tissue"
+    17: "Pull Suture"
+    18: "Push Needle Through Tissue"
+    20: "Reach Suture"
+    22: "Square Knot and Cinch"
+    23: "Target Needle"
+
+
 
 learning_params:
-  lr: 1.0e-5
-  epochs: 100
+  lr: 5.0e-5 # 0.0005 
+  epochs: 30
   weight_decay: 1.0e-5
   patience: 30
   lr_drop: 30
@@ -95,14 +139,11 @@ transformer_params:
 # optional overrides for build_model_cfg_from_dataloader
 model_cfg_overrides:
   d_model: 128
-  nhead: 8
-  num_layers: 4
+  nhead: 4
+  num_layers: 2
   dropout: 0.1
-  seq_to_one: true
-  causal_tcn: true
-  dim_feedforward: 512
-  tcn_channels: [128, 128, 128]
-
+  fusion: "cross_attend"
+  modality_dropout_p: 0.1
 
 
 mstcn_model_params:

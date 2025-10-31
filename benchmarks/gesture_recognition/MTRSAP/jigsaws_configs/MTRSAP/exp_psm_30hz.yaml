@@ -24,7 +24,7 @@ dataloader_params:
 
 
   cv:
-    scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat" or "louo"
+    scheme: "louo" # "leave_one_out" or "k_fold" or "louo" or "louo"
     k: 5
     val_ratio: 0.2
     seed: 42

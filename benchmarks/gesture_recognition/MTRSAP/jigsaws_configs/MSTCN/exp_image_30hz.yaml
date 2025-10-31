@@ -24,7 +24,7 @@ dataloader_params:
 
 
   cv:
-    scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat" or "louo"
+    scheme: "louo" # "leave_one_out" or "k_fold" or "louo" or "louo"
     k: 5
     val_ratio: 0.2
     seed: 42
@@ -34,7 +34,7 @@ dataloader_params:
   modalities: ["images"]
 
   selections:
-    images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    images: ["resnet_v2"]    # ✅ required placeholder even if no variables to select
     # PSM: ["PSML_position_x","PSML_position_y","PSML_position_z","PSML_velocity_x","PSML_velocity_y","PSML_velocity_z","PSML_orientation_x","PSML_orientation_y","PSML_orientation_z","PSML_orientation_w","PSML_gripper_angle","PSMR_position_x","PSMR_position_y","PSMR_position_z","PSMR_velocity_x","PSMR_velocity_y","PSMR_velocity_z","PSMR_orientation_x","PSMR_orientation_y","PSMR_orientation_z","PSMR_orientation_w","PSMR_gripper_angle"]
 
   observation_window: -1

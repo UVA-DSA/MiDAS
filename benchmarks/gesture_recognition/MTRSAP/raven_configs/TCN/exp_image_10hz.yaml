@@ -32,7 +32,7 @@ dataloader_params:
     # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
     # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
     # ]
-    images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    images: ["resnet_v2"]    # ✅ required placeholder even if no variables to select
     # trakstar: [
     # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
     # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
@@ -59,7 +59,7 @@ dataloader_params:
 
 learning_params:
   lr: 5.0e-5
-  epochs: 30
+  epochs: 90
   weight_decay: 5.0e-4
   patience: 30
   lr_drop: 30

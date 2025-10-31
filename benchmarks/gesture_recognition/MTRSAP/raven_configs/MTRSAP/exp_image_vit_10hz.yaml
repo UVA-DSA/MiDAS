@@ -1,12 +1,13 @@
 record_results: true
 
 dataloader_params:
-  experiment_name: "hamid_DS_NOCLUTCH_WINDOW_10hz"
+  experiment_name: "hamid_resnet_DS_NOCLUTCH_NOWINDOW_30hz"
   base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
   batch_size: 1
   sample_rate: 10
   ignore_clutch: true
   clutch_pressed_value: 0
+  drop_neg1: true
   all_trials: ["t1","t3","t4","t5","t6","t7"]
 
   cv:
@@ -31,7 +32,7 @@ dataloader_params:
     # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
     # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
     # ]
-    images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    images: ["timm"]    # ✅ required placeholder even if no variables to select
     # trakstar: [
     # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
     # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
@@ -44,7 +45,7 @@ dataloader_params:
     # sw_right: ["sw_right_x"]
 
 
-  observation_window: 10
+  observation_window: -1
   step: 1
 
   keysteps:
@@ -58,7 +59,7 @@ dataloader_params:
 
 learning_params:
   lr: 1.0e-5
-  epochs: 100
+  epochs: 30
   weight_decay: 1.0e-5
   patience: 30
   lr_drop: 30
@@ -67,7 +68,7 @@ learning_params:
 tcn_model_params:
   encoder_params:
     in_channels: 128
-    kernel_size: 13
+    kernel_size: 5
     out_channels: 64
   decoder_params:
     in_channels: 60
@@ -78,9 +79,9 @@ tcn_model_params:
 
 transformer_params:
   d_model: 64
-  nhead: 4
+  nhead: 8
   num_layers: 2
-  dropout: 0.5
+  dropout: 0.1
   batch_first: true
   sample_rate: 48000
   n_mels: 64

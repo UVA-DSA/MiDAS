@@ -7,6 +7,7 @@ dataloader_params:
   sample_rate: 10
   ignore_clutch: true
   clutch_pressed_value: 0
+  drop_neg1: true
   all_trials: ["t1","t3","t4","t5","t6","t7"]
 
   cv:
@@ -17,26 +18,21 @@ dataloader_params:
     shuffle: true
     val_same_as_test: true
 
-  modalities: ["console"]
+  modalities: ["images"]
 
   selections:
-    console: [
-      "console_pos0_transformed","console_pos1_transformed","console_pos2_transformed","console_pos3_transformed","console_pos4_transformed","console_pos5_transformed",
-      "console_rot0","console_rot1","console_rot2","console_rot3","console_rot4","console_rot5",
-      "console_aux0","console_aux1","console_pedal"
-    ]
     # console: [
     #   "console_pos0","console_pos1","console_pos2","console_pos3","console_pos4","console_pos5",
-    #   "console_rot0","console_rot1","console_rot2","console_rot3","console_rot4","console_rot5"
-    #   # "console_aux0","console_aux1","console_pedal"
+    #   "console_rot0","console_rot1","console_rot2","console_rot3","console_rot4","console_rot5",
+    #   "console_aux0","console_aux1","console_pedal"
     # ]
     # raven: [
     # "raven_field.pos0","raven_field.pos1","raven_field.pos2","raven_field.pos3","raven_field.pos4","raven_field.pos5",
-    # "raven_field.ori0","raven_field.ori1","raven_field.ori2","raven_field.ori3","raven_field.ori4","raven_field.ori5"
-    # # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
-    # # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
-    # ] # left rave: 0, 1 ,2 , right: 3,4,5
-    # images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    # "raven_field.ori0","raven_field.ori1","raven_field.ori2","raven_field.ori3","raven_field.ori4","raven_field.ori5",
+    # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
+    # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
+    # ]
+    images: ["timm"]    # ✅ required placeholder even if no variables to select
     # trakstar: [
     # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
     # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
@@ -62,7 +58,7 @@ dataloader_params:
     S7: "Align & place"
 
 learning_params:
-  lr: 1.0e-5
+  lr: 5.0e-5 # 0.0005 
   epochs: 30
   weight_decay: 1.0e-5
   patience: 30

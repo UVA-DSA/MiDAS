@@ -2,15 +2,17 @@ record_results: true
 
 dataloader_params:
   experiment_name: "hamid_resnet_DS_NOCLUTCH_NOWINDOW_30hz"
+  dataset_name: "MIDAS"
   base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
   batch_size: 1
   sample_rate: 10
   ignore_clutch: true
   clutch_pressed_value: 0
+  drop_neg1: true
   all_trials: ["t1","t3","t4","t5","t6","t7"]
 
   cv:
-    scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat"
+    scheme: "gesture_flat" # "leave_one_out" or "group_k_fold" or "gesture_flat"
     k: 5
     val_ratio: 0.25
     seed: 42
@@ -31,7 +33,7 @@ dataloader_params:
     # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
     # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
     # ]
-    images: ["resnet_raven"]    # ✅ required placeholder even if no variables to select
+    images: ["resnet_v2"]    # ✅ required placeholder even if no variables to select
     # trakstar: [
     # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
     # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
@@ -58,7 +60,7 @@ dataloader_params:
 
 learning_params:
   lr: 1.0e-5
-  epochs: 50
+  epochs: 30
   weight_decay: 1.0e-5
   patience: 30
   lr_drop: 30
@@ -66,8 +68,8 @@ learning_params:
 
 tcn_model_params:
   encoder_params:
-    in_channels: 2048
-    kernel_size: 31
+    in_channels: 512
+    kernel_size: 13
     out_channels: 256
   decoder_params:
     in_channels: 60

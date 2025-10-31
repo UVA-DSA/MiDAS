@@ -1,15 +1,45 @@
 record_results: true
 
 dataloader_params:
-  experiment_name: "hamid_resnet_DS_NOCLUTCH_NOWINDOW_30hz"
-  base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
+  experiment_name: "bootcamp_data"
+  dataset_name: "MIDAS"
+  base_path: "/standard/UVA-DSA/MIDAS/Organized/Bootcamp/SuturingV2/Processed/"
   batch_size: 1
-  sample_rate: 10
-  observation_window: -1
-  step: 1
+  sample_rate: 30
   ignore_clutch: true
   clutch_pressed_value: 0
-  all_trials: ["t1","t3","t4","t5","t6","t7"]
+  drop_neg1: true
+  all_trials: [    
+    "S105_T1",
+    "S106_T1",
+    "S106_T2",
+    "S112_T1",
+    "S112_T2",
+    "S116_T1",
+    "S116_T2",
+    "S116_T4",
+    "S116_T5",
+    "S118_T1",
+    "S200_T1",
+    "S201_T1",
+    "S201_T2",
+    "S202_T1",
+    "S203_T1",
+    "S204_T1",
+    "S209_T2",
+    "S210_T1",
+    "S214_T1",
+    "S214_T4",
+    "S214_T6",
+    "S215_T3",
+    "S215_T4",
+    "S217_T2",
+    "S217_T3",
+    "S217_T4",
+    "S218_T1",
+    "S219_T1"
+    ]
+
 
   cv:
     scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat"
@@ -19,7 +49,7 @@ dataloader_params:
     shuffle: true
     val_same_as_test: true
 
-  modalities: ["raven"]
+  modalities: ["images"]
 
   selections:
     # console: [
@@ -27,12 +57,14 @@ dataloader_params:
     #   "console_rot0","console_rot1","console_rot2","console_rot3","console_rot4","console_rot5",
     #   "console_aux0","console_aux1","console_pedal"
     # ]
-    raven: [
-    "raven_field.pos0","raven_field.pos1","raven_field.pos2","raven_field.pos3","raven_field.pos4","raven_field.pos5",
-    "raven_field.ori0","raven_field.ori1","raven_field.ori2","raven_field.ori3","raven_field.ori4","raven_field.ori5",
-    "raven_field.grasp_d0","raven_field.grasp_d1"
-    ] # left rave: 0, 1 ,2 , right: 3,4,5
+    # raven: [
+    # "raven_field.pos0","raven_field.pos1","raven_field.pos2","raven_field.pos3","raven_field.pos4","raven_field.pos5",
+    # "raven_field.ori0","raven_field.ori1","raven_field.ori2","raven_field.ori3","raven_field.ori4","raven_field.ori5",
+    # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
+    # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
+    # ]
     # images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    images: ["timm"]    # ✅ required placeholder even if no variables to select
     # trakstar: [
     # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
     # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
@@ -45,18 +77,21 @@ dataloader_params:
     # sw_right: ["sw_right_x"]
 
 
+  observation_window: -1
+  step: 1
 
   keysteps:
-    S1: "Approach peg"
-    S2: "Align & grasp"
-    S3: "Lift peg"
-    S4: "Transfer peg - Get together"
-    S5: "Transfer peg - Exchange"
-    S6: "Approach pole"
-    S7: "Align & place"
+    8: "Make C Loop"
+    11: "Orient Needle"
+    16: "Pull Needle out of Tissue"
+    17: "Pull Suture"
+    18: "Push Needle Through Tissue"
+    20: "Reach Suture"
+    22: "Square Knot and Cinch"
+    23: "Target Needle"
 
 learning_params:
-  lr: 1.0e-5
+  lr: 5.0e-5 # 0.0005 
   epochs: 30
   weight_decay: 1.0e-5
   patience: 30

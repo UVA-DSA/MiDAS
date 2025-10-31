@@ -3,6 +3,7 @@ record_results: true
 dataloader_params:
   experiment_name: "hamid_trakstar_sw_10hz"
   base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
+  dataset_name: "MIDAS"
   batch_size: 1
   sample_rate: 10
   ignore_clutch: true

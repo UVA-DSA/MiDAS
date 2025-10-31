@@ -2,6 +2,7 @@ record_results: true
 
 dataloader_params:
   experiment_name: "hamid_resnet_DS_NOCLUTCH_NOWINDOW_30hz"
+  dataset_name: "MIDAS"
   base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
   batch_size: 1
   sample_rate: 10
@@ -57,8 +58,8 @@ dataloader_params:
     S7: "Align & place"
 
 learning_params:
-  lr: 5.0e-5
-  epochs: 60
+  lr: 1.0e-5
+  epochs: 30
   weight_decay: 1.0e-5
   patience: 30
   lr_drop: 30

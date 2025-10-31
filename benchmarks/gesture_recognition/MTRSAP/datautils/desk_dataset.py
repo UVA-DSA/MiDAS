@@ -323,9 +323,11 @@ class DeskDataset(Dataset):
         "resnet_deskpt": "resnet_deskpt",
         "resnet_deskpt_v2": "resnet_deskpt_v2",
         "resnet_raven": "resnet_raven",
+        "resnet_v2": "resnet_v2",
         "dinov3": "dinov3",
         "i3d_flow":    "flow",
-        "i3d_rgb":     "rgb"
+        "i3d_rgb":     "rgb",
+        "timm":        "timm",
         # add more here later
     }
 
@@ -662,9 +664,12 @@ class DeskDataset(Dataset):
             "resnet_deskpt": 2048,
             "resnet_deskpt_v2": 2048,
             "resnet_raven": 2048,
+            "resnet_v2" : 256,
             "dinov3": 1024,   # adjust to your dump
             "i3d_rgb": 1024,  # adjust
-            "i3d_flow": 1024  # adjust
+            "i3d_flow": 1024,  # adjust,
+            "timm": 1024     # adjust
+
         }
 
         feats_list = []
@@ -783,8 +788,8 @@ class DeskDataset(Dataset):
         # images: features (concatenated over selected types)
         im_feats = self._load_clip_image_features(start, end)
         # print(f"Image features shape: {im_feats.shape if im_feats is not None else 'None'}")
-        if im_feats is None:
-            print(f"[WARN] No image features loaded for sample index {i} with label {code} (trial_id={item['trial_id']})")
+        # if im_feats is None:
+        #     print(f"[WARN] No image features loaded for sample index {i} with label {code} (trial_id={item['trial_id']})")
         if im_feats is not None:
             item["images_feat"] = im_feats  # [T, F_total]
 

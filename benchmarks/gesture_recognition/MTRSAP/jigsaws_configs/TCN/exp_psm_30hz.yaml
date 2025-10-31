@@ -23,7 +23,7 @@ dataloader_params:
     ]
 
   cv:
-    scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat" or "louo"
+    scheme: "louo" # "leave_one_out" or "k_fold" or "louo" or "louo"
     k: 5
     val_ratio: 0.2
     seed: 42
@@ -40,13 +40,22 @@ dataloader_params:
   step: 1
 
   keysteps:
-    S1: "Approach peg"
-    S2: "Align & grasp"
-    S3: "Lift peg"
-    S4: "Transfer peg - Get together"
-    S5: "Transfer peg - Exchange"
-    S6: "Approach pole"
-    S7: "Align & place"
+    G1:  "Approach needle with right hand"
+    G2:  "Align and grasp needle"
+    G3:  "Insert and push needle through tissue"
+    G4:  "Transfer needle from left to right"
+    G5:  "Center and stabilize needle"
+    G6:  "Pull suture with left hand"
+    # G7:  "Pull suture with right hand"
+    G8:  "Orient needle for next pass"
+    G9:  "Assist tightening with right hand"
+    G10: "Loosen and adjust suture"
+    G11: "Drop suture and reposition to endpoints"
+    # G12: "Approach needle with left hand"
+    # G13: "Form C-loop with right hand"
+    # G14: "Reach for suture with right hand"
+    # G15: "Pull suture using both hands"
+
 
 
 learning_params:

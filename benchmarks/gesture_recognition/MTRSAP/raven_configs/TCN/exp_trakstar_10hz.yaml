@@ -2,6 +2,7 @@ record_results: true
 
 dataloader_params:
   experiment_name: "hamid_DS_NOCLUTCH_NOWINDOW"
+  dataset_name: "MIDAS"
   base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
   batch_size: 1
   sample_rate: 10
@@ -61,7 +62,7 @@ dataloader_params:
 
 learning_params:
   lr: 5.0e-5
-  epochs: 30
+  epochs: 90
   weight_decay: 5.0e-4
   patience: 30
   lr_drop: 30

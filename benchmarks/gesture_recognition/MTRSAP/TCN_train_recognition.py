@@ -236,6 +236,16 @@ if __name__ == "__main__":
         args.dataloader_params['train_class_stats'] = train_class_stats
         args.dataloader_params['val_class_stats'] = val_class_stats
 
+        # save the class stats for reference
+        stats_json = f"{fold_results_dir}/{fi}_class_stats.json"
+        write_json(stats_json, {
+            "train_class_stats": train_class_stats,
+            "val_class_stats": val_class_stats,
+            "test_class_stats": test_class_stats,
+        })
+        print(f"Saved class stats to: {stats_json}")
+
+
         print(f"Training samples: {len(train_loader.dataset)}, Validation samples: {len(val_loader.dataset)}, Test samples: {len(test_loader.dataset)}")
         print_one_batch(train_loader)
 

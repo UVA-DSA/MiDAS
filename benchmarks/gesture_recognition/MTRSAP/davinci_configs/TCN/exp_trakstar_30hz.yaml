@@ -3,12 +3,12 @@ record_results: true
 dataloader_params:
   experiment_name: "bootcamp_data"
   dataset_name: "MIDAS"
-  base_path: "/standard/UVA-DSA/MIDAS/Organized/Bootcamp/Suturing/Processed/"
+  base_path: "/standard/UVA-DSA/MIDAS/Organized/Bootcamp/SuturingV2/Processed/"
   batch_size: 1
   sample_rate: 30
   ignore_clutch: true
   clutch_pressed_value: 0
-  drop_neg1: true
+  drop_neg1: false
   all_trials: [    
     "S105_T1",
     "S106_T1",

@@ -338,7 +338,7 @@ class MultimodalGestureDataset(Dataset):
         "console":  lambda c: c.startswith("console_"),
         "raven":    lambda c: c.startswith("raven_"),
         "pedals":   lambda c: c.startswith("Pedal "),
-        "handkp":   lambda c: c.startswith("hand_"),
+        "handkp":   lambda c: c.startswith("left_") or c.startswith("right_"),
     }
 
     # map selection token -> filename suffix for features
@@ -347,9 +347,12 @@ class MultimodalGestureDataset(Dataset):
         "resnet_deskpt": "resnet_deskpt",
         "resnet_deskpt_v2": "resnet_deskpt_v2",
         "resnet_raven": "resnet_raven",
+        "resnet_v2": "resnet_v2",
+        "resnet_v3": "resnet_v3",
         "dinov3": "dinov3",
         "i3d_flow":    "flow",
-        "i3d_rgb":     "rgb"
+        "i3d_rgb":     "rgb",
+        "timm": "timm",
         # add more here later
     }
 

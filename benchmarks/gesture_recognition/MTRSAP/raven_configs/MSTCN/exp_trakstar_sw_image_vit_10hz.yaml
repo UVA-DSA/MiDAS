@@ -1,12 +1,13 @@
 record_results: true
 
 dataloader_params:
-  experiment_name: "hamid_trakstar_sw_10hz"
+  experiment_name: "hamid_DS_NOCLUTCH_NOWINDOW"
   base_path: "/standard/UVA-DSA/MIDAS/Organized/final_data/"
   batch_size: 1
   sample_rate: 10
   ignore_clutch: true
   clutch_pressed_value: 0
+  drop_neg1: true
   all_trials: ["t1","t3","t4","t5","t6","t7"]
 
   cv:
@@ -17,7 +18,7 @@ dataloader_params:
     shuffle: true
     val_same_as_test: true
 
-  modalities: ["trakstar","sw_left","sw_right"]
+  modalities: ["trakstar","sw_left","sw_right", "images"]
 
   selections:
     # console: [
@@ -31,19 +32,25 @@ dataloader_params:
     # # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
     # # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
     # ] # left rave: 0, 1 ,2 , right: 3,4,5
-    # images: ["resnet"]    # ✅ required placeholder even if no variables to select
-    trakstar: [ 
-          "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
+    images: ["timm"]    # ✅ required placeholder even if no variables to select
+    trakstar: [
+    "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
     "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
     "trakstar_sensor_0_roll","trakstar_sensor_1_roll","trakstar_sensor_2_roll","trakstar_sensor_3_roll",
-    "trakstar_sensor_0_x_transformed","trakstar_sensor_0_y_transformed","trakstar_sensor_0_z_transformed",
-      "trakstar_sensor_1_x_transformed","trakstar_sensor_1_y_transformed","trakstar_sensor_1_z_transformed",
-      "trakstar_sensor_2_x_transformed","trakstar_sensor_2_y_transformed","trakstar_sensor_2_z_transformed",
-       "trakstar_sensor_3_x_transformed","trakstar_sensor_3_y_transformed","trakstar_sensor_3_z_transformed"
-      #  ,"trakstar_grasp_d0","trakstar_grasp_d1"
+    "trakstar_sensor_0_x_transformed","trakstar_sensor_1_x_transformed","trakstar_sensor_2_x_transformed","trakstar_sensor_3_x_transformed",
+    "trakstar_sensor_0_y_transformed","trakstar_sensor_1_y_transformed","trakstar_sensor_2_y_transformed","trakstar_sensor_3_y_transformed",
+    "trakstar_sensor_0_z_transformed","trakstar_sensor_1_z_transformed","trakstar_sensor_2_z_transformed","trakstar_sensor_3_z_transformed"
+        ,"trakstar_grasp_d0","trakstar_grasp_d1"
+
     ]
     sw_left: ["sw_left_x","sw_left_y","sw_left_z"]
-    sw_right: ["sw_right_x", "sw_right_y", "sw_right_z"]
+    sw_right: ["sw_right_x","sw_right_y","sw_right_z"]
+
+    # handkp: [
+    #   # "hand_left X","hand_left Y","hand_left Z","hand_left Yaw","hand_left Pitch","hand_left Roll","hand_right X","hand_right Y","hand_right Z","hand_right Yaw","hand_right Pitch","hand_right Roll",
+    # "hand_left_index_tip_X","hand_left_index_tip_Y","hand_left_index_tip_Z","hand_right_index_tip_X","hand_right_index_tip_Y","hand_right_index_tip_Z","hand_left_thumb_tip_X","hand_left_thumb_tip_Y","hand_left_thumb_tip_Z","hand_right_thumb_tip_X","hand_right_thumb_tip_Y","hand_right_thumb_tip_Z"
+    # ]
+
 
 
   observation_window: -1
@@ -59,8 +66,8 @@ dataloader_params:
     S7: "Align & place"
 
 learning_params:
-  lr: 1.0e-5
-  epochs: 50
+  lr: 5.0e-5 # 0.0005 
+  epochs: 30
   weight_decay: 1.0e-5
   patience: 30
   lr_drop: 30
@@ -94,15 +101,12 @@ transformer_params:
 
 # optional overrides for build_model_cfg_from_dataloader
 model_cfg_overrides:
-  d_model: 256
-  nhead: 8
-  num_layers: 4
+  d_model: 128
+  nhead: 4
+  num_layers: 2
   dropout: 0.1
-  seq_to_one: true
-  causal_tcn: true
-  dim_feedforward: 1028
-  tcn_channels: [128, 128, 256]
-
+  fusion: "cross_attend"
+  modality_dropout_p: 0.1
 
 
 mstcn_model_params:

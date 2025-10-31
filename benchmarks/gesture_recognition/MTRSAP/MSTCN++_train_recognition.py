@@ -187,8 +187,8 @@ if __name__ == "__main__":
 
 
         # per-fold folders (unique)
-        fold_results_dir = os.path.join(run_root, experiment_name)
-        fold_ckpt_dir = os.path.join(ckpt_root, experiment_name)
+        fold_results_dir = os.path.join(run_root, experiment_name, f"fold_{fi}")
+        fold_ckpt_dir = os.path.join(ckpt_root, experiment_name, f"fold_{fi}")
         os.makedirs(fold_results_dir, exist_ok=True)
         os.makedirs(fold_ckpt_dir, exist_ok=True)
 
@@ -217,9 +217,39 @@ if __name__ == "__main__":
         print(f"Trials (train/val/test): {args.dataloader_params['train_trials']} / {args.dataloader_params['val_trials']} / {args.dataloader_params['test_trials']}")
 
         # Data
-        train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats = MIDAS_get_dataloaders(args)
+        if args.dataloader_params.get('dataset_name', 'MIDAS') == 'MIDAS':
+            print("Using MIDAS dataset...")
+            train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats, class_names = MIDAS_get_dataloaders(args)
+            
+            # invert class_names so we can go from contiguous index → original_id
+            inv_class_names = {v: k for k, v in class_names.items()}
+
+            # build mapping contiguous_index → human-readable name
+            class_id_to_name = {
+                idx: keysteps.get(orig_id, str(orig_id))
+                for idx, orig_id in inv_class_names.items()
+            }
+            print("Class ID → Name mapping:", class_id_to_name)
+        elif args.dataloader_params.get('dataset_name') == 'DESK':
+            print("Using DESK dataset...")
+            train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats = DESK_get_dataloaders(args)
+        elif args.dataloader_params.get('dataset_name') == 'JIGSAWS':
+            print("Using JIGSAWS dataset...")
+            train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats = DESK_get_dataloaders(args) # reuse DESK loader for JIGSAWS
+
+
         args.dataloader_params['train_class_stats'] = train_class_stats
         args.dataloader_params['val_class_stats'] = val_class_stats
+
+        # save the class stats for reference
+        stats_json = f"{fold_results_dir}/{fi}_class_stats.json"
+        write_json(stats_json, {
+            "train_class_stats": train_class_stats,
+            "val_class_stats": val_class_stats,
+            "test_class_stats": test_class_stats,
+        })
+        print(f"Saved class stats to: {stats_json}")
+
 
         print(f"Training samples: {len(train_loader.dataset)}, Validation samples: {len(val_loader.dataset)}, Test samples: {len(test_loader.dataset)}")
         print_one_batch(train_loader)

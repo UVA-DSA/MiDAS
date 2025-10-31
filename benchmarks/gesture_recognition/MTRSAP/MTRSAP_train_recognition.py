@@ -8,6 +8,9 @@ from torch.optim.lr_scheduler import StepLR
 import wandb
 from datetime import datetime
 
+from models.simple_mlp import *
+
+
 import argparse
 import warnings
 import os
@@ -147,7 +150,10 @@ if __name__ == "__main__":
     folds = build_cv_splits(cfg["dataloader_params"])
     print(f"Discovered {len(folds)} folds:")
     for i, f in enumerate(folds):
-        print(f"  [{i}] {f['name']}: train={f['train_trials']}  val={f['val_trials']}  test={f['test_trials']}")
+        print("-" * 20, f" Fold {i} ", "-" * 20)
+        print(f"  [{i}] {f['name']}:\n train={f['train_trials']} \n val={f['val_trials']} \n test={f['test_trials']}")
+    print("-" * 40)
+    
 
     # choose which folds to run
     fold_indices = list(range(len(folds))) if cmd_args.fold_index is None else [cmd_args.fold_index]
@@ -182,8 +188,8 @@ if __name__ == "__main__":
         experiment_name = args.dataloader_params['experiment_name']
 
         # per-fold folders (unique)
-        fold_results_dir = os.path.join(run_root, experiment_name)
-        fold_ckpt_dir = os.path.join(ckpt_root, experiment_name)
+        fold_results_dir = os.path.join(run_root, experiment_name, f"fold_{fi}")
+        fold_ckpt_dir = os.path.join(ckpt_root, experiment_name, f"fold_{fi}")
         os.makedirs(fold_results_dir, exist_ok=True)
         os.makedirs(fold_ckpt_dir, exist_ok=True)
 
@@ -205,6 +211,8 @@ if __name__ == "__main__":
         out_classes = len(keysteps)
         modality = args.dataloader_params['modalities']
         selections = args.dataloader_params['selections']
+        class_names = None
+        class_id_to_name = None
 
         print(f"Keysteps: {keysteps}")
         print(f"Modalities: {modality}")
@@ -212,7 +220,35 @@ if __name__ == "__main__":
         print(f"Trials (train/val/test): {args.dataloader_params['train_trials']} / {args.dataloader_params['val_trials']} / {args.dataloader_params['test_trials']}")
 
         # Data
-        train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats = MIDAS_get_dataloaders(args)
+        if args.dataloader_params.get('dataset_name', 'MIDAS') == 'MIDAS':
+            print("Using MIDAS dataset...")
+            train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats, class_names = MIDAS_get_dataloaders(args)
+            
+            # invert class_names so we can go from contiguous index → original_id
+            inv_class_names = {v: k for k, v in class_names.items()}
+
+            # build mapping contiguous_index → human-readable name
+            class_id_to_name = {
+                idx: keysteps.get(orig_id, str(orig_id))
+                for idx, orig_id in inv_class_names.items()
+            }
+            print("Class ID → Name mapping:", class_id_to_name)
+        elif args.dataloader_params.get('dataset_name') == 'DESK':
+            print("Using DESK dataset...")
+            train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats = DESK_get_dataloaders(args)
+        elif args.dataloader_params.get('dataset_name') == 'JIGSAWS':
+            print("Using JIGSAWS dataset...")
+            train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats = DESK_get_dataloaders(args) # reuse DESK loader for JIGSAWS
+
+        # save the class stats for reference
+        stats_json = f"{fold_results_dir}/{fi}_class_stats.json"
+        write_json(stats_json, {
+            "train_class_stats": train_class_stats,
+            "val_class_stats": val_class_stats,
+            "test_class_stats": test_class_stats,
+        })
+        print(f"Saved class stats to: {stats_json}")
+
         args.dataloader_params['train_class_stats'] = train_class_stats
         args.dataloader_params['val_class_stats'] = val_class_stats
 
@@ -222,6 +258,19 @@ if __name__ == "__main__":
         # Device
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Using device: {device}")
+
+
+        # svm_out = svm_baseline_from_loaders(
+        #     train_loader, val_loader, test_loader,
+        #     args=args, device=device,
+        #     class_names=class_id_to_name,    # {0:'Reach Suture', ...}
+        #     results_dir="./svm_baseline_run2",
+        #     use_pca=True, pca_dim=128,
+        #     agg="meanstd", add_delta=True,   # <- key upgrades
+        #     model_type="rbf"                 # try 'linear' as well and compare
+        # )
+
+        # breakpoint()
 
         # Initial model (with dummy dims)
         args.transformer_params['input_dim'] = 128
@@ -234,10 +283,18 @@ if __name__ == "__main__":
         args.transformer_params['input_dim'] = feature_dim
         args.transformer_params['output_dim'] = out_classes
 
+        model, optimizer, criterion = init_model(args, device)
+
+        print("Number of classes:", out_classes)
 
         # Model reinit with correct dims
         model, optimizer, criterion = init_model(args, device)
+        if hasattr(model, 'count_parameters'):
+            model.count_parameters()
+
         scheduler = StepLR(optimizer, step_size=args.learning_params["lr_drop"], gamma=0.1)
+
+        
 
         # Track best val
         best_val_path = os.path.join(fold_ckpt_dir, 'val_best_model.pt')
@@ -266,7 +323,7 @@ if __name__ == "__main__":
 
             epoch_dir = os.path.join(fold_results_dir, "epochs")
             os.makedirs(epoch_dir, exist_ok=True)
-            _ = test_transtcn_model(best_model, test_loader, criterion, device, wandb_logger, epoch, epoch_dir, args)
+            _ = test_transtcn_model(best_model, test_loader, criterion, device, wandb_logger, epoch, epoch_dir, args, class_names=class_id_to_name)
 
             print("*"*10, "="*10, "*"*10)
 
@@ -276,7 +333,7 @@ if __name__ == "__main__":
             print(f"Loaded best val checkpoint from: {best_val_path}")
 
         final_results = test_transtcn_model(
-            best_model, test_loader, criterion, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args
+            best_model, test_loader, criterion, device, wandb_logger, epoch="final", results_dir=fold_results_dir, args=args, class_names=class_id_to_name
         )
         print(f"[{experiment_name}] Final Test Results: {final_results}")
 

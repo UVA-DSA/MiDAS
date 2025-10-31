@@ -15,6 +15,7 @@ from functools import partial
 import torch.nn.functional as F
 
 from datautils.midas import MultimodalGestureDataset
+from datautils.desk_dataset import DeskDataset
 import torchvision.transforms as tfs
 import numpy as np
 import os
@@ -981,8 +982,49 @@ def MIDAS_get_dataloaders(args):
     fold = args.fold  # your chosen fold dict
     dp = args.dataloader_params
 
+    fold_name = fold.get("name", "unknown_fold")
+
+    print("Using fold: ", fold)
+    print("Using fold name: ", fold_name)
     # ---- Trial-based path (unchanged) ----
-    if not fold.get("use_gesture_flat", False):
+    if "kfold" in fold_name or "loo" in fold_name or "louo" in fold_name:
+        print("\n--- Using TRIAL-BASED split ---\n")
+        print("Train Trials: ", args.dataloader_params["train_trials"])
+        print("Val Trials: ", args.dataloader_params["val_trials"])
+        print("Test Trials: ", args.dataloader_params["test_trials"])
+
+                # ----- 1) Build ONE master class_map (contiguous) -----
+        # Prefer the explicit keysteps dict if provided (stable & human-readable).
+        # keysteps can be like {20: "Reach Suture", 8: "Make C Loop", ...} or {"G1": "...", ...}
+        keysteps = dp.get("keysteps", None)
+
+        if keysteps and isinstance(keysteps, dict) and len(keysteps) > 0:
+            # Keep insertion order of provided keysteps
+            # DeskDataset uses strings in 'gesture_code', so normalize keys to str
+            master_class_map = {str(k): i for i, k in enumerate(keysteps.keys())}
+            class_id_to_name  = {i: keysteps[k] for k, i in master_class_map.items()}
+            class_name_to_id  = {v: i for i, v in class_id_to_name.items()}
+        else:
+            # Fallback: we’ll derive a union of labels from TRAIN trials only (stable for LOUO),
+            # but since we can’t cheaply read CSVs here, we’ll create a tiny bootstrap dataset
+            # to scan gesture codes, then rebuild with the fixed mapping.
+            bootstrap_train = DeskDataset(
+                base_path=dp["base_path"],
+                csv_paths=dp["train_trials"],
+                clip_len=dp["observation_window"],
+                step=dp["step"],
+                include_modalities=dp["modalities"],
+                sample_rate=dp["sample_rate"],
+                modality_selections=dp['selections'],
+                normalize=False,            # <- no stats yet
+            )
+            # Build map in sorted order of observed gesture codes for determinism
+            observed = sorted(map(str, bootstrap_train.df["gesture_code"].dropna().unique().tolist()))
+            master_class_map = {c: i for i, c in enumerate(observed)}
+            class_id_to_name = {i: str(c) for c, i in master_class_map.items()}
+            class_name_to_id = {v: i for i, v in class_id_to_name.items()}
+            # Drop bootstrap dataset to free memory
+            del bootstrap_train
 
         train_dataset = MultimodalGestureDataset(
             base_path=args.dataloader_params["base_path"],
@@ -994,6 +1036,9 @@ def MIDAS_get_dataloaders(args):
             drop_neg1=args.dataloader_params.get("drop_neg1", True),
             # Allowlist patterns (fnmatch)
             modality_selections= args.dataloader_params['selections'],
+            classes_to_allow= args.dataloader_params.get("keysteps", None),
+            class_map=master_class_map,
+
 
             # modality_exclude={
             #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
@@ -1001,6 +1046,9 @@ def MIDAS_get_dataloaders(args):
 
             normalize=True,
         )
+        # Attach helpful mappings for downstream code
+        train_dataset.class_id_to_name = class_id_to_name
+        train_dataset.class_name_to_id = class_name_to_id
 
         val_dataset = MultimodalGestureDataset(
             base_path=args.dataloader_params["base_path"],
@@ -1010,15 +1058,22 @@ def MIDAS_get_dataloaders(args):
             include_modalities=args.dataloader_params["modalities"],
             sample_rate=args.dataloader_params["sample_rate"],
             drop_neg1=args.dataloader_params.get("drop_neg1", True),
+            classes_to_allow= args.dataloader_params.get("keysteps", None),
+
 
 
             modality_selections= args.dataloader_params['selections'],
+            class_map=master_class_map,
 
             # modality_exclude={
             #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
             # },
             normalize=True,
         )
+
+        # Attach helpful mappings for downstream code
+        val_dataset.class_id_to_name = class_id_to_name
+        val_dataset.class_name_to_id = class_name_to_id
 
         test_dataset = MultimodalGestureDataset(
             base_path=args.dataloader_params["base_path"],
@@ -1031,12 +1086,19 @@ def MIDAS_get_dataloaders(args):
             drop_neg1=args.dataloader_params.get("drop_neg1", True),
 
             modality_selections= args.dataloader_params['selections'],
+            classes_to_allow= args.dataloader_params.get("keysteps", None),
+            class_map=master_class_map,
+
 
             # modality_exclude={
             #     "trakstar": ["*elevation*", "*roll*"],  # just in case the allowlist was broad
             # },
             normalize=True,
         )
+
+        # Attach helpful mappings for downstream code
+        test_dataset.class_id_to_name = class_id_to_name
+        test_dataset.class_name_to_id = class_name_to_id
 
         train_class_stats = train_dataset._get_class_stats()
         print("Train class stats: ", train_class_stats)
@@ -1054,101 +1116,16 @@ def MIDAS_get_dataloaders(args):
         test_loader = DataLoader(test_dataset, batch_size=args.dataloader_params["batch_size"], shuffle=False,
                             collate_fn=MultimodalGestureDataset.collate_fn)
         
-        return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+        return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats , class_map
 
-    # else: # simple train/test split
+    elif fold_name == "gesture_flat" and dp["observation_window"] == -1: # simple train/val/test split for clips of gestures
+        # 1) Build a TEMP dataset over all trials just to enumerate clips
+        all_trials = sorted(set(fold["train_trials"]) | set(fold["test_trials"]))
+        print(f"Building TEMP dataset over {len(all_trials)} trials...")
 
-    #     # 1) Build a TEMP dataset over all trials just to enumerate windows
-    #     ds_all_temp = MultimodalGestureDataset(
-    #         base_path=dp.get("base_path", None),
-    #         csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
-    #         clip_len=dp["observation_window"],
-    #         step=dp["step"],
-    #         sample_rate=dp["sample_rate"],
-    #         ignore_clutch=dp.get("ignore_clutch", False),
-    #         clutch_pressed_value=dp.get("clutch_pressed_value", 1),
-    #         drop_neg1=dp.get("drop_neg1", True),
-    #         include_modalities=dp["modalities"],
-    #         modality_selections=dp.get("selections", {}),
-    #         normalize=False,  # IMPORTANT: don't compute stats here
-    #         video_root=dp.get("video_root", None),
-    #         video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
-    #         video_output_size=tuple(dp.get("video_output_size", (224, 224))),
-    #     )
-
-    #     # 2) Stratified split over WINDOWS from ds_all_temp
-    #     y_all = _labels_for_dataset_windows(ds_all_temp)  # returns a list/np.array of class ids per window
-    #     tr_idx, te_idx = stratified_gesture_train_test(
-    #         y_all, test_ratio=fold["flat_test_ratio"], seed=fold["flat_seed"]
-    #     )
-
-    #     # 3) Build an actual TRAIN dataset limited to tr_idx; compute normalization on train only
-    #     ds_tr = MultimodalGestureDataset(
-    #         base_path=dp.get("base_path", None),
-    #         csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
-    #         clip_len=dp["observation_window"],
-    #         step=dp["step"],
-    #         sample_rate=dp["sample_rate"],
-    #         ignore_clutch=dp.get("ignore_clutch", False),
-    #         clutch_pressed_value=dp.get("clutch_pressed_value", 1),
-    #         drop_neg1=dp.get("drop_neg1", True),
-    #         include_modalities=dp["modalities"],
-    #         modality_selections=dp.get("selections", {}),
-    #         normalize=True,                     # <- compute stats here
-    #         video_root=dp.get("video_root", None),
-    #         video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
-    #         video_output_size=tuple(dp.get("video_output_size", (224, 224))),
-    #         selected_indices=tr_idx,            # <- only these windows exist in this instance
-    #     )
-
-    #     # 4) Build TEST dataset limited to te_idx, but REUSE train stats to avoid leakage
-    #     ds_te = MultimodalGestureDataset(
-    #         base_path=dp.get("base_path", None),
-    #         csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
-    #         clip_len=dp["observation_window"],
-    #         step=dp["step"],
-    #         sample_rate=dp["sample_rate"],
-    #         ignore_clutch=dp.get("ignore_clutch", False),
-    #         clutch_pressed_value=dp.get("clutch_pressed_value", 1),
-    #         drop_neg1=dp.get("drop_neg1", True),
-    #         include_modalities=dp["modalities"],
-    #         modality_selections=dp.get("selections", {}),
-    #         normalize=True,
-    #         normalization_stats=ds_tr.norm_stats,  # <- reuse TRAIN mean/std
-    #         video_root=dp.get("video_root", None),
-    #         video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
-    #         video_output_size=tuple(dp.get("video_output_size", (224, 224))),
-    #         selected_indices=te_idx,
-    #     )
-
-    #     # 5) (Optional) sanity: class stats by window
-    #     train_class_stats = ds_tr._get_class_stats()
-    #     test_class_stats  = ds_te._get_class_stats()
-    #     print("Train class stats (windows):", train_class_stats)
-    #     print("Test  class stats (windows):", test_class_stats)
-
-    #     # 6) Build loaders
-    #     train_loader = DataLoader(
-    #         ds_tr, batch_size=dp["batch_size"], shuffle=True,
-    #         num_workers=dp.get("num_workers", 4),
-    #         collate_fn=MultimodalGestureDataset.collate_fn, drop_last=False
-    #     )
-    #     test_loader = DataLoader(
-    #         ds_te, batch_size=dp["batch_size"], shuffle=False,
-    #         num_workers=dp.get("num_workers", 4),
-    #         collate_fn=MultimodalGestureDataset.collate_fn, drop_last=False
-    #     )
-    #     val_loader = test_loader  # <- dummy
-
-
-    #     val_class_stats = test_class_stats  # <- dummy
-    #     return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
-
-    else: # simple train/val/test split
-        # 1) Build a TEMP dataset over all trials just to enumerate windows
         ds_all_temp = MultimodalGestureDataset(
             base_path=dp.get("base_path", None),
-            csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+            csv_paths=all_trials,
             clip_len=dp["observation_window"],
             step=dp["step"],
             sample_rate=dp["sample_rate"],
@@ -1161,10 +1138,13 @@ def MIDAS_get_dataloaders(args):
             video_root=dp.get("video_root", None),
             video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
             video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            classes_to_allow=dp.get("keysteps", None)
         )
 
+        class_map = ds_all_temp.class_map
+
         # 2) Two-stage stratified split: Train/Val/Test
-        y_all = _labels_for_dataset_windows(ds_all_temp)  # returns a list/np.array of class ids per window
+        y_all = _labels_for_dataset_windows(ds_all_temp)  # returns a list/np.array of class ids per clip
 
         # Configure split ratios (adjust these as needed)
         test_ratio = fold.get("test_ratio", 0.20)  # 20% for test
@@ -1190,7 +1170,7 @@ def MIDAS_get_dataloaders(args):
         tr_idx_local = np.array(tr_idx_local)
         val_idx_local = np.array(val_idx_local)
 
-        # Map local indices back to global window indices
+        # Map local indices back to global clip indices
         tr_idx = tr_val_idx[tr_idx_local]
         val_idx = tr_val_idx[val_idx_local]
 
@@ -1214,6 +1194,8 @@ def MIDAS_get_dataloaders(args):
             video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
             video_output_size=tuple(dp.get("video_output_size", (224, 224))),
             selected_indices=tr_idx,  # only training windows
+            classes_to_allow=dp.get("keysteps", None)
+
         )
 
         # 4) Build VALIDATION dataset - reuse train normalization stats
@@ -1234,6 +1216,8 @@ def MIDAS_get_dataloaders(args):
             video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
             video_output_size=tuple(dp.get("video_output_size", (224, 224))),
             selected_indices=val_idx,  # only validation windows
+            classes_to_allow=dp.get("keysteps", None)
+
         )
 
         # 5) Build TEST dataset - reuse train normalization stats
@@ -1254,6 +1238,8 @@ def MIDAS_get_dataloaders(args):
             video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
             video_output_size=tuple(dp.get("video_output_size", (224, 224))),
             selected_indices=te_idx,  # only test windows
+            classes_to_allow=dp.get("keysteps", None)
+
         )
 
         # 6) Print class distribution stats for each split
@@ -1263,9 +1249,9 @@ def MIDAS_get_dataloaders(args):
 
         print("*" * 10, "=" * 10, "*" * 10)
         print("\nClass distribution by split:")
-        print("Train class stats (windows):", train_class_stats)
-        print("Val   class stats (windows):", val_class_stats)
-        print("Test  class stats (windows):", test_class_stats)
+        print("Train class stats:", train_class_stats)
+        print("Val   class stats:", val_class_stats)
+        print("Test  class stats:", test_class_stats)
         print("*" * 10, "=" * 10, "*" * 10)
 
         # 7) Build DataLoaders
@@ -1297,7 +1283,715 @@ def MIDAS_get_dataloaders(args):
         )
 
         # Return all loaders and stats
+        return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats, class_map
+
+    elif  fold_name == "gesture_flat" and dp["observation_window"] != -1: # simple train/val/test split for window segments within gestures
+        # ---- 0) Build a TEMP dataset once to enumerate ALL windows across the chosen trials ----
+        all_trials = sorted(set(fold["train_trials"]) | set(fold["test_trials"]))
+        print(f"\n--- Using WINDOW-BASED split (no leakage) over {len(all_trials)} trials ---\n")
+
+        ds_all = MultimodalGestureDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            ignore_clutch=dp.get("ignore_clutch", False),
+            clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+            drop_neg1=dp.get("drop_neg1", True),
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=False,  # IMPORTANT: don't compute stats here
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        # ---- 1) Group windows by gesture RUN (segment) to prevent leakage ----
+        # Each window belongs entirely to one _run_id by construction of _make_windows().
+        run_to_win = {}   # run_id -> list[window_idx]
+        run_labels = []   # parallel to run_ids: class id per run (for stratification)
+        run_ids = []      # list of run_ids in the same order as run_labels
+
+        class_map = ds_all.class_map
+        for wi, s in enumerate(ds_all.samples):
+            start = s["start"]
+            run_id = int(ds_all.df.loc[start, "_run_id"])
+            if run_id not in run_to_win:
+                run_to_win[run_id] = []
+                run_ids.append(run_id)
+                run_labels.append(class_map[s["gesture_code"]])
+            run_to_win[run_id].append(wi)
+
+        y_run = np.asarray(run_labels, dtype=np.int64)
+        run_ids = np.asarray(run_ids, dtype=np.int64)
+
+        print(f"Total gesture runs: {len(run_ids)} | Total windows: {len(ds_all)}")
+
+        # ---- 2) Stratified split on RUNS, then expand to window indices ----
+        test_ratio = float(fold.get("test_ratio", 0.20))
+        val_ratio  = float(fold.get("val_ratio", 0.20))
+        base_seed  = int(fold.get("flat_seed", 0))
+
+        def expand_runs_to_windows(run_idx_array: np.ndarray) -> np.ndarray:
+            out = []
+            for j in run_idx_array:
+                rid = int(run_ids[j])
+                out.extend(run_to_win[rid])
+            # unique + sorted for stability
+            return np.array(sorted(set(out)), dtype=np.int64)
+
+        # a) Train+Val vs Test on RUNS
+        trval_run_idx, te_run_idx = stratified_gesture_train_test(
+            y_run, test_ratio=test_ratio, seed=base_seed
+        )
+        trval_run_idx = np.asarray(trval_run_idx)
+        te_run_idx    = np.asarray(te_run_idx)
+
+        # b) Train vs Val on RUNS (remaining)
+        y_trval = y_run[trval_run_idx]
+        tr_local, val_local = stratified_gesture_train_test(
+            y_trval, test_ratio=val_ratio, seed=base_seed + 1
+        )
+        tr_run_idx  = trval_run_idx[np.asarray(tr_local)]
+        val_run_idx = trval_run_idx[np.asarray(val_local)]
+
+        # c) Expand to WINDOW indices
+        tr_idx  = expand_runs_to_windows(tr_run_idx)
+        val_idx = expand_runs_to_windows(val_run_idx)
+        te_idx  = expand_runs_to_windows(te_run_idx)
+
+        # ---- 3) (Optional) ensure each split has all classes present in ds_all (best-effort retry) ----
+        y_all_windows = _labels_for_dataset_windows(ds_all)
+        all_classes   = set(np.unique(y_all_windows))
+
+        def covers_all(idx):
+            return set(np.unique(y_all_windows[idx])) >= all_classes
+
+        if not (covers_all(tr_idx) and covers_all(val_idx) and covers_all(te_idx)):
+            print("Note: At least one split is missing some classes. Retrying up to 25 times...")
+            rng = np.random.RandomState(base_seed)
+            ok = False
+            for attempt in range(25):
+                s1 = int(rng.randint(0, 1_000_000))
+                s2 = s1 + 1
+                trval_run_idx, te_run_idx = stratified_gesture_train_test(y_run, test_ratio=test_ratio, seed=s1)
+                trval_run_idx = np.asarray(trval_run_idx); te_run_idx = np.asarray(te_run_idx)
+                y_trval = y_run[trval_run_idx]
+                tr_local, val_local = stratified_gesture_train_test(y_trval, test_ratio=val_ratio, seed=s2)
+                tr_run_idx  = trval_run_idx[np.asarray(tr_local)]
+                val_run_idx = trval_run_idx[np.asarray(val_local)]
+                tr_idx  = expand_runs_to_windows(tr_run_idx)
+                val_idx = expand_runs_to_windows(val_run_idx)
+                te_idx  = expand_runs_to_windows(te_run_idx)
+                if covers_all(tr_idx) and covers_all(val_idx) and covers_all(te_idx):
+                    ok = True
+                    print(f"Class coverage satisfied on attempt {attempt+1}.")
+                    break
+            if not ok:
+                print("Warning: Could not satisfy full class coverage across splits. Proceeding with best effort.")
+
+        print(f"Split sizes (windows) — Train: {len(tr_idx)}, Val: {len(val_idx)}, Test: {len(te_idx)}")
+
+        # ---- 4) Build final datasets (compute stats on TRAIN only; reuse for VAL/TEST) ----
+        ds_tr = MultimodalGestureDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            ignore_clutch=dp.get("ignore_clutch", False),
+            clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+            drop_neg1=dp.get("drop_neg1", True),
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,  # compute stats here
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=tr_idx,
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        ds_val = MultimodalGestureDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            ignore_clutch=dp.get("ignore_clutch", False),
+            clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+            drop_neg1=dp.get("drop_neg1", True),
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,
+            normalization_stats=ds_tr.norm_stats,  # reuse TRAIN mean/std
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=val_idx,
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        ds_te = MultimodalGestureDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            ignore_clutch=dp.get("ignore_clutch", False),
+            clutch_pressed_value=dp.get("clutch_pressed_value", 1),
+            drop_neg1=dp.get("drop_neg1", True),
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,
+            normalization_stats=ds_tr.norm_stats,  # reuse TRAIN mean/std
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=te_idx,
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        # ---- 5) Class stats + DataLoaders ----
+        train_class_stats = ds_tr._get_class_stats()
+        val_class_stats   = ds_val._get_class_stats()
+        test_class_stats  = ds_te._get_class_stats()
+
+        print("*" * 10, "=" * 10, "*" * 10)
+        print("Class distribution by split (windows, no leakage):")
+        print("Train:", train_class_stats)
+        print("Val  :", val_class_stats)
+        print("Test :", test_class_stats)
+        print("*" * 10, "=" * 10, "*" * 10)
+
+        train_loader = DataLoader(
+            ds_tr, batch_size=dp["batch_size"], shuffle=True,
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=MultimodalGestureDataset.collate_fn, drop_last=False
+        )
+        val_loader = DataLoader(
+            ds_val, batch_size=dp["batch_size"], shuffle=False,
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=MultimodalGestureDataset.collate_fn, drop_last=False
+        )
+        test_loader = DataLoader(
+            ds_te, batch_size=dp["batch_size"], shuffle=False,
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=MultimodalGestureDataset.collate_fn, drop_last=False
+        )
+
+        return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats , class_map
+
+    else:
+        raise ValueError("Invalid fold configuration provided.")
+
+
+
+
+
+
+# return train,val,test dataloaders using the DESK dataset class
+def DESK_get_dataloaders(args):
+    """
+    Returns:
+        train_loader, val_loader, test_loader,
+        train_class_stats, val_class_stats, test_class_stats
+    Side-effects:
+        - Ensures a single, shared class_map across splits.
+        - Uses train-only normalization stats for val/test.
+        - Attaches helpers on datasets:
+            .class_map            : {gesture_code(str): contiguous_id(int)}
+            .class_id_to_name     : {contiguous_id(int): human_readable_name(str)}
+            .class_name_to_id     : {human_readable_name(str): contiguous_id(int)}
+    """
+    print("*" * 10, "=" * 10, "*" * 10)
+    print("Loading dataloader for DESK Classification task")
+
+    fold = args.fold
+    dp = args.dataloader_params
+    fold_name = fold.get("name", "unknown_fold")
+
+    print("Using fold: ", fold)
+    print("Using fold name: ", fold_name)
+
+    if "kfold" in fold_name or "loo" in fold_name or "louo" in fold_name:
+        print("\n--- Using TRIAL-BASED split ---\n")
+        print("Train Trials: ", dp["train_trials"])
+        print("Val Trials: ",   dp["val_trials"])
+        print("Test Trials: ",  dp["test_trials"])
+
+        # ----- 1) Build ONE master class_map (contiguous) -----
+        # Prefer the explicit keysteps dict if provided (stable & human-readable).
+        # keysteps can be like {20: "Reach Suture", 8: "Make C Loop", ...} or {"G1": "...", ...}
+        keysteps = dp.get("keysteps", None)
+
+        if keysteps and isinstance(keysteps, dict) and len(keysteps) > 0:
+            # Keep insertion order of provided keysteps
+            # DeskDataset uses strings in 'gesture_code', so normalize keys to str
+            master_class_map = {str(k): i for i, k in enumerate(keysteps.keys())}
+            class_id_to_name  = {i: keysteps[k] for k, i in master_class_map.items()}
+            class_name_to_id  = {v: i for i, v in class_id_to_name.items()}
+        else:
+            # Fallback: we’ll derive a union of labels from TRAIN trials only (stable for LOUO),
+            # but since we can’t cheaply read CSVs here, we’ll create a tiny bootstrap dataset
+            # to scan gesture codes, then rebuild with the fixed mapping.
+            bootstrap_train = DeskDataset(
+                base_path=dp["base_path"],
+                csv_paths=dp["train_trials"],
+                clip_len=dp["observation_window"],
+                step=dp["step"],
+                include_modalities=dp["modalities"],
+                sample_rate=dp["sample_rate"],
+                modality_selections=dp['selections'],
+                normalize=False,            # <- no stats yet
+            )
+            # Build map in sorted order of observed gesture codes for determinism
+            observed = sorted(map(str, bootstrap_train.df["gesture_code"].dropna().unique().tolist()))
+            master_class_map = {c: i for i, c in enumerate(observed)}
+            class_id_to_name = {i: str(c) for c, i in master_class_map.items()}
+            class_name_to_id = {v: i for i, v in class_id_to_name.items()}
+            # Drop bootstrap dataset to free memory
+            del bootstrap_train
+
+        # ----- 2) Build TRAIN dataset with the fixed mapping; compute normalization on TRAIN only -----
+        train_dataset = DeskDataset(
+            base_path=dp["base_path"],
+            csv_paths=dp["train_trials"],
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            include_modalities=dp["modalities"],
+            sample_rate=dp["sample_rate"],
+            modality_selections=dp['selections'],
+            classes_to_allow=keysteps,         # <- filter to same class set
+            class_map=master_class_map,        # <- fixed contiguous mapping
+            normalize=True,                    # will compute stats on TRAIN
+        )
+        # Attach helpful mappings for downstream code
+        train_dataset.class_id_to_name = class_id_to_name
+        train_dataset.class_name_to_id = class_name_to_id
+
+        # ----- 3) Build VAL/TEST datasets using the SAME mapping + train-only norm stats -----
+        val_dataset = DeskDataset(
+            base_path=dp["base_path"],
+            csv_paths=dp["val_trials"],
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            include_modalities=dp["modalities"],
+            sample_rate=dp["sample_rate"],
+            modality_selections=dp['selections'],
+            classes_to_allow=keysteps,                # same filter
+            class_map=master_class_map,               # same mapping
+            normalize=True,
+            normalization_stats=train_dataset.norm_stats,  # <- use train stats
+        )
+        val_dataset.class_id_to_name = class_id_to_name
+        val_dataset.class_name_to_id = class_name_to_id
+
+        test_dataset = DeskDataset(
+            base_path=dp["base_path"],
+            csv_paths=dp["test_trials"],
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            include_modalities=dp["modalities"],
+            sample_rate=dp["sample_rate"],
+            modality_selections=dp['selections'],
+            classes_to_allow=keysteps,                # same filter
+            class_map=master_class_map,               # same mapping
+            normalize=True,
+            normalization_stats=train_dataset.norm_stats,  # <- use train stats
+        )
+        test_dataset.class_id_to_name = class_id_to_name
+        test_dataset.class_name_to_id = class_name_to_id
+
+        # ----- 4) Debug prints -----
+        print("Fixed class_map (gesture_code -> id):", master_class_map)
+        print("Class id -> name:", class_id_to_name)
+
+        train_class_stats = train_dataset._get_class_stats()
+        print("Train class stats: ", train_class_stats)
+
+        val_class_stats = val_dataset._get_class_stats()
+        print("Val class stats: ", val_class_stats)
+
+        test_class_stats = test_dataset._get_class_stats()
+        print("Test class stats: ", test_class_stats)
+
+        # ----- 5) DataLoaders -----
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=dp["batch_size"],
+            shuffle=True,
+            collate_fn=DeskDataset.collate_fn
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=dp["batch_size"],
+            shuffle=False,
+            collate_fn=DeskDataset.collate_fn
+        )
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=dp["batch_size"],
+            shuffle=False,
+            collate_fn=DeskDataset.collate_fn
+        )
+
         return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+
+
+
+    elif fold_name == "gesture_flat" and dp["observation_window"] == -1: # simple train/val/test split for clips of gestures
+        # 1) Build a TEMP dataset over all trials just to enumerate clips
+        all_trials = sorted(set(fold["train_trials"]) | set(fold["test_trials"]))
+        print(f"Building TEMP dataset over {len(all_trials)} trials...")
+
+        ds_all_temp = DeskDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=False,  # IMPORTANT: don't compute stats here
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        # 2) Two-stage stratified split: Train/Val/Test
+        y_all = _labels_for_dataset_windows(ds_all_temp)  # returns a list/np.array of class ids per clip
+
+        # Configure split ratios (adjust these as needed)
+        test_ratio = fold.get("test_ratio", 0.20)  # 20% for test
+        val_ratio = fold.get("val_ratio", 0.20)    # 20% of remaining (16% of total) for validation
+
+        # First split: separate out test set
+        tr_val_idx, te_idx = stratified_gesture_train_test(
+            y_all, 
+            test_ratio=test_ratio, 
+            seed=fold["flat_seed"]
+        )
+
+        # Second split: separate train and validation from the remaining data
+        y_tr_val = y_all[tr_val_idx]  # labels for train+val subset only
+        tr_idx_local, val_idx_local = stratified_gesture_train_test(
+            y_tr_val, 
+            test_ratio=val_ratio,  # this is ratio of (train+val), not total
+            seed=fold["flat_seed"] + 1  # use different seed for reproducibility
+        )
+
+        # Convert to numpy arrays for fancy indexing
+        tr_val_idx = np.array(tr_val_idx)
+        tr_idx_local = np.array(tr_idx_local)
+        val_idx_local = np.array(val_idx_local)
+
+        # Map local indices back to global clip indices
+        tr_idx = tr_val_idx[tr_idx_local]
+        val_idx = tr_val_idx[val_idx_local]
+
+        print(f"Data split sizes - Train: {len(tr_idx)}, Val: {len(val_idx)}, Test: {len(te_idx)}")
+        print(f"Data split ratios - Train: {len(tr_idx)/len(y_all):.1%}, Val: {len(val_idx)/len(y_all):.1%}, Test: {len(te_idx)/len(y_all):.1%}")
+
+        # 3) Build TRAIN dataset - compute normalization stats on training data only
+        ds_tr = DeskDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,  # compute stats here
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=tr_idx,  # only training windows
+            classes_to_allow=dp.get("keysteps", None)
+
+        )
+
+        # 4) Build VALIDATION dataset - reuse train normalization stats
+        ds_val = DeskDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,
+            normalization_stats=ds_tr.norm_stats,  # reuse TRAIN mean/std
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=val_idx,  # only validation windows
+            classes_to_allow=dp.get("keysteps", None)
+
+        )
+
+        # 5) Build TEST dataset - reuse train normalization stats
+        ds_te = DeskDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=sorted(set(fold["train_trials"]) | set(fold["test_trials"])),
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,
+            normalization_stats=ds_tr.norm_stats,  # reuse TRAIN mean/std
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=te_idx,  # only test windows
+            classes_to_allow=dp.get("keysteps", None)
+
+        )
+
+        # 6) Print class distribution stats for each split
+        train_class_stats = ds_tr._get_class_stats()
+        val_class_stats = ds_val._get_class_stats()
+        test_class_stats = ds_te._get_class_stats()
+
+        print("*" * 10, "=" * 10, "*" * 10)
+        print("\nClass distribution by split:")
+        print("Train class stats:", train_class_stats)
+        print("Val   class stats:", val_class_stats)
+        print("Test  class stats:", test_class_stats)
+        print("*" * 10, "=" * 10, "*" * 10)
+
+        print("Building DataLoaders...")
+        print("Using num_workers: ", dp.get("num_workers", 4))
+
+        # 7) Build DataLoaders
+        train_loader = DataLoader(
+            ds_tr, 
+            batch_size=dp["batch_size"], 
+            shuffle=True,  # shuffle training data
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=DeskDataset.collate_fn, 
+            drop_last=False
+        )
+
+        val_loader = DataLoader(
+            ds_val, 
+            batch_size=dp["batch_size"], 
+            shuffle=False,  # no shuffle for validation
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=DeskDataset.collate_fn, 
+            drop_last=False
+        )
+
+        test_loader = DataLoader(
+            ds_te, 
+            batch_size=dp["batch_size"], 
+            shuffle=False,  # no shuffle for test
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=DeskDataset.collate_fn, 
+            drop_last=False
+        )
+
+        # Return all loaders and stats
+        return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+
+    elif  fold_name == "gesture_flat" and dp["observation_window"] != -1: # simple train/val/test split for window segments within gestures
+        # ---- 0) Build a TEMP dataset once to enumerate ALL windows across the chosen trials ----
+        all_trials = sorted(set(fold["train_trials"]) | set(fold["test_trials"]))
+        print(f"\n--- Using WINDOW-BASED split (no leakage) over {len(all_trials)} trials ---\n")
+
+        ds_all = DeskDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=False,  # IMPORTANT: don't compute stats here
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        # ---- 1) Group windows by gesture RUN (segment) to prevent leakage ----
+        # Each window belongs entirely to one _run_id by construction of _make_windows().
+        run_to_win = {}   # run_id -> list[window_idx]
+        run_labels = []   # parallel to run_ids: class id per run (for stratification)
+        run_ids = []      # list of run_ids in the same order as run_labels
+
+        class_map = ds_all.class_map
+        for wi, s in enumerate(ds_all.samples):
+            start = s["start"]
+            run_id = int(ds_all.df.loc[start, "_run_id"])
+            if run_id not in run_to_win:
+                run_to_win[run_id] = []
+                run_ids.append(run_id)
+                run_labels.append(class_map[s["gesture_code"]])
+            run_to_win[run_id].append(wi)
+
+        y_run = np.asarray(run_labels, dtype=np.int64)
+        run_ids = np.asarray(run_ids, dtype=np.int64)
+
+        print(f"Total gesture runs: {len(run_ids)} | Total windows: {len(ds_all)}")
+
+        # ---- 2) Stratified split on RUNS, then expand to window indices ----
+        test_ratio = float(fold.get("test_ratio", 0.20))
+        val_ratio  = float(fold.get("val_ratio", 0.20))
+        base_seed  = int(fold.get("flat_seed", 0))
+
+        def expand_runs_to_windows(run_idx_array: np.ndarray) -> np.ndarray:
+            out = []
+            for j in run_idx_array:
+                rid = int(run_ids[j])
+                out.extend(run_to_win[rid])
+            # unique + sorted for stability
+            return np.array(sorted(set(out)), dtype=np.int64)
+
+        # a) Train+Val vs Test on RUNS
+        trval_run_idx, te_run_idx = stratified_gesture_train_test(
+            y_run, test_ratio=test_ratio, seed=base_seed
+        )
+        trval_run_idx = np.asarray(trval_run_idx)
+        te_run_idx    = np.asarray(te_run_idx)
+
+        # b) Train vs Val on RUNS (remaining)
+        y_trval = y_run[trval_run_idx]
+        tr_local, val_local = stratified_gesture_train_test(
+            y_trval, test_ratio=val_ratio, seed=base_seed + 1
+        )
+        tr_run_idx  = trval_run_idx[np.asarray(tr_local)]
+        val_run_idx = trval_run_idx[np.asarray(val_local)]
+
+        # c) Expand to WINDOW indices
+        tr_idx  = expand_runs_to_windows(tr_run_idx)
+        val_idx = expand_runs_to_windows(val_run_idx)
+        te_idx  = expand_runs_to_windows(te_run_idx)
+
+        # ---- 3) (Optional) ensure each split has all classes present in ds_all (best-effort retry) ----
+        y_all_windows = _labels_for_dataset_windows(ds_all)
+        all_classes   = set(np.unique(y_all_windows))
+
+        def covers_all(idx):
+            return set(np.unique(y_all_windows[idx])) >= all_classes
+
+        if not (covers_all(tr_idx) and covers_all(val_idx) and covers_all(te_idx)):
+            print("Note: At least one split is missing some classes. Retrying up to 25 times...")
+            rng = np.random.RandomState(base_seed)
+            ok = False
+            for attempt in range(25):
+                s1 = int(rng.randint(0, 1_000_000))
+                s2 = s1 + 1
+                trval_run_idx, te_run_idx = stratified_gesture_train_test(y_run, test_ratio=test_ratio, seed=s1)
+                trval_run_idx = np.asarray(trval_run_idx); te_run_idx = np.asarray(te_run_idx)
+                y_trval = y_run[trval_run_idx]
+                tr_local, val_local = stratified_gesture_train_test(y_trval, test_ratio=val_ratio, seed=s2)
+                tr_run_idx  = trval_run_idx[np.asarray(tr_local)]
+                val_run_idx = trval_run_idx[np.asarray(val_local)]
+                tr_idx  = expand_runs_to_windows(tr_run_idx)
+                val_idx = expand_runs_to_windows(val_run_idx)
+                te_idx  = expand_runs_to_windows(te_run_idx)
+                if covers_all(tr_idx) and covers_all(val_idx) and covers_all(te_idx):
+                    ok = True
+                    print(f"Class coverage satisfied on attempt {attempt+1}.")
+                    break
+            if not ok:
+                print("Warning: Could not satisfy full class coverage across splits. Proceeding with best effort.")
+
+        print(f"Split sizes (windows) — Train: {len(tr_idx)}, Val: {len(val_idx)}, Test: {len(te_idx)}")
+
+        # ---- 4) Build final datasets (compute stats on TRAIN only; reuse for VAL/TEST) ----
+        ds_tr = DeskDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,  # compute stats here
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=tr_idx,
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        ds_val = DeskDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,
+            normalization_stats=ds_tr.norm_stats,  # reuse TRAIN mean/std
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=val_idx,
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        ds_te = DeskDataset(
+            base_path=dp.get("base_path", None),
+            csv_paths=all_trials,
+            clip_len=dp["observation_window"],
+            step=dp["step"],
+            sample_rate=dp["sample_rate"],
+            include_modalities=dp["modalities"],
+            modality_selections=dp.get("selections", {}),
+            normalize=True,
+            normalization_stats=ds_tr.norm_stats,  # reuse TRAIN mean/std
+            video_root=dp.get("video_root", None),
+            video_pattern=dp.get("video_pattern", "{trial_id}.mp4"),
+            video_output_size=tuple(dp.get("video_output_size", (224, 224))),
+            selected_indices=te_idx,
+            classes_to_allow=dp.get("keysteps", None)
+        )
+
+        # ---- 5) Class stats + DataLoaders ----
+        train_class_stats = ds_tr._get_class_stats()
+        val_class_stats   = ds_val._get_class_stats()
+        test_class_stats  = ds_te._get_class_stats()
+
+        print("*" * 10, "=" * 10, "*" * 10)
+        print("Class distribution by split (windows, no leakage):")
+        print("Train:", train_class_stats)
+        print("Val  :", val_class_stats)
+        print("Test :", test_class_stats)
+        print("*" * 10, "=" * 10, "*" * 10)
+
+        train_loader = DataLoader(
+            ds_tr, batch_size=dp["batch_size"], shuffle=True,
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=DeskDataset.collate_fn, drop_last=False
+        )
+        val_loader = DataLoader(
+            ds_val, batch_size=dp["batch_size"], shuffle=False,
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=DeskDataset.collate_fn, drop_last=False
+        )
+        test_loader = DataLoader(
+            ds_te, batch_size=dp["batch_size"], shuffle=False,
+            num_workers=dp.get("num_workers", 4),
+            collate_fn=DeskDataset.collate_fn, drop_last=False
+        )
+
+        return train_loader, val_loader, test_loader, train_class_stats, val_class_stats, test_class_stats
+
+    else:
+        raise ValueError("Invalid fold configuration provided.")
+
+
+
+
+
 
 
 
@@ -1678,8 +2372,10 @@ def mmt_preprocess(batch, args, backbone, device):
 
     # Expand the effective list with image logic:
     # Prefer precomputed features if requested/present; otherwise fall back to frames->backbone.
+    # print("batch", batch)
     effective_mods = []
     for m in wanted_mods:
+        # print("Processing modality:", m)
         if m == "images_feat":
             if "images_feat" in batch:
                 effective_mods.append("images_feat")
@@ -1699,6 +2395,7 @@ def mmt_preprocess(batch, args, backbone, device):
                 effective_mods.append(m)
 
     if not effective_mods:
+        print("Probklems with batch keys:", list(batch.keys()))
         raise ValueError(
             "No active modalities found in batch matching args.dataloader_params['modalities'] "
             "(nothing to concatenate)."
@@ -1822,6 +2519,8 @@ def train_transtcn_one_epoch(model, train_loader, criterion, optimizer, device, 
             preprocessed_inputs = mmt_preprocess(batch, args, model, device)  # [B, T, F_total]
             # print(f" Preprocessed input shape: {preprocessed_inputs.shape}")
             logits = model(preprocessed_inputs)
+            # print("prediction argmax: ", torch.argmax(logits, dim=1))
+            # print(F" Batch label: {batch['label']}")
             loss = criterion(logits, batch['label'].to(device))
             loss.backward()
             optimizer.step()
@@ -1865,7 +2564,6 @@ def validate_transtcn(model, val_loader, criterion, device, logger, args):
 
     return total_loss / len(val_loader)
 
-
 def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, results_dir, args, class_names=None):
     """
     Enhanced TransTCN model testing with comprehensive metrics for ML papers.
@@ -1879,7 +2577,7 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
         epoch: Current epoch number
         results_dir: Directory to save results
         args: Arguments object containing model configuration
-        class_names: List of class names for better visualization (optional)
+        class_names: Optional; dict {contiguous_id->name} or list ["name_for_0", ...]
     """
     model.eval()
     total_loss = 0
@@ -1895,13 +2593,13 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
                 # Forward pass
                 preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
                 logits = model(preprocessed_inputs)                              # [B, C]
-                labels = batch["label"].to(device, non_blocking=True)            # [B]
+                labels = batch["label"].to(device, non_blocking=True)           # [B]
                 loss = criterion(logits, labels)
                 total_loss += loss.item()
 
                 # Predictions
-                pred = torch.argmax(logits, dim=1)  # [B]
-                probs = torch.softmax(logits, dim=1)  # [B, C]
+                pred = torch.argmax(logits, dim=1)      # [B]
+                probs = torch.softmax(logits, dim=1)    # [B, C]
 
                 # Accumulate for metrics
                 gt.extend(labels.cpu().tolist())
@@ -1919,7 +2617,6 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
                 for i in range(B):
                     true_label = int(labels[i].cpu().item())
                     pred_label = int(pred[i].cpu().item())
-                    
                     preds_detail.append({
                         "trial_id": trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item(),
                         "subject_id": subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item(),
@@ -1938,87 +2635,114 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
                 traceback.print_exc()
                 continue
 
-    # Calculate average loss
-    avg_loss = total_loss / len(test_loader) if len(test_loader) > 0 else 0
+    # Averages
+    avg_loss = total_loss / len(test_loader) if len(test_loader) > 0 else 0.0
 
-    # Calculate comprehensive metrics
-    accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt) if len(gt) > 0 else 0
-    
-    # Macro and weighted metrics
+    # Overall metrics
+    accuracy = (sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)) if len(gt) > 0 else 0.0
     precision_macro = precision_score(gt, preds, average='macro', zero_division=0)
-    recall_macro = recall_score(gt, preds, average='macro', zero_division=0)
-    f1_macro = f1_score(gt, preds, average='macro', zero_division=0)
-    
+    recall_macro    = recall_score(gt, preds, average='macro', zero_division=0)
+    f1_macro        = f1_score(gt, preds, average='macro', zero_division=0)
     precision_weighted = precision_score(gt, preds, average='weighted', zero_division=0)
-    recall_weighted = recall_score(gt, preds, average='weighted', zero_division=0)
-    f1_weighted = f1_score(gt, preds, average='weighted', zero_division=0)
-    
-    # Per-class metrics
-    precision_per_class = precision_score(gt, preds, average=None, zero_division=0)
-    recall_per_class = recall_score(gt, preds, average=None, zero_division=0)
-    f1_per_class = f1_score(gt, preds, average=None, zero_division=0)
-    
-    # Additional metrics
+    recall_weighted    = recall_score(gt, preds, average='weighted', zero_division=0)
+    f1_weighted        = f1_score(gt, preds, average='weighted', zero_division=0)
     balanced_acc = balanced_accuracy_score(gt, preds)
-    kappa = cohen_kappa_score(gt, preds)
-    
-    # Top-k accuracy (if more than 5 classes)
-    unique_classes = sorted(list(set(gt + preds)))
-    n_classes = len(unique_classes)
-    
+    kappa        = cohen_kappa_score(gt, preds)
+
+    # Class sets
+    classes_gt   = sorted(set(gt))               # only classes present in ground truth
+    classes_all  = sorted(set(gt) | set(preds))  # union of GT and predictions
+    n_classes_all = len(classes_all)
+
+    # Top-k accuracy (only if we can align labels to score columns; may be skipped)
     top_k_acc = {}
-    if n_classes >= 3:
+    if n_classes_all >= 3:
         for k in [3, 5]:
-            if k < n_classes:
+            if k < n_classes_all:
                 try:
+                    # Note: y_score must correspond to the order of `labels`; if not perfectly aligned, we skip.
                     top_k_acc[f"top_{k}_accuracy"] = top_k_accuracy_score(
-                        gt, np.array(all_probs), k=k, labels=unique_classes
+                        gt, np.array(all_probs), k=k, labels=classes_all
                     )
-                except:
+                except Exception:
                     top_k_acc[f"top_{k}_accuracy"] = None
-    
-    # ROC-AUC (if binary or can be computed)
+
+    # ROC-AUC
     try:
-        if n_classes == 2:
+        if len(classes_all) == 2:
             roc_auc = roc_auc_score(gt, np.array(all_probs)[:, 1])
         else:
             roc_auc = roc_auc_score(gt, np.array(all_probs), multi_class='ovr', average='macro')
-    except:
+    except Exception:
         roc_auc = None
-    
-    # Confusion matrix
-    cm = confusion_matrix(gt, preds, labels=unique_classes)
-    
-    # Calculate per-class accuracy from confusion matrix
-    class_accuracy = cm.diagonal() / cm.sum(axis=1)
-    
-    # Generate class names if not provided
-    if class_names is None:
-        class_names = [f"Class {i}" for i in unique_classes]
-    elif len(class_names) < n_classes:
-        # Extend class names if needed
-        class_names = class_names + [f"Class {i}" for i in range(len(class_names), n_classes)]
-    
-    # Classification report
-    class_report = classification_report(
-        gt, preds, target_names=class_names, 
-        labels=unique_classes, zero_division=0, 
-        output_dict=True
-    )
-    
-    # Calculate confidence statistics
+
+    # ---------- Class name helpers ----------
+    def _names_for(cls_ids, names):
+        if names is None:
+            return [f"Class {i}" for i in cls_ids]
+        if isinstance(names, dict):
+            return [names.get(i, f"Class {i}") for i in cls_ids]
+        # assume list-like aligned to contiguous ids
+        out = []
+        for i in cls_ids:
+            out.append(names[i] if 0 <= i < len(names) else f"Class {i}")
+        return out
+
+    class_names_all = _names_for(classes_all, class_names)
+    class_names_gt  = _names_for(classes_gt,  class_names)
+
+    # ---------- Confusion matrix on union labels ----------
+    cm = confusion_matrix(gt, preds, labels=classes_all)
+
+    # Per-class accuracy (row recall) with safe division
+    row_sums = cm.sum(axis=1, keepdims=True)  # (N,1)
+    class_accuracy_all = np.divide(
+        np.diag(cm).reshape(-1, 1), row_sums,
+        out=np.zeros((n_classes_all, 1), dtype=float), where=row_sums != 0
+    ).squeeze(1)
+
+    # ---------- Per-class metrics on GT-only labels; map back to union ----------
+    if classes_gt:
+        precision_gt = precision_score(gt, preds, labels=classes_gt, average=None, zero_division=0)
+        recall_gt    = recall_score(gt, preds,    labels=classes_gt, average=None, zero_division=0)
+        f1_gt        = f1_score(gt, preds,        labels=classes_gt, average=None, zero_division=0)
+    else:
+        precision_gt = recall_gt = f1_gt = np.array([])
+
+    idx_all = {cid: i for i, cid in enumerate(classes_all)}
+    precision_all_vec = np.zeros(n_classes_all, dtype=float)
+    recall_all_vec    = np.zeros(n_classes_all, dtype=float)
+    f1_all_vec        = np.zeros(n_classes_all, dtype=float)
+    for j, cid in enumerate(classes_gt):
+        i_all = idx_all[cid]
+        precision_all_vec[i_all] = precision_gt[j]
+        recall_all_vec[i_all]    = recall_gt[j]
+        f1_all_vec[i_all]        = f1_gt[j]
+
+    # ---------- Classification report (GT-only) ----------
+    try:
+        class_report = classification_report(
+            gt, preds,
+            labels=classes_gt,
+            target_names=class_names_gt,
+            zero_division=0,
+            output_dict=True
+        )
+    except Exception:
+        class_report = classification_report(gt, preds, zero_division=0, output_dict=True)
+
+    # ---------- Confidence stats ----------
     confidences = [p["confidence"] for p in preds_detail]
-    correct_confidences = [p["confidence"] for p in preds_detail if p["correct"]]
+    correct_confidences   = [p["confidence"] for p in preds_detail if p["correct"]]
     incorrect_confidences = [p["confidence"] for p in preds_detail if not p["correct"]]
-    
     confidence_stats = {
-        "mean_confidence": np.mean(confidences),
-        "std_confidence": np.std(confidences),
-        "mean_confidence_correct": np.mean(correct_confidences) if correct_confidences else 0,
-        "mean_confidence_incorrect": np.mean(incorrect_confidences) if incorrect_confidences else 0,
+        "mean_confidence": float(np.mean(confidences)) if confidences else 0.0,
+        "std_confidence":  float(np.std(confidences))  if confidences else 0.0,
+        "mean_confidence_correct": float(np.mean(correct_confidences))   if correct_confidences else 0.0,
+        "mean_confidence_incorrect": float(np.mean(incorrect_confidences)) if incorrect_confidences else 0.0,
     }
-    
-    # Prepare results dictionary
+
+    # ---------- Results dict ----------
     results = {
         "epoch": epoch,
         "loss": avg_loss,
@@ -2032,31 +2756,25 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
         "recall_weighted": recall_weighted,
         "f1_weighted": f1_weighted,
     }
-    
-    # Add ROC-AUC if available
     if roc_auc is not None:
         results["roc_auc"] = roc_auc
-    
-    # Add top-k accuracy if available
-    results.update(top_k_acc)
-    
-    # Add confidence statistics
     results.update(confidence_stats)
-    
-    # Add per-class metrics to results
-    for i, class_idx in enumerate(unique_classes):
-        results[f"class_{class_idx}_accuracy"] = float(class_accuracy[i])
-        results[f"class_{class_idx}_precision"] = float(precision_per_class[i])
-        results[f"class_{class_idx}_recall"] = float(recall_per_class[i])
-        results[f"class_{class_idx}_f1"] = float(f1_per_class[i])
-    
+    results.update(top_k_acc)
+
+    # Per-class metrics (aligned with classes_all)
+    for i, class_idx in enumerate(classes_all):
+        results[f"class_{class_idx}_accuracy"]  = float(class_accuracy_all[i])
+        results[f"class_{class_idx}_precision"] = float(precision_all_vec[i])
+        results[f"class_{class_idx}_recall"]    = float(recall_all_vec[i])
+        results[f"class_{class_idx}_f1"]        = float(f1_all_vec[i])
+
     # Log metrics to wandb
     logger.log(results)
-    
-    # Create results directory if it doesn't exist
+
+    # ---------- Save artifacts ----------
     Path(results_dir).mkdir(parents=True, exist_ok=True)
-    
-    # Save overall metrics to CSV
+
+    # Overall metrics CSV
     metrics_path = f'{results_dir}/metrics_epoch_{epoch}.csv'
     with open(metrics_path, mode='w', newline='') as file:
         writer = csv.writer(file)
@@ -2080,40 +2798,36 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
         writer.writerow(["Mean Confidence", confidence_stats["mean_confidence"]])
         writer.writerow(["Mean Confidence (Correct)", confidence_stats["mean_confidence_correct"]])
         writer.writerow(["Mean Confidence (Incorrect)", confidence_stats["mean_confidence_incorrect"]])
-    
-    # Save per-class metrics to CSV
+
+    # Per-class metrics CSV (aligned with classes_all)
     class_metrics_path = f'{results_dir}/class_metrics_epoch_{epoch}.csv'
     with open(class_metrics_path, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["Class_ID", "Class_Name", "Accuracy", "Precision", "Recall", "F1-Score", "Support"])
-        for i, class_idx in enumerate(unique_classes):
+        for i, class_idx in enumerate(classes_all):
             support = int(cm[i].sum())
             writer.writerow([
-                class_idx, 
-                class_names[i],
-                f"{class_accuracy[i]:.4f}",
-                f"{precision_per_class[i]:.4f}",
-                f"{recall_per_class[i]:.4f}",
-                f"{f1_per_class[i]:.4f}",
+                class_idx,
+                class_names_all[i],
+                f"{class_accuracy_all[i]:.4f}",
+                f"{precision_all_vec[i]:.4f}",
+                f"{recall_all_vec[i]:.4f}",
+                f"{f1_all_vec[i]:.4f}",
                 support
             ])
-    
-    # Save confusion matrix as CSV (raw counts)
-    cm_path = f'{results_dir}/confusion_matrix_epoch_{epoch}.csv'
-    np.savetxt(cm_path, cm, delimiter=',', fmt='%d')
-    
-    # Save confusion matrix with labels
-    cm_labeled_path = f'{results_dir}/confusion_matrix_labeled_epoch_{epoch}.csv'
-    with open(cm_labeled_path, mode='w', newline='') as file:
+
+    # Confusion matrix CSVs
+    np.savetxt(f'{results_dir}/confusion_matrix_epoch_{epoch}.csv', cm, delimiter=',', fmt='%d')
+    with open(f'{results_dir}/confusion_matrix_labeled_epoch_{epoch}.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['True\\Predicted'] + class_names)
+        writer.writerow(['True\\Predicted'] + class_names_all)
         for i, row in enumerate(cm):
-            writer.writerow([class_names[i]] + row.tolist())
-    
-    # Visualize and save confusion matrix
-    plt.figure(figsize=(max(10, n_classes), max(8, n_classes * 0.8)))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=class_names, yticklabels=class_names,
+            writer.writerow([class_names_all[i]] + row.tolist())
+
+    # Confusion matrix plot
+    plt.figure(figsize=(max(10, n_classes_all), max(8, n_classes_all * 0.8)))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names_all, yticklabels=class_names_all,
                 cbar_kws={'label': 'Count'})
     plt.title(f'Confusion Matrix - Epoch {epoch}', fontsize=14, fontweight='bold')
     plt.ylabel('True Label', fontsize=12)
@@ -2121,12 +2835,15 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
     plt.tight_layout()
     plt.savefig(f'{results_dir}/confusion_matrix_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
     plt.close()
-    
-    # Visualize normalized confusion matrix (by row - recall)
-    cm_normalized = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
-    plt.figure(figsize=(max(10, n_classes), max(8, n_classes * 0.8)))
+
+    # Normalized confusion matrix (row recall) — SAFE DIVIDE, no broadcasting
+    row_sums = cm.sum(axis=1, keepdims=True)  # (N,1)
+    cm_normalized = np.divide(
+        cm, row_sums, out=np.zeros_like(cm, dtype=float), where=row_sums != 0
+    )
+    plt.figure(figsize=(max(10, n_classes_all), max(8, n_classes_all * 0.8)))
     sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',
-                xticklabels=class_names, yticklabels=class_names,
+                xticklabels=class_names_all, yticklabels=class_names_all,
                 cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
     plt.title(f'Normalized Confusion Matrix (Recall) - Epoch {epoch}', fontsize=14, fontweight='bold')
     plt.ylabel('True Label', fontsize=12)
@@ -2134,76 +2851,70 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
     plt.tight_layout()
     plt.savefig(f'{results_dir}/confusion_matrix_normalized_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
     plt.close()
-    
-    # Visualize per-class metrics
+
+    # Per-class bars
     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
     metrics_to_plot = [
-        (class_accuracy, 'Accuracy', axes[0, 0]),
-        (precision_per_class, 'Precision', axes[0, 1]),
-        (recall_per_class, 'Recall', axes[1, 0]),
-        (f1_per_class, 'F1-Score', axes[1, 1])
+        (class_accuracy_all, 'Accuracy', axes[0, 0]),
+        (precision_all_vec,  'Precision', axes[0, 1]),
+        (recall_all_vec,     'Recall', axes[1, 0]),
+        (f1_all_vec,         'F1-Score', axes[1, 1])
     ]
-    
     for metric_values, metric_name, ax in metrics_to_plot:
-        bars = ax.bar(range(len(class_names)), metric_values, color='skyblue', edgecolor='navy', alpha=0.7)
+        vals = np.nan_to_num(metric_values, nan=0.0)
+        bars = ax.bar(range(len(class_names_all)), vals, color='skyblue', edgecolor='navy', alpha=0.7)
         ax.set_xlabel('Class', fontsize=11)
         ax.set_ylabel(metric_name, fontsize=11)
         ax.set_title(f'Per-Class {metric_name}', fontsize=12, fontweight='bold')
-        ax.set_xticks(range(len(class_names)))
-        ax.set_xticklabels(class_names, rotation=45, ha='right')
+        ax.set_xticks(range(len(class_names_all)))
+        ax.set_xticklabels(class_names_all, rotation=45, ha='right')
         ax.set_ylim([0, 1.1])
         ax.grid(axis='y', alpha=0.3)
-        
-        # Add value labels on bars
-        for i, (bar, val) in enumerate(zip(bars, metric_values)):
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + 0.02,
-                   f'{val:.3f}', ha='center', va='bottom', fontsize=9)
-    
+        for i, (bar, val) in enumerate(zip(bars, vals)):
+            ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.02,
+                    f'{val:.3f}', ha='center', va='bottom', fontsize=9)
     plt.tight_layout()
     plt.savefig(f'{results_dir}/per_class_metrics_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
     plt.close()
-    
-    # Confidence histogram
+
+    # Confidence plots
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    
-    # Overall confidence distribution
     axes[0].hist(confidences, bins=20, color='skyblue', edgecolor='black', alpha=0.7)
-    axes[0].axvline(np.mean(confidences), color='red', linestyle='--', 
-                    label=f'Mean: {np.mean(confidences):.3f}')
+    if confidences:
+        axes[0].axvline(np.mean(confidences), color='red', linestyle='--', 
+                        label=f'Mean: {np.mean(confidences):.3f}')
     axes[0].set_xlabel('Prediction Confidence', fontsize=11)
     axes[0].set_ylabel('Frequency', fontsize=11)
     axes[0].set_title('Distribution of Prediction Confidence', fontsize=12, fontweight='bold')
     axes[0].legend()
     axes[0].grid(alpha=0.3)
-    
-    # Confidence by correctness
+
     if correct_confidences and incorrect_confidences:
         axes[1].hist([correct_confidences, incorrect_confidences], bins=20, 
-                    label=['Correct', 'Incorrect'], color=['green', 'red'], 
-                    alpha=0.6, edgecolor='black')
+                     label=['Correct', 'Incorrect'], color=['green', 'red'], 
+                     alpha=0.6, edgecolor='black')
         axes[1].set_xlabel('Prediction Confidence', fontsize=11)
         axes[1].set_ylabel('Frequency', fontsize=11)
         axes[1].set_title('Confidence by Prediction Correctness', fontsize=12, fontweight='bold')
         axes[1].legend()
         axes[1].grid(alpha=0.3)
-    
     plt.tight_layout()
     plt.savefig(f'{results_dir}/confidence_distribution_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
     plt.close()
-    
-    # Save classification report
-    report_path = f'{results_dir}/classification_report_epoch_{epoch}.json'
-    with open(report_path, 'w') as f:
+
+    # Classification report JSON/TXT (GT-only)
+    with open(f'{results_dir}/classification_report_epoch_{epoch}.json', 'w') as f:
         json.dump(class_report, f, indent=4)
-    
-    # Save classification report as text
-    report_text_path = f'{results_dir}/classification_report_epoch_{epoch}.txt'
-    with open(report_text_path, 'w') as f:
-        f.write(classification_report(gt, preds, target_names=class_names, 
-                                     labels=unique_classes, zero_division=0))
-    
-    # Save detailed predictions to CSV
+    try:
+        report_text = classification_report(
+            gt, preds, labels=classes_gt, target_names=class_names_gt, zero_division=0
+        )
+    except Exception:
+        report_text = classification_report(gt, preds, zero_division=0)
+    with open(f'{results_dir}/classification_report_epoch_{epoch}.txt', 'w') as f:
+        f.write(report_text)
+
+    # Detailed predictions
     preds_path = f'{results_dir}/predictions_epoch_{epoch}.csv'
     print("Saving predictions to:", preds_path)
     with open(preds_path, mode='w', newline='') as file:
@@ -2226,12 +2937,10 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
                 pred["logits"],
                 pred["probs"]
             ])
-    
-    # Save misclassified samples separately
+
     misclassified = [p for p in preds_detail if not p["correct"]]
     if misclassified:
-        misclass_path = f'{results_dir}/misclassified_epoch_{epoch}.csv'
-        with open(misclass_path, mode='w', newline='') as file:
+        with open(f'{results_dir}/misclassified_epoch_{epoch}.csv', mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow([
                 "trial_id", "subject_id", "gesture_code", "true_label", 
@@ -2243,67 +2952,59 @@ def test_transtcn_model(model, test_loader, criterion, device, logger, epoch, re
                     pred["true_label"], pred["pred_label"],
                     f"{pred['confidence']:.4f}", f"{pred['true_class_prob']:.4f}"
                 ])
-    
-    # Create comprehensive summary
-    summary_path = f'{results_dir}/summary_epoch_{epoch}.txt'
-    with open(summary_path, 'w') as f:
+
+    # Summary
+    with open(f'{results_dir}/summary_epoch_{epoch}.txt', 'w') as f:
         f.write(f"TransTCN Model Evaluation Summary - Epoch {epoch}\n")
         f.write("=" * 70 + "\n\n")
-        
         f.write(f"Overall Metrics:\n")
         f.write(f"  Accuracy: {accuracy:.4f}\n")
         f.write(f"\nMacro-averaged Metrics:\n")
         f.write(f"  Precision: {precision_macro:.4f}\n")
         f.write(f"  Recall: {recall_macro:.4f}\n")
         f.write(f"  F1-Score: {f1_macro:.4f}\n")
-        
         f.write(f"  Loss: {avg_loss:.4f}\n")
         f.write(f"  Balanced Accuracy: {balanced_acc:.4f}\n")
         f.write(f"  Cohen's Kappa: {kappa:.4f}\n")
         if roc_auc is not None:
             f.write(f"  ROC-AUC: {roc_auc:.4f}\n")
-        
         if top_k_acc:
             f.write(f"\nTop-K Accuracy:\n")
             for k, v in top_k_acc.items():
                 if v is not None:
                     f.write(f"  {k.replace('_', '-').title()}: {v:.4f}\n")
-        
-
         f.write(f"\nWeighted-averaged Metrics:\n")
         f.write(f"  Precision: {precision_weighted:.4f}\n")
         f.write(f"  Recall: {recall_weighted:.4f}\n")
         f.write(f"  F1-Score: {f1_weighted:.4f}\n")
-        
         f.write(f"\nConfidence Statistics:\n")
         f.write(f"  Mean Confidence: {confidence_stats['mean_confidence']:.4f}\n")
         f.write(f"  Std Confidence: {confidence_stats['std_confidence']:.4f}\n")
         f.write(f"  Mean Confidence (Correct): {confidence_stats['mean_confidence_correct']:.4f}\n")
         f.write(f"  Mean Confidence (Incorrect): {confidence_stats['mean_confidence_incorrect']:.4f}\n")
-        
-        f.write(f"\nPer-Class Metrics:\n")
-        for i, class_idx in enumerate(unique_classes):
-            f.write(f"\n  {class_names[i]} (Class {class_idx}):\n")
-            f.write(f"    Accuracy: {class_accuracy[i]:.4f}\n")
-            f.write(f"    Precision: {precision_per_class[i]:.4f}\n")
-            f.write(f"    Recall: {recall_per_class[i]:.4f}\n")
-            f.write(f"    F1-Score: {f1_per_class[i]:.4f}\n")
+        f.write(f"\nPer-Class Metrics (union of GT & preds):\n")
+        for i, class_idx in enumerate(classes_all):
+            f.write(f"\n  {class_names_all[i]} (Class {class_idx}):\n")
+            f.write(f"    Accuracy: {class_accuracy_all[i]:.4f}\n")
+            f.write(f"    Precision: {precision_all_vec[i]:.4f}\n")
+            f.write(f"    Recall: {recall_all_vec[i]:.4f}\n")
+            f.write(f"    F1-Score: {f1_all_vec[i]:.4f}\n")
             f.write(f"    Support: {int(cm[i].sum())}\n")
-        
         f.write(f"\n" + "=" * 70 + "\n")
         f.write(f"Total Samples: {len(gt)}\n")
         f.write(f"Correct Predictions: {sum(1 for x, y in zip(preds, gt) if x == y)}\n")
         f.write(f"Incorrect Predictions: {len(misclassified)}\n")
-        f.write(f"Number of Classes: {n_classes}\n")
-    
+        f.write(f"Number of Classes (union): {n_classes_all}\n")
+
     print(f"\n{'='*70}")
     print(f"TransTCN Evaluation Complete - Epoch {epoch}")
     print(f"Loss: {avg_loss:.4f} | Accuracy: {accuracy:.4f} | F1 (Macro): {f1_macro:.4f}")
     print(f"Balanced Accuracy: {balanced_acc:.4f} | Kappa: {kappa:.4f}")
     print(f"Results saved to: {results_dir}")
     print(f"{'='*70}\n")
-    
+
     return results
+
 
 
 def initialize_tcn_model(args, input_dim, device, num_classes):
@@ -2415,96 +3116,356 @@ def validate_TCN(model, val_loader, criterion, device, logger, args):
                 continue
 
     return total_loss / len(val_loader)
+def test_TCN_model(model, test_loader, criterion, device, logger, epoch, results_dir, args, class_names=None):
+    import os, csv, json
+    import numpy as np
+    import torch
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from pathlib import Path
+    from sklearn.metrics import (
+        precision_score, recall_score, f1_score, balanced_accuracy_score,
+        cohen_kappa_score, jaccard_score, confusion_matrix,
+        classification_report, roc_auc_score, top_k_accuracy_score
+    )
 
-def test_TCN_model(model, test_loader, criterion, device, logger, epoch, results_dir, args):
+    Path(results_dir).mkdir(parents=True, exist_ok=True)
+
     model.eval()
-    total_loss = 0
+    total_loss = 0.0
 
-
-    accuracy = 0.0
     gt = []
     preds = []
-    
+    all_probs = []          # list of per-sample probability vectors
+    all_logits = []         # optional, not strictly needed
     preds_detail = []
 
     with torch.no_grad():
-        for i, batch in enumerate(test_loader):
+        for bidx, batch in enumerate(test_loader):
             try:
-                # forward
-                preprocessed_inputs = mmt_preprocess(batch, args, None, device)  # [B, T, F_total]
-                            # skip batch if sequence length is less than 10
-                if preprocessed_inputs.shape[1] < 10:
+                # Forward
+                x_BTF = mmt_preprocess(batch, args, None, device)          # [B, T, F_total]
+                if x_BTF.shape[1] < 10:                                     # keep your early skip
                     continue
-                logits = model(preprocessed_inputs)                            # [B, C]
-                labels = batch["label"].to(device, non_blocking=True)  # [B]
+                logits = model(x_BTF)                                       # [B, C]
+                labels = batch["label"].to(device, non_blocking=True)       # [B]
                 loss = criterion(logits, labels)
-                total_loss += loss.item()
+                total_loss += float(loss.item())
 
-                # predictions
-                pred = torch.argmax(logits, dim=1)               # [B]
+                # Predictions / probs
+                pred = torch.argmax(logits, dim=1)                           # [B]
+                probs = torch.softmax(logits, dim=1)                         # [B, C]
 
-                # accumulate scalar lists
-                gt.extend(batch["label"].cpu().tolist())         # extend with B items
-                preds.extend(pred.cpu().tolist())                # extend with B items
+                # Accumulate
+                gt.extend(labels.detach().cpu().tolist())
+                preds.extend(pred.detach().cpu().tolist())
+                all_probs.extend(probs.detach().cpu().tolist())
+                all_logits.extend(logits.detach().cpu().tolist())
 
-                # optional: probs if you need them
-                probs = torch.softmax(logits, dim=1).detach().cpu().tolist()
-
-                # detailed per-sample records
+                # Metadata (tolerate list or tensor)
                 B = pred.shape[0]
-                trial_ids      = batch.get("trial_id",      [None]*B)   # might be list[str] or tensor
-                subject_ids    = batch.get("subject_id",    [None]*B)
-                gesture_codes  = batch.get("gesture_code",  [None]*B)   # usually list[str]
+                trial_ids     = batch.get("trial_id", [None]*B)
+                subject_ids   = batch.get("subject_id", [None]*B)
+                gesture_codes = batch.get("gesture_code", [None]*B)
+
+                if torch.is_tensor(trial_ids):     trial_ids = trial_ids.cpu().tolist()
+                if torch.is_tensor(subject_ids):   subject_ids = subject_ids.cpu().tolist()
+                if torch.is_tensor(gesture_codes): gesture_codes = gesture_codes.cpu().tolist()
 
                 for i in range(B):
+                    t_id  = trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item()
+                    s_id  = subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item()
+                    gcode = gesture_codes[i] if isinstance(gesture_codes, list) else gesture_codes[i]
+                    plab  = int(pred[i].cpu().item())
+                    tlab  = int(labels[i].cpu().item())
+                    conf  = float(probs[i, plab].cpu().item())
+                    tprob = float(probs[i, tlab].cpu().item()) if (0 <= tlab < probs.shape[1]) else 0.0
+
                     preds_detail.append({
-                        "trial_id":      trial_ids[i] if not torch.is_tensor(trial_ids) else trial_ids[i].item(),
-                        "subject_id":    subject_ids[i] if not torch.is_tensor(subject_ids) else subject_ids[i].item(),
-                        "gesture_code":  gesture_codes[i] if isinstance(gesture_codes, list) else gesture_codes[i],
-                        "pred_label":    int(pred[i].cpu().item()),
-                        "logits":        logits[i].detach().cpu().tolist(),
-                        "probs":         probs[i],
+                        "trial_id": t_id,
+                        "subject_id": s_id,
+                        "gesture_code": gcode,
+                        "true_label": tlab,
+                        "pred_label": plab,
+                        "correct": (tlab == plab),
+                        "confidence": conf,
+                        "true_class_prob": tprob,
+                        "logits": logits[i].detach().cpu().tolist(),
+                        "probs": probs[i].detach().cpu().tolist(),
                     })
 
             except Exception as e:
-                print(f"Error in batch {i}: {e}")
-                import traceback
-                traceback.print_exc()
-                # print(f"Batch data: {batch}")
+                print(f"[TEST] Error in batch {bidx}: {e}")
+                import traceback; traceback.print_exc()
                 continue
 
-            # break
-            
-    # Calculate metrics
-    accuracy = sum(1 for x, y in zip(preds, gt) if x == y) / len(gt)
-    precision = precision_score(gt, preds, average='macro')
-    recall = recall_score(gt, preds, average='macro')
-    f1 = f1_score(gt, preds, average='macro')
-    results = {
-        "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "epoch": epoch
+    # ----- If no data collected -----
+    if len(gt) == 0:
+        print("Warning: no test samples were processed.")
+        results = {"epoch": epoch, "loss": 0.0, "accuracy": 0.0,
+                   "precision_macro": 0.0, "recall_macro": 0.0, "f1_macro": 0.0}
+        logger.log(results)
+        return results
+
+    # ----- LOUO-safe class set: derive from y_true only -----
+    unique_classes = sorted(list(set(gt)))
+    n_classes = len(unique_classes)
+
+    # Compute core metrics
+    accuracy = sum(int(p == t) for p, t in zip(preds, gt)) / len(gt)
+
+    precision_macro  = precision_score(gt, preds, average='macro', zero_division=0)
+    recall_macro     = recall_score(gt, preds, average='macro', zero_division=0)
+    f1_macro         = f1_score(gt, preds, average='macro', zero_division=0)
+
+    precision_weighted = precision_score(gt, preds, average='weighted', zero_division=0)
+    recall_weighted    = recall_score(gt, preds, average='weighted', zero_division=0)
+    f1_weighted        = f1_score(gt, preds, average='weighted', zero_division=0)
+
+    precision_per_class = precision_score(gt, preds, average=None, labels=unique_classes, zero_division=0)
+    recall_per_class    = recall_score(gt, preds, average=None, labels=unique_classes, zero_division=0)
+    f1_per_class        = f1_score(gt, preds, average=None, labels=unique_classes, zero_division=0)
+
+    balanced_acc = balanced_accuracy_score(gt, preds)
+    kappa        = cohen_kappa_score(gt, preds)
+    jaccard_macro   = jaccard_score(gt, preds, average='macro', zero_division=0)
+    jaccard_weighted= jaccard_score(gt, preds, average='weighted', zero_division=0)
+
+    # Top-k (optional)
+    top_k_acc = {}
+    if n_classes >= 3:
+        try:
+            probs_arr = np.asarray(all_probs)  # [N, C]
+            # restrict nothing for top-k (works fine as long as C>=k and labels passed)
+            for k in (3, 5):
+                if k < probs_arr.shape[1]:
+                    top_k_acc[f"top_{k}_accuracy"] = top_k_accuracy_score(gt, probs_arr, k=k, labels=unique_classes)
+        except Exception:
+            for k in (3, 5):
+                top_k_acc[f"top_{k}_accuracy"] = None
+
+    # ROC-AUC (optional)
+    roc_auc = None
+    try:
+        probs_arr = np.asarray(all_probs)  # [N, C]
+        if n_classes == 2:
+            # pick column for positive class (assume the larger label is positive)
+            pos_col = unique_classes[-1]
+            roc_auc = roc_auc_score(gt, probs_arr[:, pos_col])
+        elif n_classes > 2:
+            # subset columns to unique_classes order
+            cols = np.array(unique_classes, dtype=int)
+            roc_auc = roc_auc_score(gt, probs_arr[:, cols], multi_class='ovr', average='macro')
+    except Exception:
+        roc_auc = None
+
+    # Confusion matrix & per-class accuracy
+    cm = confusion_matrix(gt, preds, labels=unique_classes)
+    row_sums = cm.sum(axis=1, keepdims=True) + 1e-10
+    class_accuracy = (cm.diagonal().astype(np.float64) / row_sums.squeeze(1))
+
+    # ----- Class-name handling aligned to unique_classes -----
+    if class_names is None:
+        class_names_list = [f"Class {c}" for c in unique_classes]
+    elif isinstance(class_names, dict):
+        class_names_list = [class_names.get(c, f"Class {c}") for c in unique_classes]
+    else:
+        # list/tuple indexed by contiguous id
+        class_names_list = [
+            class_names[c] if (isinstance(c, int) and c < len(class_names)) else f"Class {c}"
+            for c in unique_classes
+        ]
+
+    # Average loss
+    avg_loss = total_loss / max(1, len(test_loader))
+
+    # Confidence stats
+    confidences = [p["confidence"] for p in preds_detail]
+    correct_conf = [p["confidence"] for p in preds_detail if p["correct"]]
+    wrong_conf   = [p["confidence"] for p in preds_detail if not p["correct"]]
+    confidence_stats = {
+        "mean_confidence": float(np.mean(confidences)) if confidences else 0.0,
+        "std_confidence":  float(np.std(confidences)) if confidences else 0.0,
+        "mean_confidence_correct": float(np.mean(correct_conf)) if correct_conf else 0.0,
+        "mean_confidence_incorrect": float(np.mean(wrong_conf)) if wrong_conf else 0.0,
     }
-    # Log metrics to wandb
+
+    # ----- Results dict -----
+    results = {
+        "epoch": epoch,
+        "loss": avg_loss,
+        "accuracy": accuracy,
+        "balanced_accuracy": balanced_acc,
+        "cohen_kappa": kappa,
+        "precision_macro": precision_macro,
+        "recall_macro": recall_macro,
+        "f1_macro": f1_macro,
+        "precision_weighted": precision_weighted,
+        "recall_weighted": recall_weighted,
+        "f1_weighted": f1_weighted,
+        "jaccard_macro": jaccard_macro,
+        "jaccard_weighted": jaccard_weighted,
+        **{k: v for k, v in top_k_acc.items() if v is not None},
+    }
+    if roc_auc is not None:
+        results["roc_auc"] = roc_auc
+    results.update(confidence_stats)
+
+    # Per-class into results
+    for i, class_idx in enumerate(unique_classes):
+        results[f"class_{class_idx}_accuracy"]  = float(class_accuracy[i])
+        results[f"class_{class_idx}_precision"] = float(precision_per_class[i])
+        results[f"class_{class_idx}_recall"]    = float(recall_per_class[i])
+        results[f"class_{class_idx}_f1"]        = float(f1_per_class[i])
+
+    # ----- Log -----
     logger.log(results)
 
-    # Save metrics to CSV
-    metrics_path = f'{results_dir}/metrics.csv'
-    with open(metrics_path, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["epoch",  "precision", "recall", "f1", "accuracy"])
-        writer.writerow([epoch,  precision, recall, f1, accuracy])  
+    # ===== Saving =====
+    Path(results_dir).mkdir(parents=True, exist_ok=True)
 
-        # Save detailed predictions to CSV
-    preds_path = f'{results_dir}/preds.csv'
-    print("Saving predictions to: ", preds_path)
-    with open(preds_path, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["trial_id", "subject_id", "gesture_code", "pred_label","probs"])
-        for pred in preds_detail:
-            writer.writerow([pred["trial_id"], pred["subject_id"], pred["gesture_code"], pred["pred_label"], pred["probs"]])
+    # Overall metrics CSV
+    metrics_path = f'{results_dir}/metrics_epoch_{epoch}.csv'
+    with open(metrics_path, mode='w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(["Metric", "Value"])
+        w.writerow(["Epoch", epoch])
+        w.writerow(["Loss", avg_loss])
+        w.writerow(["Accuracy", accuracy])
+        w.writerow(["Balanced Accuracy", balanced_acc])
+        w.writerow(["Cohen's Kappa", kappa])
+        if roc_auc is not None:
+            w.writerow(["ROC-AUC", roc_auc])
+        for k, v in top_k_acc.items():
+            if v is not None:
+                w.writerow([k.replace('_', ' ').title(), v])
+        w.writerow(["Precision (Macro)", precision_macro])
+        w.writerow(["Recall (Macro)", recall_macro])
+        w.writerow(["F1 Score (Macro)", f1_macro])
+        w.writerow(["Precision (Weighted)", precision_weighted])
+        w.writerow(["Recall (Weighted)", recall_weighted])
+        w.writerow(["F1 Score (Weighted)", f1_weighted])
+        w.writerow(["Jaccard (Macro)", jaccard_macro])
+        w.writerow(["Jaccard (Weighted)", jaccard_weighted])
+        w.writerow(["Mean Confidence", confidence_stats["mean_confidence"]])
+        w.writerow(["Mean Confidence (Correct)", confidence_stats["mean_confidence_correct"]])
+        w.writerow(["Mean Confidence (Incorrect)", confidence_stats["mean_confidence_incorrect"]])
+
+    # Per-class metrics CSV
+    class_metrics_path = f'{results_dir}/class_metrics_epoch_{epoch}.csv'
+    with open(class_metrics_path, mode='w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(["Class_ID", "Class_Name", "Accuracy", "Precision", "Recall", "F1-Score", "Support"])
+        for i, class_idx in enumerate(unique_classes):
+            support = int(cm[i].sum())
+            w.writerow([
+                class_idx,
+                class_names_list[i],
+                f"{class_accuracy[i]:.4f}",
+                f"{precision_per_class[i]:.4f}",
+                f"{recall_per_class[i]:.4f}",
+                f"{f1_per_class[i]:.4f}",
+                support,
+            ])
+
+    # Confusion matrices
+    cm_path = f'{results_dir}/confusion_matrix_epoch_{epoch}.csv'
+    np.savetxt(cm_path, cm, delimiter=',', fmt='%d')
+
+    cm_labeled_path = f'{results_dir}/confusion_matrix_labeled_epoch_{epoch}.csv'
+    with open(cm_labeled_path, mode='w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['True\\Predicted'] + class_names_list)
+        for i, row in enumerate(cm):
+            w.writerow([class_names_list[i]] + row.tolist())
+
+    # Heatmaps
+    fig_w = max(10, n_classes)
+    fig_h = max(8, int(n_classes * 0.8))
+    plt.figure(figsize=(fig_w, fig_h))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=class_names_list, yticklabels=class_names_list,
+                cbar_kws={'label': 'Count'})
+    plt.title(f'Confusion Matrix - Epoch {epoch}', fontsize=14, fontweight='bold')
+    plt.ylabel('True Label'); plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/confusion_matrix_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    cm_norm = cm.astype('float') / (cm.sum(axis=1, keepdims=True) + 1e-10)
+    plt.figure(figsize=(fig_w, fig_h))
+    sns.heatmap(cm_norm, annot=True, fmt='.2%', cmap='Blues',
+                xticklabels=class_names_list, yticklabels=class_names_list,
+                cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
+    plt.title(f'Normalized Confusion Matrix (Recall) - Epoch {epoch}', fontsize=14, fontweight='bold')
+    plt.ylabel('True Label'); plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/confusion_matrix_normalized_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # Per-class bar charts
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    metrics_to_plot = [
+        (class_accuracy, 'Accuracy', axes[0, 0]),
+        (precision_per_class, 'Precision', axes[0, 1]),
+        (recall_per_class, 'Recall', axes[1, 0]),
+        (f1_per_class, 'F1-Score', axes[1, 1]),
+    ]
+    for metric_values, metric_name, ax in metrics_to_plot:
+        bars = ax.bar(range(len(class_names_list)), metric_values, color='skyblue', edgecolor='navy', alpha=0.7)
+        ax.set_xlabel('Class'); ax.set_ylabel(metric_name)
+        ax.set_title(f'Per-Class {metric_name}', fontsize=12, fontweight='bold')
+        ax.set_xticks(range(len(class_names_list)))
+        ax.set_xticklabels(class_names_list, rotation=45, ha='right')
+        ax.set_ylim([0, 1.1]); ax.grid(axis='y', alpha=0.3)
+        for i, (bar, val) in enumerate(zip(bars, metric_values)):
+            ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.02,
+                    f'{val:.3f}', ha='center', va='bottom', fontsize=9)
+    plt.tight_layout()
+    plt.savefig(f'{results_dir}/per_class_metrics_epoch_{epoch}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    # Classification report
+    class_report = classification_report(gt, preds,
+                                         target_names=class_names_list,
+                                         labels=unique_classes,
+                                         zero_division=0,
+                                         output_dict=True)
+    with open(f'{results_dir}/classification_report_epoch_{epoch}.json', 'w') as f:
+        json.dump(class_report, f, indent=4)
+    with open(f'{results_dir}/classification_report_epoch_{epoch}.txt', 'w') as f:
+        f.write(classification_report(gt, preds,
+                                      target_names=class_names_list,
+                                      labels=unique_classes,
+                                      zero_division=0))
+
+    # Save detailed predictions
+    preds_path = f'{results_dir}/predictions_epoch_{epoch}.csv'
+    print("Saving predictions to:", preds_path)
+    with open(preds_path, mode='w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(["trial_id","subject_id","gesture_code","true_label","pred_label",
+                    "correct","confidence","true_class_prob","logits","probs"])
+        for r in preds_detail:
+            w.writerow([
+                r["trial_id"], r["subject_id"], r["gesture_code"],
+                r["true_label"], r["pred_label"], r["correct"],
+                f'{r["confidence"]:.6f}', f'{r["true_class_prob"]:.6f}',
+                r["logits"], r["probs"]
+            ])
+
+    print(f"\n{'='*70}")
+    print(f"TCN Evaluation Complete - Epoch {epoch}")
+    print(f"Loss: {avg_loss:.4f} | Acc: {accuracy:.4f} | F1 (Macro): {f1_macro:.4f}")
+    print(f"Balanced Acc: {balanced_acc:.4f} | Kappa: {kappa:.4f} | Jaccard (Macro): {jaccard_macro:.4f}")
+    if roc_auc is not None:
+        print(f"ROC-AUC: {roc_auc:.4f}")
+    for k, v in top_k_acc.items():
+        if v is not None:
+            print(f"{k.replace('_',' ').title()}: {v:.4f}")
+    print(f"Results saved to: {results_dir}")
+    print(f"{'='*70}\n")
+
     return results
 
 
@@ -3157,8 +4118,8 @@ def train_mstcn_one_epoch(model, train_loader, loss_fns, optimizer, device, logg
             B, C, T = x_BCT.shape
             
             # skip batches with time length < 30
-            if T < 30:
-                continue
+            # if T < 30:
+            #     continue
 
             if labels.dim() == 1:
                 # Expand single label per sequence across time to match MS-TCN++ interface
@@ -3239,8 +4200,8 @@ def validate_mstcn(model, val_loader, loss_fns, device, logger, args):
                 B, C, T = x_BCT.shape
 
                 # skip batches with time length < 30
-                if T < 30:
-                    continue
+                # if T < 30:
+                #     continue
 
                 if labels.dim() == 1:
                     labels = labels.unsqueeze(1).expand(-1, T).contiguous()  # (B,T)
@@ -3317,32 +4278,9 @@ import os
 from pathlib import Path
 import traceback
 from collections import defaultdict
-
 def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, results_dir, args, class_names=None):
     """
     Enhanced frame-wise test loop for MS-TCN++ with comprehensive metrics for ML papers.
-    
-    - Computes average loss over batches using mstcn_compute_loss
-    - Aggregates frame-level predictions vs. labels (mask + IGNORE_INDEX respected)
-    - Reports comprehensive metrics: accuracy, balanced accuracy, per-class metrics, confusion matrix
-    - Computes temporal metrics: frame accuracy, edit distance, segmental metrics
-    - Saves detailed metrics, visualizations, and per-sample predictions
-    
-    Args:
-        model: MS-TCN++ model to evaluate
-        test_loader: DataLoader for test data
-        loss_fns: Loss functions for MS-TCN++
-        device: Device to run on
-        logger: Logger (e.g., wandb)
-        epoch: Current epoch number
-        results_dir: Directory to save results
-        args: Arguments object containing model configuration
-        class_names: List of class names for better visualization (optional)
-    
-    Expects each batch to contain:
-      - 'label': (B,) or (B,T) long (if (B,), we expand to (B,T))
-      - optional 'mask': (B,1,T) float in {0,1}; if absent, uses all-ones
-      - optional metadata: 'trial_id', 'subject_id', 'gesture_code'
     """
     os.makedirs(results_dir, exist_ok=True)
 
@@ -3371,11 +4309,6 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
                     raise ValueError(f"mmt_preprocess must return (B,T,F), got shape {tuple(x_BTF.shape)}")
                 x_BCT = x_BTF.permute(0, 2, 1).contiguous()        # (B,C=F,T)
                 B, C, T = x_BCT.shape
-
-                # Skip batches with time length < 30
-                if T < 30:
-                    print(f"Skipping batch {i}: T={T} < 30")
-                    continue
 
                 # ----- Targets -----
                 labels = batch['label'].to(device)                 # (B,) or (B,T)
@@ -3418,9 +4351,9 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
                     
                     # Count per-class frames and correct predictions
                     for gt_class, pred_class in zip(gt_flat, pred_flat):
-                        class_frame_counts[gt_class] += 1
+                        class_frame_counts[int(gt_class)] += 1
                         if gt_class == pred_class:
-                            class_correct_counts[gt_class] += 1
+                            class_correct_counts[int(gt_class)] += 1
 
                 # ----- Per-sample metrics and saving -----
                 probs_BCT = torch.softmax(final_logits, dim=1).detach().cpu().numpy()  # (B,C,T)
@@ -3449,10 +4382,8 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
                         pred_valid = pred_b[valid_b]
                         sample_accuracy = float((gt_valid == pred_valid).mean())
                         
-                        # Calculate edit distance (Levenshtein distance)
+                        # Temporal metrics
                         edit_dist = compute_edit_distance(gt_valid, pred_valid)
-                        
-                        # Calculate F1@k scores (overlap at different thresholds)
                         f1_scores = compute_f1_at_k(gt_valid, pred_valid, k_list=[10, 25, 50])
                     else:
                         sample_accuracy = 0.0
@@ -3470,7 +4401,6 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
                     np.save(os.path.join(pred_save_path, f"{stem}_gt.npy"), gt_b)
                     np.save(os.path.join(pred_save_path, f"{stem}_mask.npy"), valid_b)
                     
-                    # Save probs if requested
                     if getattr(args, "save_probs", False):
                         np.save(os.path.join(pred_save_path, f"{stem}_probs.npy"), probs_BCT[b])
 
@@ -3526,10 +4456,16 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
         precision_per_class = recall_per_class = f1_per_class = np.array([])
         unique_classes = []
         cm = np.array([[]])
+        class_accuracy = np.array([])
+        jaccard_macro = jaccard_weighted = 0.0
+        gt_all = pred_all = np.array([])
     else:
         gt_all = np.concatenate(all_gt_frames, axis=0)
         pred_all = np.concatenate(all_pred_frames, axis=0)
-        
+
+        # ----- Use only classes present in y_true (LOUO-safe) -----
+        unique_classes = sorted(list(set(gt_all.tolist())))
+
         # Overall metrics
         accuracy = float((gt_all == pred_all).mean())
         
@@ -3542,8 +4478,7 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
         recall_weighted = float(recall_score(gt_all, pred_all, average='weighted', zero_division=0))
         f1_weighted = float(f1_score(gt_all, pred_all, average='weighted', zero_division=0))
         
-        # Per-class metrics
-        unique_classes = sorted(list(set(gt_all.tolist())))
+        # Per-class metrics (restricted to unique_classes)
         precision_per_class = precision_score(gt_all, pred_all, average=None, zero_division=0, labels=unique_classes)
         recall_per_class = recall_score(gt_all, pred_all, average=None, zero_division=0, labels=unique_classes)
         f1_per_class = f1_score(gt_all, pred_all, average=None, zero_division=0, labels=unique_classes)
@@ -3556,24 +4491,31 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
         jaccard_macro = float(jaccard_score(gt_all, pred_all, average='macro', zero_division=0))
         jaccard_weighted = float(jaccard_score(gt_all, pred_all, average='weighted', zero_division=0))
         
-        # Confusion matrix
+        # Confusion matrix on unique_classes
         cm = confusion_matrix(gt_all, pred_all, labels=unique_classes)
         
-        # Per-class accuracy from confusion matrix
-        class_accuracy = cm.diagonal() / (cm.sum(axis=1) + 1e-10)
+        # Per-class accuracy from confusion matrix (safe divide)
+        row_sums = cm.sum(axis=1, keepdims=True)
+        class_accuracy = (cm.diagonal().astype(np.float64) / (row_sums.squeeze(1) + 1e-10))
 
-    # Generate class names if not provided
+    # ----- Class-name handling aligned with unique_classes -----
     n_classes = len(unique_classes)
     if class_names is None:
-        class_names = [f"Class_{c}" for c in unique_classes]
-    elif len(class_names) < n_classes:
-        class_names = class_names + [f"Class_{c}" for c in range(len(class_names), n_classes)]
+        class_names_list = [f"Class {c}" for c in unique_classes]
+    elif isinstance(class_names, dict):
+        class_names_list = [class_names.get(c, f"Class {c}") for c in unique_classes]
+    else:
+        # list/tuple: index by contiguous id
+        class_names_list = [
+            class_names[c] if (isinstance(c, int) and c < len(class_names)) else f"Class {c}"
+            for c in unique_classes
+        ]
 
-    # Calculate average temporal metrics
-    avg_edit_distance = np.mean([rec["edit_distance"] for rec in per_sample_records])
-    avg_f1_10 = np.mean([rec["f1@10"] for rec in per_sample_records])
-    avg_f1_25 = np.mean([rec["f1@25"] for rec in per_sample_records])
-    avg_f1_50 = np.mean([rec["f1@50"] for rec in per_sample_records])
+    # Average temporal metrics
+    avg_edit_distance = np.mean([rec["edit_distance"] for rec in per_sample_records]) if per_sample_records else 0.0
+    avg_f1_10 = np.mean([rec["f1@10"] for rec in per_sample_records]) if per_sample_records else 0.0
+    avg_f1_25 = np.mean([rec["f1@25"] for rec in per_sample_records]) if per_sample_records else 0.0
+    avg_f1_50 = np.mean([rec["f1@50"] for rec in per_sample_records]) if per_sample_records else 0.0
 
     # Prepare results dictionary
     results = {
@@ -3643,7 +4585,7 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
             for i, class_idx in enumerate(unique_classes):
                 writer.writerow([
                     class_idx,
-                    class_names[i],
+                    class_names_list[i],
                     f"{class_accuracy[i]:.4f}",
                     f"{precision_per_class[i]:.4f}",
                     f"{recall_per_class[i]:.4f}",
@@ -3659,15 +4601,15 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
         cm_labeled_path = os.path.join(results_dir, f"confusion_matrix_labeled_epoch_{epoch}.csv")
         with open(cm_labeled_path, mode='w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['True\\Predicted'] + class_names)
+            writer.writerow(['True\\Predicted'] + class_names_list)
             for i, row in enumerate(cm):
-                writer.writerow([class_names[i]] + row.tolist())
+                writer.writerow([class_names_list[i]] + row.tolist())
 
         # ----- Visualize confusion matrix -----
         fig_size = max(10, n_classes * 0.8)
         plt.figure(figsize=(fig_size, fig_size * 0.9))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                    xticklabels=class_names, yticklabels=class_names,
+                    xticklabels=class_names_list, yticklabels=class_names_list,
                     cbar_kws={'label': 'Frame Count'})
         plt.title(f'Confusion Matrix (Frame-level) - Epoch {epoch}', fontsize=14, fontweight='bold')
         plt.ylabel('True Label', fontsize=12)
@@ -3676,11 +4618,12 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
         plt.savefig(os.path.join(results_dir, f"confusion_matrix_epoch_{epoch}.png"), dpi=300, bbox_inches='tight')
         plt.close()
 
-        # Normalized confusion matrix
-        cm_normalized = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
+        # Normalized confusion matrix (safe row-wise division)
+        row_sums = cm.sum(axis=1, keepdims=True) + 1e-10
+        cm_normalized = cm.astype('float') / row_sums
         plt.figure(figsize=(fig_size, fig_size * 0.9))
         sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues',
-                    xticklabels=class_names, yticklabels=class_names,
+                    xticklabels=class_names_list, yticklabels=class_names_list,
                     cbar_kws={'label': 'Proportion'}, vmin=0, vmax=1)
         plt.title(f'Normalized Confusion Matrix (Recall) - Epoch {epoch}', fontsize=14, fontweight='bold')
         plt.ylabel('True Label', fontsize=12)
@@ -3699,12 +4642,12 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
         ]
 
         for metric_values, metric_name, ax in metrics_to_plot:
-            bars = ax.bar(range(len(class_names)), metric_values, color='skyblue', edgecolor='navy', alpha=0.7)
+            bars = ax.bar(range(len(class_names_list)), metric_values, color='skyblue', edgecolor='navy', alpha=0.7)
             ax.set_xlabel('Class', fontsize=11)
             ax.set_ylabel(metric_name, fontsize=11)
             ax.set_title(f'Per-Class {metric_name} (Frame-level)', fontsize=12, fontweight='bold')
-            ax.set_xticks(range(len(class_names)))
-            ax.set_xticklabels(class_names, rotation=45, ha='right')
+            ax.set_xticks(range(len(class_names_list)))
+            ax.set_xticklabels(class_names_list, rotation=45, ha='right')
             ax.set_ylim([0, 1.1])
             ax.grid(axis='y', alpha=0.3)
 
@@ -3720,16 +4663,16 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
         # ----- Visualize frame distribution per class -----
         plt.figure(figsize=(12, 6))
         frame_counts = [class_frame_counts[c] for c in unique_classes]
-        bars = plt.bar(range(len(class_names)), frame_counts, color='coral', edgecolor='darkred', alpha=0.7)
+        bars = plt.bar(range(len(class_names_list)), frame_counts, color='coral', edgecolor='darkred', alpha=0.7)
         plt.xlabel('Class', fontsize=12)
         plt.ylabel('Frame Count', fontsize=12)
         plt.title('Frame Distribution by Class', fontsize=14, fontweight='bold')
-        plt.xticks(range(len(class_names)), class_names, rotation=45, ha='right')
+        plt.xticks(range(len(class_names_list)), class_names_list, rotation=45, ha='right')
         plt.grid(axis='y', alpha=0.3)
 
         for bar, count in zip(bars, frame_counts):
             height = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width()/2., height + max(frame_counts)*0.01,
+            plt.text(bar.get_x() + bar.get_width()/2., height + max(frame_counts + [1]) * 0.01,
                     f'{count}', ha='center', va='bottom', fontsize=10)
 
         plt.tight_layout()
@@ -3738,8 +4681,13 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
 
         # ----- Classification report -----
         if len(gt_all) > 0:
-            class_report = classification_report(gt_all, pred_all, target_names=class_names,
-                                                labels=unique_classes, zero_division=0, output_dict=True)
+            class_report = classification_report(
+                gt_all, pred_all,
+                target_names=class_names_list,
+                labels=unique_classes,
+                zero_division=0,
+                output_dict=True
+            )
             
             report_path = os.path.join(results_dir, f"classification_report_epoch_{epoch}.json")
             with open(report_path, 'w') as f:
@@ -3747,8 +4695,12 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
 
             report_text_path = os.path.join(results_dir, f"classification_report_epoch_{epoch}.txt")
             with open(report_text_path, 'w') as f:
-                f.write(classification_report(gt_all, pred_all, target_names=class_names,
-                                            labels=unique_classes, zero_division=0))
+                f.write(classification_report(
+                    gt_all, pred_all,
+                    target_names=class_names_list,
+                    labels=unique_classes,
+                    zero_division=0
+                ))
 
     # ----- Save per-sample summary CSV -----
     samples_path = os.path.join(results_dir, f"samples_epoch_{epoch}.csv")
@@ -3765,46 +4717,40 @@ def test_MSTCN_model(model, test_loader, loss_fns, device, logger, epoch, result
     with open(detailed_path, 'w') as f:
         json.dump(per_sample_detailed, f, indent=2)
 
-    # ----- Create comprehensive summary -----
+    # ----- Summary -----
     summary_path = os.path.join(results_dir, f"summary_epoch_{epoch}.txt")
     with open(summary_path, 'w') as f:
         f.write(f"MS-TCN++ Model Evaluation Summary - Epoch {epoch}\n")
         f.write("=" * 70 + "\n\n")
-        
         f.write(f"Overall Metrics:\n")
         f.write(f"  Loss: {avg_loss:.4f}\n")
         f.write(f"  Frame Accuracy: {accuracy:.4f}\n")
         f.write(f"  Balanced Accuracy: {balanced_acc:.4f}\n")
         f.write(f"  Cohen's Kappa: {kappa:.4f}\n")
-        
         f.write(f"\nMacro-averaged Metrics:\n")
         f.write(f"  Precision: {precision_macro:.4f}\n")
         f.write(f"  Recall: {recall_macro:.4f}\n")
         f.write(f"  F1-Score: {f1_macro:.4f}\n")
         f.write(f"  Jaccard (IoU): {jaccard_macro:.4f}\n")
-        
         f.write(f"\nWeighted-averaged Metrics:\n")
         f.write(f"  Precision: {precision_weighted:.4f}\n")
         f.write(f"  Recall: {recall_weighted:.4f}\n")
         f.write(f"  F1-Score: {f1_weighted:.4f}\n")
         f.write(f"  Jaccard (IoU): {jaccard_weighted:.4f}\n")
-        
         f.write(f"\nTemporal Metrics:\n")
         f.write(f"  Average Edit Distance: {avg_edit_distance:.2f}\n")
         f.write(f"  Average F1@10: {avg_f1_10:.4f}\n")
         f.write(f"  Average F1@25: {avg_f1_25:.4f}\n")
         f.write(f"  Average F1@50: {avg_f1_50:.4f}\n")
-        
         if n_classes > 0:
             f.write(f"\nPer-Class Metrics:\n")
             for i, class_idx in enumerate(unique_classes):
-                f.write(f"\n  {class_names[i]} (Class {class_idx}):\n")
+                f.write(f"\n  {class_names_list[i]} (Class {class_idx}):\n")
                 f.write(f"    Accuracy: {class_accuracy[i]:.4f}\n")
                 f.write(f"    Precision: {precision_per_class[i]:.4f}\n")
                 f.write(f"    Recall: {recall_per_class[i]:.4f}\n")
                 f.write(f"    F1-Score: {f1_per_class[i]:.4f}\n")
                 f.write(f"    Frame Count: {class_frame_counts[class_idx]}\n")
-        
         f.write(f"\n" + "=" * 70 + "\n")
         f.write(f"Total Frames: {results['total_frames']}\n")
         f.write(f"Total Samples: {results['total_samples']}\n")

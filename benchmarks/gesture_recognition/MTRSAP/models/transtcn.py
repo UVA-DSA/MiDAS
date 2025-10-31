@@ -184,7 +184,23 @@ class LeanTemporalEncoder(nn.Module):
         # print("After temporal:", x.shape)
         return x
     
+class TokenProjector(nn.Module):
+    def __init__(self, in_dim=2048, d_model=64, p_drop=0.1):
+        super().__init__()
+        self.norm = nn.LayerNorm(in_dim)
+        self.proj = nn.Sequential(
+            nn.Linear(in_dim, d_model),
+            nn.GELU(),
+            nn.Dropout(p_drop),
+        )
+    def forward(self, x):   # x: [B, T, 2048]
+        x = self.norm(x)
+        return self.proj(x) # [B, T, d_model]
     
+
+   
+    
+
 class TransformerModel(nn.Module):
     def __init__(self, args: DefaultArgsNamespace):
         super().__init__()
@@ -204,7 +220,7 @@ class TransformerModel(nn.Module):
         self.encoder_params = args.tcn_model_params["encoder_params"]
         self.decoder_params = args.tcn_model_params["decoder_params"]
 
-        self.encoder_params["in_channels"] = self.input_dim
+        self.encoder_params["in_channels"] =  self.input_dim
         self.decoder_params["out_channels"] = self.output_dim
 
         # Load ResNet-50 backbone and remove the final classification layer
@@ -214,7 +230,6 @@ class TransformerModel(nn.Module):
         # Freeze ResNet-50 weights
         for param in self.backbone.parameters():
             param.requires_grad = False
-
         self.transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=self.d_model, nhead=self.nhead, dropout=self.dropout, batch_first=self.batch_first),
             num_layers=self.num_layers
@@ -228,7 +243,15 @@ class TransformerModel(nn.Module):
         
         features_dim = 2048  # Output dimension of ResNet-50 backbone
         self.pe = PositionalEncoding(d_model=self.d_model, max_len=32, dropout=self.dropout)
-        self.fc = nn.Linear(features_dim, self.d_model)
+
+
+        self.fc = nn.Linear(self.input_dim, self.d_model)
+
+        self.token_projector = TokenProjector(in_dim=self.input_dim, d_model=self.d_model, p_drop=self.dropout)
+
+        self.fc_out = nn.Linear(self.input_dim, self.output_dim)
+
+
 
 
         # MelSpectrogram transform
@@ -339,26 +362,46 @@ class TransformerModel(nn.Module):
             features = self.wav2vec_project_layer(features)
             
         return features
+    
+    def count_parameters(self):
+        trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        frozen = sum(p.numel() for p in self.parameters() if not p.requires_grad)
+        print(f"[MTRSAP] Trainable parameters: {trainable:,}")
+        print(f"[MTRSAP] Frozen parameters: {frozen:,}")
+        print(f"[MTRSAP] Total parameters: {trainable + frozen:,}")
+        return trainable
+
 
     def forward(self, x):
+
+        # project input to d_model
+        # print("Input shape:", x.shape)
+        # x = self.fc(x)                        # (B, T, d_model)
+        # print("After fc:", x.shape)
+
         # # TCN encoder
         if self.seq_to_one:
             x = x.permute(0, 2, 1).contiguous()    # (B, d_model, T)
             x = self.encoder(x)
         else:
             x = self.lean_temporal_encoder(x)
-        # print("encoder_out",x.shape)
             
         x = x.permute(0, 2, 1).contiguous()    # (B, T, d_model)
         x = self.pe(x)                         # (B, T, d_model)
+
+        # print("Trans_encoder_in",x.shape)
+
         x = self.transformer(x)                # (B, T, d_model)
         x = self.out(x)                        # (B, T, C)
+        
+        # for testing use a simple MLP
+        # x = self.fc_out(x)                     # (B, T, C)
+        # print("Final output shape:", x.shape)
 
         if self.seq_to_one:
             # sequence classification path (NOT for frame-wise segmentation)
             x = self.max_pool(x)               # (B, C)
             return x
 
-        # frame-wise logits expected by your loss: (B, C, T)
         return x.transpose(1, 2).contiguous()  # (B, C, T)
         

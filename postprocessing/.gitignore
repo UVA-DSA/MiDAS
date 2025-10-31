@@ -1,1 +1,4 @@
 plots
+logs
+*.csv
+*.jpg

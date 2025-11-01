@@ -41,6 +41,17 @@ import json
 from pathlib import Path
 import traceback
 
+from scipy.signal import butter, filtfilt
+def butter_lowpass(cutoff, fs, order=5):
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    return b, a
+def lowpass_filter(data, cutoff=2.5, fs=30.0, order=5):
+    b, a = butter_lowpass(cutoff, fs, order=order)
+    y = filtfilt(b, a, data, axis=1)
+    return y
+
 def seed_everything(seed: int = 42):
     """
     Ensure reproducible training across Python, NumPy, and PyTorch.

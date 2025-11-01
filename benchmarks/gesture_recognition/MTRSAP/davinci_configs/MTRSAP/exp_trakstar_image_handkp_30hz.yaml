@@ -37,17 +37,20 @@ dataloader_params:
     "S217_T3",
     "S217_T4",
     "S218_T1",
-    "S219_T1"]
+    "S219_T1"
+    ]
+
 
   cv:
-    scheme: "gesture_flat" # "leave_one_out" or "k_fold" or "gesture_flat"
+    scheme: "gesture_flat" # "gesture_flat" or "group_k_fold" or "gesture_flat" or "trial_split"
     k: 5
-    val_ratio: 0.25
+    val_ratio: 0.2
+    test_ratio: 0.2
     seed: 42
     shuffle: true
-    val_same_as_test: true
+    val_same_as_test: false
 
-  modalities: ["trakstar","handkp"]
+  modalities: ["trakstar", "images", "handkp"]  # available: console, raven, sw_left, sw_right, trakstar, images, handkp
 
   selections:
     # console: [
@@ -61,7 +64,7 @@ dataloader_params:
     # # "raven_field.ori6","raven_field.ori7","raven_field.ori8","raven_field.ori9","raven_field.ori10","raven_field.ori11",
     # # "raven_field.ori12","raven_field.ori13","raven_field.ori14","raven_field.ori15","raven_field.ori16","raven_field.ori17"
     # ] # left rave: 0, 1 ,2 , right: 3,4,5
-    # images: ["resnet"]    # ✅ required placeholder even if no variables to select
+    images: ["resnet_v2"]    # ✅ required placeholder even if no variables to select
     # trakstar: [
     # "trakstar_sensor_0_azimuth","trakstar_sensor_1_azimuth","trakstar_sensor_2_azimuth","trakstar_sensor_3_azimuth",
     # "trakstar_sensor_0_elevation","trakstar_sensor_1_elevation","trakstar_sensor_2_elevation","trakstar_sensor_3_elevation",
@@ -78,7 +81,6 @@ dataloader_params:
       "trakstar_sensor_1_x_transformed","trakstar_sensor_1_y_transformed","trakstar_sensor_1_z_transformed",
       "trakstar_sensor_2_x_transformed","trakstar_sensor_2_y_transformed","trakstar_sensor_2_z_transformed",
        "trakstar_sensor_3_x_transformed","trakstar_sensor_3_y_transformed","trakstar_sensor_3_z_transformed"
-      #  ,"trakstar_grasp_d0","trakstar_grasp_d1"
     ]
     # sw_left: ["sw_left_x"]
     # sw_right: ["sw_right_x"]
@@ -86,9 +88,9 @@ dataloader_params:
       # "hand_left X","hand_left Y","hand_left Z","hand_left Yaw","hand_left Pitch","hand_left Roll","hand_right X","hand_right Y","hand_right Z","hand_right Yaw","hand_right Pitch","hand_right Roll",
     "left_index_tip_X","left_index_tip_Y","left_index_tip_Z","right_index_tip_X","right_index_tip_Y","right_index_tip_Z","left_thumb_tip_X","left_thumb_tip_Y","left_thumb_tip_Z","right_thumb_tip_X","right_thumb_tip_Y","right_thumb_tip_Z"
     ]
-
-
-  observation_window: -1
+    
+  # observation_window: 10 # 3 seconds at 10 Hz
+  observation_window: -1 # clips
   step: 1
 
   keysteps:
@@ -135,7 +137,6 @@ transformer_params:
   seq_to_one: true
 
 
-
 # optional overrides for build_model_cfg_from_dataloader
 model_cfg_overrides:
   d_model: 128
@@ -152,4 +153,3 @@ mstcn_model_params:
   num_layers_PG: 11
   num_layers_R: 10
   num_R: 3
-

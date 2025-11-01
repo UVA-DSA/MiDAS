@@ -32,7 +32,7 @@ dataloader_params:
     raven: [
     "raven_field.pos0","raven_field.pos1","raven_field.pos2","raven_field.pos3","raven_field.pos4","raven_field.pos5",
     "raven_field.ori0","raven_field.ori1","raven_field.ori2","raven_field.ori3","raven_field.ori4","raven_field.ori5",
-    "raven_field.grasp_d0","raven_field.grasp_d1"
+    # "raven_field.grasp_d0","raven_field.grasp_d1"
     ] # left rave: 0, 1 ,2 , right: 3,4,5
     # images: ["resnet"]    # ✅ required placeholder even if no variables to select
     # trakstar: [

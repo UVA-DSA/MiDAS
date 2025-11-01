@@ -25,11 +25,14 @@ CFG_PATH="./davinci_configs/MTRSAP/exp_image_30hz.yaml"
 # CFG_PATH="./desk_configs/MTRSAP/exp_image_10hz.yaml"
 # CFG_PATH="./raven_configs/MTRSAP/exp_image_10hz.yaml"
 
+CFG_PATH="./davinci_configs/MTRSAP/exp_trakstar_30hz.yaml"
 # CFG_PATH="./davinci_configs/MTRSAP/exp_trakstar_image_30hz.yaml"
 # CFG_PATH="./davinci_configs/MTRSAP/exp_image_vit_30hz.yaml"
 # CFG_PATH="./davinci_configs/MTRSAP/exp_trakstar_image_vit_30hz.yaml"
-# CFG_PATH="./davinci_configs/MTRSAP/exp_handkp_30hz.yaml"
+CFG_PATH="./davinci_configs/MTRSAP/exp_handkp_30hz.yaml"
 # CFG_PATH="./davinci_configs/MTRSAP/exp_trakstar_handkp_30hz.yaml"
+# CFG_PATH="./davinci_configs/MTRSAP/exp_trakstar_image_handkp_30hz.yaml"
+# CFG_PATH="./davinci_configs/MTRSAP/exp_trakstar_image_vit_handkp_30hz.yaml"
 
 
 
@@ -43,8 +46,8 @@ CFG_PATH="./davinci_configs/MTRSAP/exp_image_30hz.yaml"
 # CFG_PATH="./jigsaws_configs/MTRSAP/exp_psm_30hz.yaml"
 # CFG_PATH="./jigsaws_configs/MTRSAP/exp_psm_image_30hz.yaml"
 
-CFG_PATH="./raven_configs/MTRSAP/exp_raven_10hz.yaml"
-CFG_PATH="./raven_configs/MTRSAP/exp_image_vit_10hz.yaml"
+# CFG_PATH="./raven_configs/MTRSAP/exp_raven_10hz.yaml"
+# CFG_PATH="./raven_configs/MTRSAP/exp_image_vit_10hz.yaml"
 # CFG_PATH="./raven_configs/MTRSAP/exp_trakstar_sw_10hz.yaml"
 # CFG_PATH="./raven_configs/MTRSAP/exp_trakstar_sw_image_vit_10hz.yaml"
 # CFG_PATH="./raven_configs/MTRSAP/exp_image_resnet_raven_10hz.yaml"

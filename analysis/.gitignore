@@ -1,4 +1,6 @@
 analysis_plots
 pca_outputs
 **pedal_accuracy_results
+**pedal_accuracy_across_trials
 **logs
+**stats

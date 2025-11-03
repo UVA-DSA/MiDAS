@@ -20,9 +20,11 @@ echo "$HOSTNAME" &&
 conda deactivate &&
 conda activate egoexoems &&
 # python -u extract_camera_events.py --job_id "$SLURM_JOB_ID"  && # camera pedal -- good hamid
-# python -u extract_camera_pedal.py --job_id "$SLURM_JOB_ID"  && # not so good keshara
 # python -u extract_arm_swap_pedal.py --job_id "$SLURM_JOB_ID"  && # armswap -- good hamid
-python -u extract_pri_sec_pedals.py --job_id "$SLURM_JOB_ID"  && # yellow and blue pedals -- good hamid
+# python -u extract_pri_sec_pedals.py --job_id "$SLURM_JOB_ID"  && # yellow and blue pedals -- good hamid
+# python -u extract_clutch_events.py --job_id "$SLURM_JOB_ID"  && # yellow and blue pedals -- good hamid
+
+python -u pedal_visualize_on_video.py --job_id "$SLURM_JOB_ID"  && # visualize pedals gt
 
 
 echo "Done" &&

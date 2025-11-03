@@ -9,6 +9,7 @@ from multiprocessing import Pool, cpu_count
 ROOT_PATH = "/standard/UVA-DSA/MIDAS/Organized/Bootcamp/SuturingV2/Processed/"
 TRIALS = [
     "S105_T1",
+    "S116_T1",
     # "S106_T1","S106_T2","S112_T1","S112_T2","S116_T1","S116_T2","S116_T4","S116_T5",
     # "S118_T1","S200_T1","S201_T1","S201_T2","S202_T1","S203_T1","S204_T1","S209_T2","S210_T1",
     # "S214_T1","S214_T4","S214_T6","S215_T3","S215_T4","S217_T2","S217_T3","S217_T4","S218_T1","S219_T1",
@@ -17,10 +18,56 @@ MAX_PROCS = 32
 PRINT_EVERY = 500  # frames
 
 # Horizontal shifts (in pixels). Positive = move right, Negative = move left.
-LEFT_X_OFFSET  = 100    # affects Camera (top-left)
-RIGHT_X_OFFSET = 100    # affects UL/UR/LL/LR (top-right)
+LEFT_X_OFFSET  = 50    # affects Camera (top-left)
+RIGHT_X_OFFSET = -50    # affects UL/UR/LL/LR (top-right)
+
+TOP_Y_OFFSET = 150       # moves top stack (Camera/energy) down
+BOTTOM_Y_OFFSET = 150    # moves bottom stack (ArmSwap/Clutch) up
+
 
 # ====================== DRAW HELPERS ======================
+import shutil
+import subprocess
+from tempfile import NamedTemporaryFile
+
+def _ffmpeg_reencode(in_path: str,
+                     out_path: str,
+                     codec: str = "libx264",
+                     crf: int = 24,
+                     preset: str = "veryfast",
+                     remove_audio: bool = True) -> tuple[bool, str]:
+    """
+    Re-encode `in_path` to `out_path` using ffmpeg.
+    Returns (ok, msg). Does nothing if ffmpeg missing.
+    """
+    if shutil.which("ffmpeg") is None:
+        return (False, "ffmpeg not found in PATH")
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", in_path,
+        "-c:v", codec,
+        "-crf", str(crf),
+        "-preset", preset,
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+    ]
+    if remove_audio:
+        cmd += ["-an"]
+    else:
+        # You can choose to keep/copy audio; copy is fastest
+        cmd += ["-c:a", "aac", "-b:a", "128k"]
+
+    cmd += [out_path]
+
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if result.returncode != 0:
+            return (False, f"ffmpeg failed: {result.stderr.decode(errors='ignore')[:500]}")
+        return (True, "ok")
+    except Exception as e:
+        return (False, f"{type(e).__name__}: {e}")
+
 
 def _draw_boxed_text(img, text, org, font_scale=0.8, thickness=2,
                      fg=(255, 255, 255), bg=(0, 140, 255), alpha=0.6, pad=6, radius=6):
@@ -113,6 +160,7 @@ def visualize_pedals_on_video(video_path, gt_pedals_csv, output_path, position=0
     line_gap = 8
     left_x   = margin + LEFT_X_OFFSET
     top_y    = margin
+    
     right_margin_x = (w - margin) + RIGHT_X_OFFSET  # we clamp when drawing
 
     # Colors
@@ -138,7 +186,8 @@ def visualize_pedals_on_video(video_path, gt_pedals_csv, output_path, position=0
             ped = _row_for_frame(gt_lookup, fidx, required)
 
             # ----- Top-left: Camera -----
-            cur_y = top_y
+            cur_y = top_y + TOP_Y_OFFSET
+
             if ped["Camera_Pedal"] == 1:
                 frame = _draw_boxed_text(frame, "CAMERA", (left_x, cur_y), fg=white, bg=cam_bg, alpha=0.65)
                 (tw, th), _ = cv2.getTextSize("CAMERA", cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
@@ -181,7 +230,7 @@ def visualize_pedals_on_video(video_path, gt_pedals_csv, output_path, position=0
                 box_w = tw + 2 * 6
                 box_h = th + 2 * 6
                 br_x = w - margin - box_w
-                br_y = h - margin - box_h
+                br_y = h - margin - box_h - BOTTOM_Y_OFFSET
                 frame = _draw_boxed_text(frame, tag, (br_x, br_y),
                                          font_scale=clutch_font_scale, thickness=clutch_thickness,
                                          fg=white, bg=clutch_bg, alpha=0.70)
@@ -216,7 +265,32 @@ def _worker(args):
 
     try:
         visualize_pedals_on_video(video_path, gt_pedals_csv, out_path, position=position)
-        return (trial, True, f"Wrote {out_path}")
+
+            # 2) Re-encode automatically with ffmpeg → temp file
+        #    (tweak crf/preset/remove_audio as you like)
+        with NamedTemporaryFile(prefix="reenc_", suffix=".mp4", delete=False, dir=os.path.dirname(out_path)) as tmpf:
+            tmp_out = tmpf.name
+
+        ok, msg = _ffmpeg_reencode(
+            in_path=out_path,
+            out_path=tmp_out,
+            codec="libx264",   # or "libx265" for HEVC (smaller, slower, less compatible)
+            crf=24,            # lower = better quality/larger file (18–28 typical)
+            preset="veryfast", # slower = smaller; try "medium" for smaller files
+            remove_audio=True  # set False if you need audio
+        )
+
+        if ok:
+            # 3) Atomically replace the big OpenCV file with the compact one
+            os.replace(tmp_out, out_path)
+            return (trial, True, f"Wrote {out_path} (re-encoded via ffmpeg)")
+        else:
+            # If ffmpeg unavailable/failed, keep the original OpenCV file
+            try:
+                os.remove(tmp_out)
+            except Exception:
+                pass
+            return (trial, True, f"Wrote {out_path} (ffmpeg skip: {msg})")
     except Exception as e:
         return (trial, False, f"{type(e).__name__}: {e}")
 

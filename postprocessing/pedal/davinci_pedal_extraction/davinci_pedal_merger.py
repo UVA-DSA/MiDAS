@@ -128,8 +128,7 @@ def merge_pedals(
 
     # ---- save merged CSV (optional) ----
     if output_csv:
-        if not os.path.isfile(output_csv):
-            final_df_out.to_csv(output_csv, index=False)
+        final_df_out.to_csv(output_csv, index=False)
 
     # ---- stats (on aggregated columns) ----
     stats_df = pd.DataFrame(columns=['Pedal_or_Event', 'Event_Count', 'Event_Share_Percent'])

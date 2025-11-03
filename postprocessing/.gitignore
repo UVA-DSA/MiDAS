@@ -2,3 +2,7 @@ plots
 logs
 *.csv
 *.jpg
+**pedal_accuracy_results
+**pedal_accuracy_across_trials
+**logs
+**stats

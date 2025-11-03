@@ -17,9 +17,8 @@ MAX_PROCS = 32
 PRINT_EVERY = 500  # frames
 
 # Horizontal shifts (in pixels). Positive = move right, Negative = move left.
-LEFT_X_OFFSET  = 100    # affects Camera/Arm Swap (top-left stack)
-RIGHT_X_OFFSET = 100    # affects UL/UR/LL/LR (top-right stack)
-
+LEFT_X_OFFSET  = 100    # affects Camera (top-left)
+RIGHT_X_OFFSET = 100    # affects UL/UR/LL/LR (top-right)
 
 # ====================== DRAW HELPERS ======================
 
@@ -29,10 +28,15 @@ def _draw_boxed_text(img, text, org, font_scale=0.8, thickness=2,
     if not text:
         return img
     x, y = org
+    H, W = img.shape[:2]
     font = cv2.FONT_HERSHEY_SIMPLEX
     (tw, th), _ = cv2.getTextSize(text, font, font_scale, thickness)
     box_w = tw + 2 * pad
     box_h = th + 2 * pad
+
+    # clamp origin so the box stays on-screen
+    x = max(0, min(W - box_w, x))
+    y = max(0, min(H - box_h, y))
 
     overlay = img.copy()
     x2, y2 = x + box_w, y + box_h
@@ -73,25 +77,23 @@ def _row_for_frame(gt_lookup, frame_idx, expected_keys):
 def visualize_pedals_on_video(video_path, gt_pedals_csv, output_path, position=0):
     """
     Overlay pedal states per frame:
-      - Top-left: Camera_Pedal (only when 1), then Arm_Swap (only when 1)
-      - Top-right stacked: Upper Left/Right (yellow), Lower Left/Right (blue), only when pressed
+      - Top-left: Camera_Pedal (only when 1)
+      - Top-right stacked: Upper Left/Right (yellow), Lower Left/Right (blue) — only when pressed
+      - Bottom-left: Arm_Swap (only when 1)
+      - Bottom-right: Clutch_Pedal (only when 1), slightly larger, light-green
     """
-    # Load ground truth and build a fast lookup
+    # Load GT
     gt = pd.read_csv(gt_pedals_csv)
     if "obs_frame_idx" not in gt.columns:
         raise ValueError("'obs_frame_idx' missing in {}".format(gt_pedals_csv))
 
-    required = ["Camera_Pedal", "Upper Left", "Upper Right", "Lower Left", "Lower Right"]
+    required = ["Camera_Pedal", "Clutch_Pedal", "Upper Left", "Upper Right", "Lower Left", "Lower Right"]
     for col in required:
         if col not in gt.columns:
             gt[col] = 0
-
-    # Normalize to ints 0/1
-    for col in required:
         gt[col] = (gt[col].fillna(0).astype(int) > 0).astype(int)
 
     offset = _compute_index_offset(gt)
-    # dict: frame_idx -> dict of values
     gt_lookup = {int(r["obs_frame_idx"]) + offset: r for _, r in gt.iterrows()}
 
     cap = cv2.VideoCapture(video_path)
@@ -107,21 +109,20 @@ def visualize_pedals_on_video(video_path, gt_pedals_csv, output_path, position=0
     out = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
 
     # Layout
-    margin = 14
+    margin   = 14
     line_gap = 8
-    left_x = margin + LEFT_X_OFFSET          # <-- was: margin
-    top_y = margin
-    right_margin_x = (w - margin) + RIGHT_X_OFFSET   # <-- was: w - margin
-
+    left_x   = margin + LEFT_X_OFFSET
+    top_y    = margin
+    right_margin_x = (w - margin) + RIGHT_X_OFFSET  # we clamp when drawing
 
     # Colors
-    cam_bg = (36, 255, 12)     # light green
-    arm_bg = (0, 165, 255)     # orange
-    yellow = (0, 255, 255)     # for Upper pedals
-    blue   = (255, 128, 0)     # for Lower pedals
-    white  = (255, 255, 255)
+    cam_bg   = (36, 255, 12)       # light green (camera)
+    arm_bg   = (0, 165, 255)       # orange (arm swap)
+    clutch_bg= (144, 238, 144)     # light green for clutch (BGR)
+    yellow   = (0, 255, 255)       # Upper pedals
+    blue     = (255, 128, 0)       # Lower pedals
+    white    = (255, 255, 255)
 
-    # Loop
     fidx = -1
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
@@ -136,19 +137,14 @@ def visualize_pedals_on_video(video_path, gt_pedals_csv, output_path, position=0
 
             ped = _row_for_frame(gt_lookup, fidx, required)
 
-            # ----- Top-left: Camera then Arm_Swap -----
+            # ----- Top-left: Camera -----
             cur_y = top_y
             if ped["Camera_Pedal"] == 1:
                 frame = _draw_boxed_text(frame, "CAMERA", (left_x, cur_y), fg=white, bg=cam_bg, alpha=0.65)
                 (tw, th), _ = cv2.getTextSize("CAMERA", cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
                 cur_y += th + 2 * 6 + line_gap
 
-            if ped["Arm_Swap"] == 1:
-                frame = _draw_boxed_text(frame, "ARM SWAP", (left_x, cur_y), fg=white, bg=arm_bg, alpha=0.65)
-                (tw, th), _ = cv2.getTextSize("ARM SWAP", cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
-                cur_y += th + 2 * 6 + line_gap
-
-            # ----- Top-right: energy pedals -----
+            # ----- Top-right: Energy pedals -----
             labels = [
                 ("Upper Left",  "UL", yellow),
                 ("Upper Right", "UR", yellow),
@@ -161,11 +157,34 @@ def visualize_pedals_on_video(video_path, gt_pedals_csv, output_path, position=0
                     (tw, th), _ = cv2.getTextSize(short_tag, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
                     box_w = tw + 2 * 6
                     right_x = right_margin_x - box_w
-                    # clamp to frame width
                     right_x = max(0, min(w - box_w, right_x))
                     frame = _draw_boxed_text(frame, short_tag, (right_x, right_y),
-                                            fg=white, bg=bg_color, alpha=0.65)
+                                             fg=white, bg=bg_color, alpha=0.65)
                     right_y += th + 2 * 6 + line_gap
+
+            # # ----- Bottom-left: Arm Swap -----
+            # if ped["Arm_Swap"] == 1:
+            #     tag = "ARM SWAP"
+            #     (tw, th), _ = cv2.getTextSize(tag, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
+            #     box_w = tw + 2 * 6
+            #     box_h = th + 2 * 6
+            #     bl_x = margin + LEFT_X_OFFSET
+            #     bl_y = h - margin - box_h
+            #     frame = _draw_boxed_text(frame, tag, (bl_x, bl_y), fg=white, bg=arm_bg, alpha=0.70)
+
+            # ----- Bottom-right: Clutch (bigger, light green) -----
+            if ped["Clutch_Pedal"] == 1:
+                tag = "CLUTCH"
+                clutch_font_scale = 1.1   # slightly larger
+                clutch_thickness  = 2
+                (tw, th), _ = cv2.getTextSize(tag, cv2.FONT_HERSHEY_SIMPLEX, clutch_font_scale, clutch_thickness)
+                box_w = tw + 2 * 6
+                box_h = th + 2 * 6
+                br_x = w - margin - box_w
+                br_y = h - margin - box_h
+                frame = _draw_boxed_text(frame, tag, (br_x, br_y),
+                                         font_scale=clutch_font_scale, thickness=clutch_thickness,
+                                         fg=white, bg=clutch_bg, alpha=0.70)
 
             out.write(frame)
     finally:
@@ -176,7 +195,6 @@ def visualize_pedals_on_video(video_path, gt_pedals_csv, output_path, position=0
 
 def _worker(args):
     """Process one trial (one video) in a separate process."""
-    # Tame thread oversubscription inside cv2/BLAS
     try:
         cv2.setNumThreads(1)
     except Exception:
@@ -191,14 +209,10 @@ def _worker(args):
     gt_pedals_csv = f"{ROOT_PATH}/{trial}/synched_data/{trial}_pds_gt.csv"
     out_path = f"{ROOT_PATH}/{trial}/synched_data/{trial}_pedal_visualized.mp4"
 
-    # Basic checks
     if not os.path.isfile(video_path):
         return (trial, False, f"Missing video: {video_path}")
     if not os.path.isfile(gt_pedals_csv):
         return (trial, False, f"Missing CSV: {gt_pedals_csv}")
-    # check if output already exists
-    # if os.path.isfile(out_path):
-    #     return (trial, True, f"Output already exists: {out_path}")
 
     try:
         visualize_pedals_on_video(video_path, gt_pedals_csv, out_path, position=position)
@@ -215,7 +229,6 @@ def main():
     procs = min(MAX_PROCS, max(1, cpu_count()))
     print(f"Launching pool with {procs} processes for {len(jobs)} trials…")
 
-    # One video per worker; maxtasksperchild=1 to keep memory stable for long runs
     with Pool(processes=procs, maxtasksperchild=1) as pool:
         for trial, ok, msg in pool.imap_unordered(_worker, jobs, chunksize=1):
             print(("✅" if ok else "❌"), trial, "-", msg)

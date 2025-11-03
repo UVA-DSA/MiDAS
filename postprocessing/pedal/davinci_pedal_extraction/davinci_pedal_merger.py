@@ -19,37 +19,50 @@ import os
 from typing import Optional, Tuple
 import pandas as pd
 
+import os
+from typing import Optional, Tuple
+import pandas as pd
+
 def merge_pedals(
     gt_camera_pedal_csv: Optional[str],
+    gt_clutch_pedal_csv: Optional[str],          # <-- NEW
     gt_armswap_pedal_csv: Optional[str],
     gt_energy_pedals_csv: Optional[str],
     output_csv: Optional[str] = None
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Merge any subset of {camera, armswap, energy} pedal CSVs.
+    Merge any subset of {camera, clutch, armswap, energy} pedal CSVs.
     Any path may be None (it will be skipped). At least one source must be provided.
-    Returns (final_df_out, stats_df).
+    Returns (final_df_out, stats_df). final_df_out only contains aggregated columns.
     """
+
     # ---- load what we have ----
-    cam = arm = eng = None
+    cam = clu = arm = eng = None
     if gt_camera_pedal_csv:
         if not os.path.isfile(gt_camera_pedal_csv):
             raise FileNotFoundError(gt_camera_pedal_csv)
         cam = pd.read_csv(gt_camera_pedal_csv)
+
+    if gt_clutch_pedal_csv:  # NEW
+        if not os.path.isfile(gt_clutch_pedal_csv):
+            raise FileNotFoundError(gt_clutch_pedal_csv)
+        clu = pd.read_csv(gt_clutch_pedal_csv)
+
     if gt_armswap_pedal_csv:
         if not os.path.isfile(gt_armswap_pedal_csv):
             raise FileNotFoundError(gt_armswap_pedal_csv)
         arm = pd.read_csv(gt_armswap_pedal_csv)
+
     if gt_energy_pedals_csv:
         if not os.path.isfile(gt_energy_pedals_csv):
             raise FileNotFoundError(gt_energy_pedals_csv)
         eng = pd.read_csv(gt_energy_pedals_csv)
 
-    if cam is None and arm is None and eng is None:
+    if cam is None and clu is None and arm is None and eng is None:
         raise ValueError("No inputs provided: all CSV paths are None.")
 
     # ---- normalize frame index ----
-    def _norm_idx(df: pd.DataFrame) -> pd.DataFrame:
+    def _norm_idx(df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
         if df is None:
             return None
         if "Frame Num" in df.columns:
@@ -59,11 +72,13 @@ def merge_pedals(
         return df
 
     cam = _norm_idx(cam)
+    clu = _norm_idx(clu)
     arm = _norm_idx(arm)
     eng = _norm_idx(eng)
 
     # ---- known columns per source ----
     camera_cols = ['Instrument_1_Camera', 'Instrument_2_Camera', 'Instrument_3_Camera', 'Instrument_4_Camera']
+    clutch_cols = ['Instrument_1_Clutch', 'Instrument_2_Clutch', 'Instrument_3_Clutch', 'Instrument_4_Clutch']  # NEW
     energy_cols = ['Upper Left', 'Upper Right', 'Lower Left', 'Lower Right']
     armswap_cols = ['Arm_Swap'] if (arm is not None and 'Arm_Swap' in arm.columns) else []
 
@@ -78,33 +93,34 @@ def merge_pedals(
         return pd.merge(base_df, src_df[cols], on='obs_frame_idx', how='outer')
 
     base = _merge_into(base, cam, camera_cols)
+    base = _merge_into(base, clu, clutch_cols)             # NEW
     base = _merge_into(base, arm, armswap_cols if armswap_cols else [])
     base = _merge_into(base, eng, energy_cols)
 
     if base is None:
-        # should not happen because we checked earlier, but guard anyway
         raise ValueError("Nothing to merge after filtering columns.")
 
     base = base.sort_values('obs_frame_idx').reset_index(drop=True)
 
     # ---- fill/coerce binary for any present cols ----
-    for cols in (camera_cols, energy_cols, armswap_cols):
+    for cols in (camera_cols, clutch_cols, energy_cols, armswap_cols):
         for c in cols:
             if c in base.columns:
                 base[c] = (pd.to_numeric(base[c], errors='coerce').fillna(0).astype(int) > 0).astype(int)
 
-    # ---- aggregate camera instruments → single Camera_Pedal (OR) ----
+    # ---- aggregate instruments → single pedal flags (OR) ----
     present_cam = [c for c in camera_cols if c in base.columns]
     if present_cam:
         base['Camera_Pedal'] = base[present_cam].max(axis=1).fillna(0).astype(int)
-    elif cam is not None:
-        # camera CSV present but no instrument cols (unlikely)—fallback to 0
-        base['Camera_Pedal'] = 0
 
-    # ---- choose output columns (only those that exist) ----
+    present_clu = [c for c in clutch_cols if c in base.columns]  # NEW
+    if present_clu:
+        base['Clutch_Pedal'] = base[present_clu].max(axis=1).fillna(0).astype(int)
+
+    # ---- choose output columns (only aggregated + energy + arm_swap) ----
     keep_cols = ['obs_frame_idx']
-    if 'Camera_Pedal' in base.columns:
-        keep_cols.append('Camera_Pedal')
+    if 'Camera_Pedal' in base.columns: keep_cols.append('Camera_Pedal')
+    if 'Clutch_Pedal' in base.columns: keep_cols.append('Clutch_Pedal')   # NEW
     keep_cols += [c for c in energy_cols if c in base.columns]
     keep_cols += [c for c in armswap_cols if c in base.columns]
 
@@ -112,11 +128,10 @@ def merge_pedals(
 
     # ---- save merged CSV (optional) ----
     if output_csv:
-        # check if csv is already there
         if not os.path.isfile(output_csv):
             final_df_out.to_csv(output_csv, index=False)
 
-    # ---- stats ----
+    # ---- stats (on aggregated columns) ----
     stats_df = pd.DataFrame(columns=['Pedal_or_Event', 'Event_Count', 'Event_Share_Percent'])
 
     print("\nA) Per-frame statistics (fraction of frames with each flag = 1):")
@@ -144,11 +159,12 @@ def merge_pedals(
             stats_df = pd.DataFrame(rows, columns=['Pedal_or_Event','Event_Count','Event_Share_Percent'])
             if output_csv:
                 stats_csv = output_csv.replace('.csv', '_pedal_event_stats.csv')
-                if not os.path.isfile(stats_csv):   
+                if not os.path.isfile(stats_csv):
                     stats_df.to_csv(stats_csv, index=False)
                 print(f"\n   ✅ Event statistics saved to: {stats_csv}")
 
     return final_df_out, stats_df
+
 
 
 if __name__ == "__main__":
@@ -156,6 +172,8 @@ if __name__ == "__main__":
 
     for trial in TRIALS:
         cam_csv = f"{ROOT_PATH}/{trial}/synched_data/{trial}_camera_pedal_gt_hamid.csv"
+        # new
+        clutch_csv = f"{ROOT_PATH}/{trial}/synched_data/{trial}_clutch_pedal_gt.csv"
         arm_csv = f"{ROOT_PATH}/{trial}/synched_data/{trial}_arm_swap_pedal_gt.csv"
         eng_csv = f"{ROOT_PATH}/{trial}/synched_data/{trial}_primary_secondary_pedals_gt.csv"
         out_csv = f"{ROOT_PATH}/{trial}/synched_data/{trial}_pds_gt.csv"
@@ -164,7 +182,8 @@ if __name__ == "__main__":
         print(f"Merging pedals for trial {trial}...")
 
         merged_df, stats_df = merge_pedals(
-            gt_camera_pedal_csv=None,
+            gt_camera_pedal_csv=cam_csv,
+            gt_clutch_pedal_csv=clutch_csv,          # <-- NEW
             gt_armswap_pedal_csv=None,
             gt_energy_pedals_csv=eng_csv,
             output_csv=out_csv

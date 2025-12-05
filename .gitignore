@@ -1,5 +1,4 @@
 __pycache__
-
 # Data Files
 src/Data/
 src/Video/camera/
@@ -7,7 +6,7 @@ src/Video/images/
 src/Smartwatch/test
 
 */trakstar_log.txt
-
+IJCARS_MiDAS_Main_Paper.pdf
 *.whl
 
 src/Video/camera_calibration.py

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <!-- Meta tags for social media banners, these should be filled in appropriatly as they are your "business card" -->
+  <!-- Replace the content tag with appropriate information -->
+  <meta name="description"
+    content="Project page for MiDAS: a multimodal data acquisition system and dataset for robot-assisted minimally invasive surgery (RMIS).">
+  <meta property="og:title" content="MiDAS: A Multimodal Data Acquisition System and Dataset for Robot Assisted Minimally Invasive Surgery">
+  <meta property="og:description"
+    content="MiDAS is an open-source, platform-agnostic system for time-synchronized, non-invasive multimodal data acquisition in robot-assisted minimally invasive surgery.">
+  <meta property="og:url" content="https://uva-dsa.github.io/MiDAS/">
+  <meta property="og:image" content="static/images/EgoExoEMS-NEW_AAAI_Main_Figure.jpg" />
+  <meta property="og:image:width" content="1200"/>
+  <meta property="og:image:height" content="630"/>
+
+  <meta name="twitter:title" content="MiDAS: Multimodal Data Acquisition for RMIS">
+  <meta name="twitter:description" content="Open-source multimodal data acquisition system and dataset for robot-assisted minimally invasive surgery.">
+  <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X600-->
+  <meta name="twitter:image" content="static/images/EgoExoEMS-NEW_AAAI_Main_Figure.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- Keywords for your paper to be indexed by-->
+  <meta name="keywords"
+    content="Robot-Assisted Minimally Invasive Surgery, RMIS, MiDAS, multimodal data acquisition, surgical robotics, gesture recognition">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>MiDAS: A Multimodal Data Acquisition System and Dataset for Robot Assisted Minimally Invasive Surgery</title>
+  <link rel="icon" type="image/x-icon" href="static/images/favicon.svg">
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
+  <script defer src="static/js/fontawesome.all.min.js"></script>
+  <script src="static/js/bulma-carousel.min.js"></script>
+  <script src="static/js/bulma-slider.min.js"></script>
+  <script src="static/js/index.js"></script>
+</head>
+
+<body>
+
+  <!-- Simple top navigation -->
+  <nav class="navbar is-spaced" role="navigation" aria-label="main navigation">
+    <div class="container is-max-desktop">
+      <div class="navbar-brand">
+        <a class="navbar-item" href="#">
+          <img id="site-logo" src="static/images/Logo_UVA_COLOR.png" alt="MiDAS">
+        </a>
+      </div>
+      <div class="navbar-menu">
+        <div class="navbar-end">
+          <a class="navbar-item" href="#overview">Overview</a>
+          <a class="navbar-item" href="#benchmarks">Experiments</a>
+          <a class="navbar-item" href="#data">Data</a>
+          <a class="navbar-item" href="#poster">Paper</a>
+          <a class="navbar-item" href="#BibTeX">BibTeX</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-body">
+      <div class="container is-max-desktop">
+        <div class="columns is-centered">
+          <div class="column has-text-centered">
+            <h1 class="title is-1 publication-title">MiDAS: A Multimodal Data Acquisition System and Dataset for Robot Assisted Minimally Invasive Surgery</h1>
+            <div class="is-size-5 publication-authors">
+              <!-- Paper authors -->
+              <span class="author-block">
+                <a href="https://keshara2032.github.io/" target="_blank">Keshara Weerasinghe</a><sup>1,†</sup>,</span>
+              <span class="author-block">
+                <a href="" target="_blank">Seyed Hamid Reza Roodabeh</a><sup>1,†</sup>,</span>
+              <span class="author-block">
+                <a href="" target="_blank">Andrew Hawkins (MD)</a><sup>2</sup>,</span>
+              <span class="author-block">
+                <a href="" target="_blank">Zhaomeng Zhang</a><sup>1</sup>,</span>
+              <span class="author-block">
+                <a href="" target="_blank">Zachary Schrader</a><sup>1</sup>,</span>
+              <span class="author-block">
+                <a href="https://homa-alem.github.io/" target="_blank">Homa Alemzadeh</a><sup>1</sup>
+              </span>
+            </div>
+
+            <div class="is-size-5 publication-authors">
+              <span class="author-block"><sup>1</sup> Department of Electrical &amp; Computer Engineering, University of Virginia</span><br>
+              <span class="author-block"><sup>2</sup> UVA Hospital, Charlottesville, Virginia, USA</span>
+              <span class="eql-cntrb"><small><br><sup>†</sup>Indicates equal contribution</small></span>
+            </div>
+
+            <div class="is-size-4">
+              <span class="publication-venue">International Journal of Computer Assisted Radiology and Surgery (IJCARS)</span>
+            </div>
+
+            <div class="column has-text-centered">
+              <div class="publication-links">
+                <!-- Journal paper PDF -->
+                <span class="link-block">
+                  <a href="IJCARS_MiDAS_Main_Paper.pdf" target="_blank"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <i class="fas fa-file-pdf"></i>
+                    </span>
+                    <span>IJCARS Paper (PDF)</span>
+                  </a>
+                </span>
+
+                <!-- Preprint link (update when available) -->
+                <span class="link-block">
+                  <a href="" target="_blank"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <i class="fas fa-file-pdf"></i>
+                    </span>
+                    <span>Preprint (coming soon)</span>
+                  </a>
+                </span>
+
+                <!-- Project / Dataset & Code -->
+                <span class="link-block">
+                  <a href="https://uva-dsa.github.io/MiDAS/" target="_blank"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <i class="fab fa-github"></i>
+                    </span>
+                    <span>Dataset &amp; Code</span>
+                  </a>
+                </span>
+
+                <!-- YouTube Video Link -->
+                <span class="link-block">
+                  <a href="" target="_blank"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <i class="fab fa-youtube"></i>
+                    </span>
+                    <span>Video</span>
+                  </a>
+                </span>
+
+                <!-- Data Link -->
+                <span class="link-block">
+                  <a href="https://uva-dsa.github.io/MiDAS/" target="_blank"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <img src="https://huggingface.co/favicon.ico" alt="Hugging Face Logo"
+                        style="width: 20px; height: 20px;" />
+                    </span>
+                    <span>MiDAS Dataset</span>
+                  </a>
+                </span>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Image Approach -->
+  <section id="overview" class="section hero is-small">
+    <div class="container is-max-desktop">
+      <img src="static/images/midas-main-v2.png" alt="MiDAS overview figure" />
+      <figcaption><b>Overview</b>. MiDAS is an open-source, platform-agnostic multimodal data acquisition system and dataset for robot-assisted minimally invasive surgery, enabling time-synchronized, non-invasive recording of hand motion, video, and interaction signals across different robotic platforms.</figcaption>
+    </div>
+  </section>
+  <!-- End image Approach -->
+
+  <!-- Teaser video-->
+  <section class="hero teaser">
+    <div class="container is-max-desktop">
+      <div class="hero-body">
+        <video poster="" id="tree" autoplay controls muted loop height="100%">
+  <!-- Your video here -->
+  <source src="static/videos/midas_banner.mp4" type="video/mp4">
+        </video>
+        <h2 class="subtitle has-text-centered">
+        </h2>
+      </div>
+    </div>
+  </section>
+  <!-- End teaser video -->
+
+  <!-- Highlights -->
+  <section class="section hero is-light">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3">Highlights</h2>
+      <div class="columns is-multiline" style="margin-top:0.5rem;">
+
+        <div class="column is-one-quarter">
+          <div class="box has-text-centered">
+            <p class="is-size-3" style="margin-bottom:0.25rem;">2</p>
+            <p class="has-text-grey">Robotic platforms (Raven-II, da Vinci Xi)</p>
+          </div>
+        </div>
+
+        <div class="column is-one-quarter">
+          <div class="box has-text-centered">
+            <p class="is-size-3" style="margin-bottom:0.25rem;">32</p>
+            <p class="has-text-grey">Trials (15 peg transfer, 17 suturing)</p>
+          </div>
+        </div>
+
+        <div class="column is-one-quarter">
+          <div class="box has-text-centered">
+            <p class="is-size-3" style="margin-bottom:0.25rem;">Multimodal</p>
+            <p class="has-text-grey">EM hand tracking, RGB-D hands, surgical video, foot pedals, robot states</p>
+          </div>
+        </div>
+
+        <div class="column is-one-quarter">
+          <div class="box has-text-centered">
+            <p class="is-size-5" style="margin-bottom:0.25rem;">Open &amp; Non-Invasive</p>
+            <p class="has-text-grey">Open-source, platform-agnostic system with no proprietary hardware access required</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+  <!-- End Highlights -->
+
+  <!-- Paper abstract -->
+  <section id="abstract" class="section hero is-light">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered has-text-centered">
+        <div class="column is-four-fifths">
+          <h2 class="title is-3">Abstract</h2>
+          <div class="content has-text-justified">
+            <p>
+              <b>Purpose:</b> Robot-assisted minimally invasive surgery (RMIS) research increasingly demands multimodal data, yet access to proprietary surgical robot telemetry remains a critical barrier. This work introduces MiDAS, an open-source, platform-agnostic system designed to enable time-synchronized, non-invasive multimodal data acquisition across diverse surgical platforms.
+            </p>
+            <p>
+              <b>Methods:</b> MiDAS integrates external sensors, including electromagnetic (EM) hand tracking, surgical video, RGB-Depth (RGB-D) hand tracking, and foot pedal interactions, without requiring proprietary hardware access. We validated the system on both the open-source Raven-II and the clinical da Vinci Xi, collecting datasets during peg transfer and hernia repair suturing tasks. We conducted correlation analysis to quantify how well external EM tracking approximates internal robot kinematics and performed downstream gesture recognition experiments with modality ablation studies.
+            </p>
+            <p>
+              <b>Results:</b> Correlation analysis confirms that EM hand tracking closely approximates robot kinematics for positional and rotational trajectories. Downstream gesture recognition experiments demonstrate that non-invasive motion signals (EM tracking) achieve performance comparable to proprietary robot kinematics. Furthermore, visual streams are shown to benefit significantly from domain-adaptive and self-supervised pretraining strategies.
+            </p>
+            <p>
+              <b>Conclusion:</b> MiDAS enables accurate, extensible, and reproducible multimodal data collection for surgical robotics research across both open and commercial platforms. The system successfully lowers barriers to data-driven learning in RMIS by providing a non-invasive alternative to proprietary data access.
+            </p>
+            <p>
+              Dataset &amp; code available at <a href="https://uva-dsa.github.io/MiDAS/" target="_blank">https://uva-dsa.github.io/MiDAS/</a>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <!-- End paper abstract -->
+
+  <!-- Benchmarks -->
+  <section id="benchmarks" class="section hero is-small">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3">Experiments &amp; Benchmarks</h2>
+      <!-- two images side by side -->
+      <img src="static/images/pos_rot_side_by_side_left.png" alt="MiDAS correlation analysis figure" />
+      <img src="static/images/raven_vs_davinci_models_by_modality_f1_muted.png" alt="MiDAS gesture recognition benchmark results figure" />
+
+      <figcaption><b>Evaluation tasks</b>. Correlation analysis between external EM hand tracking and robot kinematics, and multimodal gesture recognition with modality ablation across Raven-II and da Vinci Xi platforms.</figcaption>
+      <p style="margin-top:0.5rem"><a href="https://uva-dsa.github.io/MiDAS/" target="_blank">Details and code on the MiDAS project page</a></p>
+
+      <div class="columns is-multiline" style="margin-top:1rem;">
+        <div class="column is-one-third">
+          <div class="box">
+            <p><b>Correlation Analysis</b></p>
+            <p class="has-text-grey">Quantify how well EM hand tracking approximates internal robot kinematics.</p>
+          </div>
+        </div>
+        <div class="column is-one-third">
+          <div class="box">
+            <p><b>Gesture Recognition</b></p>
+            <p class="has-text-grey">Benchmark Transformer- and CNN-based models for gesture recognition from multimodal signals.</p>
+          </div>
+        </div>
+        <div class="column is-one-third">
+          <div class="box">
+            <p><b>Modality Ablation</b></p>
+            <p class="has-text-grey">Identify effective combinations of motion, video, and interaction modalities for RMIS tasks.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <!-- End Benchmarks -->
+
+  <!-- Data Access -->
+  <section id="data" class="section hero is-light">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3">Data Access</h2>
+      <div class="content">
+        <p>
+          The MiDAS data collection system and multimodal datasets are publicly released to support research in surgical robotics, gesture recognition, and multimodal learning.
+        </p>
+        <ul>
+          <li><a href="https://uva-dsa.github.io/MiDAS/" target="_blank">MiDAS Project Page — Dataset &amp; Code</a></li>
+          <li>Additional hosting and derived resources — coming soon.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Data Collection System -->
+  <section id="system" class="section hero is-small">
+    <div class="container is-max-desktop" align="center">
+      <h2 class="title is-3">Data Collection System</h2>
+      <img src="static/images/EgoExoEMS-NEW_DCS_Arch.png" alt="Data Collection System" width="350px"/>
+      <figcaption>MiDAS integrates external sensors (EM hand tracking, RGB-D cameras, surgical video, and foot pedal sensing) in a non-invasive, platform-agnostic architecture for time-synchronized multimodal data collection in RMIS.</figcaption>
+      <div class="content" style="margin-top:0.75rem; text-align:left;">
+        <ul>
+          <li>Open-source, platform-agnostic multimodal acquisition for teleoperated surgical robots</li>
+          <li>Non-invasive integration with Raven-II and da Vinci Xi without proprietary hardware access</li>
+          <li>Time-synchronized logging of EM hand motion, RGB-D hand tracking, video, foot pedals, and robot states</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Youtube video -->
+  <!-- <section class="section hero is-samll is-light">
+    <div calss="hero body">
+      <div class="container is-max-desktop"> -->
+        <!-- Paper video. -->
+        <!-- <center>
+          <h2 class="title is-3">Video Presentation</h2> -->
+          <!-- <div class="columns is-centered has-text-centered"> -->
+          <!-- <div class="column is-four-fifths"> -->
+
+            <!-- <div class="publication-video"> -->
+              <!-- Youtube embed code here -->
+              <!-- <iframe src="https://www.youtube.com/embed/f4ZK66xI3LU?rel=0&showinfo=0" frameborder="0" -->
+                <!-- allow="autoplay; encrypted-media" allowfullscreen></iframe> -->
+            <!-- </div> -->
+            <!-- </div> -->
+        <!-- </center> -->
+      <!-- </div>
+    </div>
+    </div>
+  </section> -->
+  <!-- End youtube video -->
+
+  <!-- Video carousel -->
+  <!-- <section class="hero is-small">
+  <div class="hero-body">
+    <div class="container">
+      <h2 class="title is-3">Another Carousel</h2>
+      <div id="results-carousel" class="carousel results-carousel">
+        <div class="item item-video1">
+          <video poster="" id="video1" autoplay controls muted loop height="100%"> -->
+  <!-- Your video file here -->
+  <!-- <source src="static/videos/carousel1.mp4"
+            type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-video2">
+          <video poster="" id="video2" autoplay controls muted loop height="100%"> -->
+  <!-- Your video file here -->
+  <!-- <source src="static/videos/carousel2.mp4"
+            type="video/mp4">
+          </video>
+        </div>
+        <div class="item item-video3">
+          <video poster="" id="video3" autoplay controls muted loop height="100%">\ -->
+  <!-- Your video file here -->
+  <!-- <source src="static/videos/carousel3.mp4"
+            type="video/mp4">
+          </video>
+        </div>
+      </div>
+    </div>
+  </div>
+</section> -->
+  <!-- End video carousel -->
+
+  <!-- Paper poster -->
+  <section id="poster" class="section is-small">
+    <div class="container is-max-desktop">
+
+      <h2 class="title">Poster</h2>
+
+      <div style="position: relative; width: 100%; height: calc(100vw * 0.48); max-height: 550px; overflow: hidden;">
+        <iframe src="static/pdfs/sample.pdf"
+          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" allowfullscreen>
+        </iframe>
+      </div>
+
+    </div>
+  </section>
+  <!--End paper poster -->
+
+  <!--BibTex citation -->
+  <section class="section" id="BibTeX">
+    <div class="container is-max-desktop content">
+      <div class="bibtex-header">
+        <h2 class="title">BibTeX</h2>
+        <button class="copy-bibtex-btn" onclick="copyBibTeX()">
+          <span class="fas fa-copy"></span>
+          <span class="copy-text">Copy</span>
+        </button>
+      </div>
+      <pre><code id="bibtex-code">
+Coming soon.
+      </code></pre>
+    </div>
+  </section>
+
+  <!-- Scroll to top button -->
+  <button class="scroll-to-top" onclick="scrollToTop()" aria-label="Scroll to top">
+    <i class="fas fa-arrow-up"></i>
+  </button>
+  <!--End BibTex citation -->
+
+  <footer class="footer">
+    <div class="container">
+      <div class="columns is-centered">
+        <div class="column is-8">
+          <div class="content">
+
+            <p>
+              This page was built using the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template"
+                target="_blank">Academic Project Page Template</a> which was adopted from the <a
+                href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
+              You are free to borrow the of this website, we just ask that you link back to this page in the footer.
+              <br> This website is licensed under a <a rel="license"
+                href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative
+                Commons Attribution-ShareAlike 4.0 International License</a>.
+            </p>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Statcounter tracking code -->
+
+  <!-- You can add a tracker to track page visits by creating an account at statcounter.com -->
+
+  <!-- End of Statcounter Code -->
+
+</body>
+
+</html>

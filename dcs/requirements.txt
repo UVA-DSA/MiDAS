@@ -1,9 +1,0 @@
-numpy==1.26.4
-obs-websocket-py==1.0
-opencv-python==4.10.0.84
-pillow==10.4.0
-pyrealsense2==2.55.1.6486
-requests==2.32.3
-tk==0.1.0
-urllib3==2.2.2
-websocket-client==1.8.0

@@ -97,7 +97,7 @@
             </div>
 
             <div class="is-size-4">
-              <span class="publication-venue">International Journal of Computer Assisted Radiology and Surgery (IJCARS)</span>
+              <span class="publication-venue">Submitted to the International Journal of Computer Assisted Radiology and Surgery (IJCARS, under review)</span>
             </div>
 
             <div class="column has-text-centered">
@@ -109,7 +109,7 @@
                     <span class="icon">
                       <i class="fas fa-file-pdf"></i>
                     </span>
-                    <span>IJCARS Paper (PDF)</span>
+                    <span>IJCARS Submission (PDF, under review)</span>
                   </a>
                 </span>
 
@@ -262,14 +262,34 @@
   <section id="benchmarks" class="section hero is-small">
     <div class="container is-max-desktop">
       <h2 class="title is-3">Experiments &amp; Benchmarks</h2>
-      <!-- two images side by side -->
-      <img src="static/images/pos_rot_side_by_side_left.png" alt="MiDAS correlation analysis figure" />
-      <img src="static/images/raven_vs_davinci_models_by_modality_f1_muted.png" alt="MiDAS gesture recognition benchmark results figure" />
+      <div class="columns is-variable is-6 is-multiline benchmark-figures">
+        <div class="column is-full-mobile is-half-tablet">
+          <figure class="benchmark-figure">
+            <img src="static/images/pos_rot_side_by_side_left.png"
+              alt="Correlation between EM hand tracking and robot kinematics across positional and rotational axes." />
+            <figcaption>
+              <b>Correlation Analysis.</b> Pearson correlations showing that external EM hand tracking closely matches internal robot
+              position and orientation trajectories on Raven-II and da Vinci Xi.
+            </figcaption>
+          </figure>
+        </div>
+        <div class="column is-full-mobile is-half-tablet">
+          <figure class="benchmark-figure">
+            <img src="static/images/raven_vs_davinci_models_by_modality_f1_muted.png"
+              alt="Gesture recognition F1 scores by modality and model on Raven-II and da Vinci Xi." />
+            <figcaption>
+              <b>Gesture Recognition &amp; Modality Ablation.</b> F1 scores for Transformer- and CNN-based models under different
+              modality pairings, highlighting the benefit of combining EM motion, video, and interaction streams.
+            </figcaption>
+          </figure>
+        </div>
+      </div>
 
-      <figcaption><b>Evaluation tasks</b>. Correlation analysis between external EM hand tracking and robot kinematics, and multimodal gesture recognition with modality ablation across Raven-II and da Vinci Xi platforms.</figcaption>
-      <p style="margin-top:0.5rem"><a href="https://uva-dsa.github.io/MiDAS/" target="_blank">Details and code on the MiDAS project page</a></p>
+      <p class="benchmarks-link">
+        <a href="https://uva-dsa.github.io/MiDAS/" target="_blank">Dive deeper into the experimental setup and code on the MiDAS project page</a>
+      </p>
 
-      <div class="columns is-multiline" style="margin-top:1rem;">
+      <div class="columns is-multiline benchmark-cards">
         <div class="column is-one-third">
           <div class="box">
             <p><b>Correlation Analysis</b></p>
@@ -311,16 +331,41 @@
 
   <!-- Data Collection System -->
   <section id="system" class="section hero is-small">
-    <div class="container is-max-desktop" align="center">
+    <div class="container is-max-desktop">
       <h2 class="title is-3">Data Collection System</h2>
-      <img src="static/images/EgoExoEMS-NEW_DCS_Arch.png" alt="Data Collection System" width="350px"/>
-      <figcaption>MiDAS integrates external sensors (EM hand tracking, RGB-D cameras, surgical video, and foot pedal sensing) in a non-invasive, platform-agnostic architecture for time-synchronized multimodal data collection in RMIS.</figcaption>
-      <div class="content" style="margin-top:0.75rem; text-align:left;">
-        <ul>
-          <li>Open-source, platform-agnostic multimodal acquisition for teleoperated surgical robots</li>
-          <li>Non-invasive integration with Raven-II and da Vinci Xi without proprietary hardware access</li>
-          <li>Time-synchronized logging of EM hand motion, RGB-D hand tracking, video, foot pedals, and robot states</li>
-        </ul>
+      <div class="system-stack">
+        <figure class="system-figure">
+          <img src="static/images/MIDAS.png" alt="MiDAS hardware stack with EM sensors, RGB-D cameras, video capture, and logging workstation." />
+          <figcaption>
+            <b>Integrated sensor stack.</b> MiDAS fuses EM hand tracking, RGB-D hand cameras, surgical video capture, and foot pedal sensing through a time-synchronized logging workstation that can attach to Raven-II or da Vinci Xi consoles.
+          </figcaption>
+        </figure>
+        <div class="system-overview">
+          <p>
+            The data collection rig deploys entirely external instrumentation on top of existing surgical robot consoles.
+            A synchronization backbone aligns motion, video, and interaction streams so downstream methods can trust
+            multimodal labels out of the box.
+          </p>
+          <div class="system-cards">
+            <div class="box system-card">
+              <p class="system-card-title">Open &amp; Platform-Agnostic</p>
+              <p class="has-text-grey">Modular controllers interface with Raven-II, da Vinci Xi, or future teleoperation platforms without vendor APIs.</p>
+            </div>
+            <div class="box system-card">
+              <p class="system-card-title">Non-Invasive Integration</p>
+              <p class="has-text-grey">External sensors mount to the surgeon console and OR equipment while preserving all clinical workflows.</p>
+            </div>
+            <div class="box system-card">
+              <p class="system-card-title">Time-Synchronized Logging</p>
+              <p class="has-text-grey">Unified clocking aligns EM motion, RGB-D hands, stereo video, foot pedals, and robot state estimates.</p>
+            </div>
+          </div>
+          <ul class="system-sensor-list">
+            <li><b>Hand Motion:</b> 6-DoF EM trackers on surgeon manipulators.</li>
+            <li><b>Visual Streams:</b> RGB-D hand cameras plus laparoscopic video capture.</li>
+            <li><b>Interactions:</b> Foot pedal telemetry and derived robot states.</li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>

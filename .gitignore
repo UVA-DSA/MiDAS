@@ -9,6 +9,8 @@ src/Smartwatch/test
 IJCARS_MiDAS_Main_Paper.pdf
 *.whl
 
+*.psd
+
 src/Video/camera_calibration.py
 src/Video/playground.py
 src/mesh_gen.obj

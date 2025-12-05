@@ -62,7 +62,7 @@ figcaption {
 
 /* Navbar logo override (Bulma caps images at ~28px) */
 #site-logo {
-  max-height: 44px !important; /* adjust size here */
+  max-height: 52px !important; /* adjust size here */
   height: auto;
 }
 

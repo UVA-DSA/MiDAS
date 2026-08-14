@@ -1,0 +1,27 @@
+# Python dependencies for 6D_hand_pose_tracking.
+#
+# The ZED Python API (pyzed.sl) is NOT on PyPI: it ships with the ZED SDK.
+# Install the SDK first (https://www.stereolabs.com/developers/release/),
+# then run its `python -m pip install <zed-sdk>/get_python_api.py` step, or
+# `python /usr/local/zed/get_python_api.py` on Linux.
+#
+#     pip install -r requirements.txt
+
+# Computer vision / image processing.
+# Install only one OpenCV distribution: opencv-python and
+# opencv-contrib-python conflict with each other.
+opencv-python>=4.5.0
+
+# Hand landmark detection.
+mediapipe>=0.10.0
+
+# Numerical computing and CSV output.
+numpy>=1.21.0
+pandas>=1.3.0
+
+# Visualisation (show3d_matplot.py / show3d_open3d.py).
+matplotlib>=3.5.0
+open3d>=0.17.0
+
+# Model downloader (download_zed_models.py).
+requests>=2.25.0
